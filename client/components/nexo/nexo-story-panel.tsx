@@ -19,18 +19,18 @@ export function NexoStoryPanel() {
       className={cn(
         "glass-elevated rounded-2xl",
         "border border-border",
-        "p-6 lg:p-8"
+        "p-4 lg:p-6"
       )}
     >
           {/* Header */}
-          <h2 className="text-2xl font-bold text-text-primary mb-6">
+          <h2 className="text-xl font-bold text-text-primary mb-4">
             Minha <span className="gradient-text-nexo">História</span>
           </h2>
 
           {/* Story content */}
-          <div className="space-y-6 text-text-secondary leading-relaxed">
+          <div className="space-y-3 text-text-secondary leading-snug text-sm">
             {/* Introduction */}
-            <p className="text-lg">
+            <p>
               O Nexo nasceu de uma ideia simples:{" "}
               <span className="text-text-primary font-medium">
                 e se a tecnologia pudesse realmente facilitar o dia a dia das pessoas na Faiston?
@@ -50,9 +50,9 @@ export function NexoStoryPanel() {
             </p>
 
             {/* Capabilities list */}
-            <div className="py-4">
-              <p className="text-text-primary font-semibold mb-3">O Nexo é:</p>
-              <ul className="space-y-2">
+            <div className="py-2">
+              <p className="text-text-primary font-semibold mb-2">O Nexo é:</p>
+              <ul className="space-y-1">
                 <li className="flex items-start gap-2">
                   <span className="text-cyan-400 mt-0.5">•</span>
                   <span>seu <strong className="text-text-primary">copiloto no trabalho</strong></span>
@@ -77,8 +77,8 @@ export function NexoStoryPanel() {
             </div>
 
             {/* Differential */}
-            <div className="p-4 rounded-xl bg-white/5 border border-border">
-              <p className="text-text-primary font-semibold mb-2">O grande diferencial?</p>
+            <div className="p-3 rounded-xl bg-white/5 border border-border">
+              <p className="text-text-primary font-semibold mb-1">O grande diferencial?</p>
               <p className="flex items-start gap-2">
                 <span className="text-xl">👉</span>
                 <span>
@@ -110,12 +110,12 @@ export function NexoStoryPanel() {
             </p>
 
             {/* Welcome */}
-            <div className="pt-4 border-t border-border">
-              <p className="text-lg font-semibold text-text-primary">
+            <div className="pt-3 border-t border-border">
+              <p className="font-semibold text-text-primary">
                 Bem-vindo ao Faiston One.
               </p>
-              <p className="text-lg">
-                Você nunca vai trabalhar sozinho. <span className="text-2xl">🚀</span>
+              <p>
+                Você nunca vai trabalhar sozinho. <span className="text-lg">🚀</span>
               </p>
             </div>
           </div>

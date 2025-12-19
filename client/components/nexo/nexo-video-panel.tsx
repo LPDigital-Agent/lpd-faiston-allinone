@@ -88,8 +88,8 @@ export function NexoVideoPanel() {
       )}
     >
       {/* Header */}
-      <div className="p-4 lg:p-6 border-b border-border">
-        <h2 className="text-2xl font-bold text-text-primary">
+      <div className="p-4 border-b border-border">
+        <h2 className="text-xl font-bold text-text-primary">
           <span className="gradient-text-nexo">Nexo</span> se apresenta
         </h2>
       </div>
