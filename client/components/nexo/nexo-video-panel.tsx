@@ -1,10 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { Play, Pause, Volume2, VolumeX, Maximize, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+
+// MANDATORY: All NEXO images must use the official avatar
+const NEXO_AVATAR_PATH = "/Avatars/nexo-avatar.png";
 
 /**
  * NexoVideoPanel - Glass panel with NEXO Avatar presentation video
@@ -90,7 +94,15 @@ export function NexoVideoPanel() {
     >
       {/* Header */}
       <div className="flex items-center gap-3 p-4 lg:p-6 border-b border-border">
-        <span className="text-4xl">🎬</span>
+        <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-magenta-mid/50 shadow-lg shadow-magenta-mid/20">
+          <Image
+            src={NEXO_AVATAR_PATH}
+            alt="NEXO Avatar"
+            width={48}
+            height={48}
+            className="w-full h-full object-cover"
+          />
+        </div>
         <h2 className="text-2xl font-bold text-text-primary">
           <span className="gradient-text-nexo">Nexo</span> se apresenta
         </h2>
@@ -106,6 +118,7 @@ export function NexoVideoPanel() {
         <video
           ref={videoRef}
           src="/Videos/Nexo%20Apresenta%C3%A7%C3%A3o.mp4"
+          poster={NEXO_AVATAR_PATH}
           className="w-full h-full object-contain"
           preload="metadata"
           onTimeUpdate={handleTimeUpdate}
