@@ -115,7 +115,7 @@ export default function ExpedicaoPage() {
                           {/* Responsible */}
                           <div className="flex items-center gap-2 text-xs text-text-muted mb-3">
                             <User className="w-3 h-3" />
-                            <span className="truncate">{order.responsavel.name}</span>
+                            <span className="truncate">{order.responsavel.nome}</span>
                           </div>
 
                           {/* Date */}

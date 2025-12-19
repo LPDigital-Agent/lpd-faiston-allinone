@@ -123,11 +123,15 @@ export interface AssetMovement {
  * Shipping order status
  */
 export type ShippingStatus =
-  | "pendente"      // Pending
-  | "em_preparo"    // Being prepared
-  | "enviado"       // Shipped
+  | "aguardando"    // Waiting for dispatch
+  | "em_transito"   // In transit
   | "entregue"      // Delivered
   | "cancelado";    // Cancelled
+
+/**
+ * Shipping priority
+ */
+export type ShippingPriority = "normal" | "alta" | "urgente";
 
 /**
  * Shipping order/expedition
@@ -138,6 +142,8 @@ export interface ShippingOrder {
   cliente: string;
   destino: AssetLocation;
   status: ShippingStatus;
+  prioridade: ShippingPriority;
+  responsavel: AssetResponsavel;
   itens: ShippingItem[];
   dataCriacao: string;
   dataPrevista: string;
@@ -165,21 +171,30 @@ export interface ShippingItem {
  * Return request status
  */
 export type ReturnStatus =
-  | "aguardando"    // Waiting for pickup
-  | "em_analise"    // Under analysis
-  | "aprovado"      // Approved
-  | "recusado"      // Rejected
-  | "concluido";    // Completed
+  | "solicitado"    // Requested
+  | "em_transito"   // In transit back
+  | "recebido"      // Received
+  | "rejeitado";    // Rejected
 
 /**
  * Return reason
  */
 export type ReturnReason =
   | "defeito"       // Defective
-  | "troca"         // Exchange
-  | "desistencia"   // Customer gave up
   | "garantia"      // Warranty claim
-  | "outros";       // Other
+  | "troca"         // Exchange
+  | "desuso"        // No longer in use
+  | "outro";        // Other
+
+/**
+ * Timeline event for return request
+ */
+export interface ReturnTimelineEvent {
+  id: string;
+  data: string;
+  descricao: string;
+  responsavel?: string;
+}
 
 /**
  * Return/reversal request
@@ -189,12 +204,14 @@ export interface ReturnRequest {
   codigo: string;              // Request code (e.g., "REV-2024-001")
   ativoId: string;
   cliente: string;
+  solicitante: AssetResponsavel;
   motivo: ReturnReason;
   status: ReturnStatus;
   descricao: string;
   dataSolicitacao: string;
   dataConclusao?: string;
   responsavel?: AssetResponsavel;
+  timeline: ReturnTimelineEvent[];
 }
 
 // =============================================================================
@@ -324,6 +341,11 @@ export interface TaxObligation {
 export type MessagePriority = "alta" | "normal" | "baixa";
 
 /**
+ * Message category
+ */
+export type MessageCategory = "geral" | "solicitacao" | "aprovacao" | "alerta";
+
+/**
  * Internal message
  */
 export interface InternalMessage {
@@ -331,7 +353,9 @@ export interface InternalMessage {
   assunto: string;
   conteudo: string;
   remetente: AssetResponsavel;
+  remetenteId: string;
   departamento: string;
+  categoria: MessageCategory;
   prioridade: MessagePriority;
   lida: boolean;
   favorita: boolean;

@@ -21,10 +21,7 @@ import {
   ChevronRight,
   MoreVertical,
 } from "lucide-react";
-import {
-  mockFiscalDocuments,
-  mockAssets,
-} from "@/mocks/ativos-mock-data";
+import { mockFiscalDocuments } from "@/mocks/ativos-mock-data";
 import { formatCurrency } from "@/lib/ativos/constants";
 import { motion } from "framer-motion";
 
@@ -35,16 +32,16 @@ import { motion } from "framer-motion";
  */
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  emitida: { label: "Emitida", color: "bg-green-500/20 text-green-400", icon: CheckCircle },
+  autorizado: { label: "Autorizado", color: "bg-green-500/20 text-green-400", icon: CheckCircle },
   pendente: { label: "Pendente", color: "bg-yellow-500/20 text-yellow-400", icon: Clock },
-  cancelada: { label: "Cancelada", color: "bg-red-500/20 text-red-400", icon: AlertTriangle },
+  cancelado: { label: "Cancelado", color: "bg-red-500/20 text-red-400", icon: AlertTriangle },
+  denegado: { label: "Denegado", color: "bg-red-500/20 text-red-400", icon: AlertTriangle },
 };
 
 const tipoLabels: Record<string, string> = {
-  nota_fiscal: "NF-e",
-  recibo: "Recibo",
-  contrato: "Contrato",
-  laudo: "Laudo Técnico",
+  nfe: "NF-e",
+  nfse: "NFS-e",
+  cte: "CT-e",
 };
 
 // Mock upcoming fiscal obligations
@@ -74,7 +71,7 @@ const mockObligations = [
 
 export default function FiscalPage() {
   const totalValue = mockFiscalDocuments.reduce((sum, doc) => sum + doc.valor, 0);
-  const emittedCount = mockFiscalDocuments.filter(d => d.status === "emitida").length;
+  const emittedCount = mockFiscalDocuments.filter(d => d.status === "autorizado").length;
 
   return (
     <div className="space-y-6">
@@ -218,7 +215,6 @@ export default function FiscalPage() {
                 {mockFiscalDocuments.map((doc, index) => {
                   const status = statusConfig[doc.status];
                   const StatusIcon = status.icon;
-                  const asset = mockAssets.find(a => a.id === doc.ativoId);
 
                   return (
                     <motion.div
@@ -234,7 +230,7 @@ export default function FiscalPage() {
                           {doc.numero}
                         </p>
                         <p className="text-xs text-text-muted truncate">
-                          {asset?.nome || "Ativo desconhecido"}
+                          {doc.cliente || "Cliente não informado"}
                         </p>
                       </div>
 

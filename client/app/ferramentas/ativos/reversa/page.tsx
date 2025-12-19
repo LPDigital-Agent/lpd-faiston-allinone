@@ -182,7 +182,7 @@ export default function ReversaPage() {
                         </div>
                         <div className="flex items-center gap-1">
                           <User className="w-3 h-3" />
-                          <span>{request.solicitante.name}</span>
+                          <span>{request.solicitante.nome}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
