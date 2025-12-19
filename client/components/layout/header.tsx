@@ -24,7 +24,7 @@ import {
   LogOut,
   Loader2,
 } from "lucide-react";
-import { getGreeting, getInitials } from "@/lib/utils";
+import { getInitials } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
@@ -45,7 +45,6 @@ export function Header({ onOpenCommandPalette }: HeaderProps) {
   const router = useRouter();
   const { user, isLoading, isAuthenticated, signOut } = useAuth();
 
-  const greeting = getGreeting();
   const userName = user?.name || user?.email?.split("@")[0] || "Usuário";
   const initials = getInitials(userName);
 
@@ -65,18 +64,8 @@ export function Header({ onOpenCommandPalette }: HeaderProps) {
         "border-b border-border"
       )}
     >
-      {/* Left section - Greeting & Search */}
-      <div className="flex items-center gap-6">
-        {/* Greeting */}
-        <div className="hidden md:block">
-          <p className="text-sm text-text-secondary">
-            {greeting},{" "}
-            <span className="text-text-primary font-medium">
-              {userName.split(" ")[0]}
-            </span>
-          </p>
-        </div>
-
+      {/* Left section - Search */}
+      <div className="flex items-center">
         {/* Search Trigger */}
         <Button
           variant="outline"
