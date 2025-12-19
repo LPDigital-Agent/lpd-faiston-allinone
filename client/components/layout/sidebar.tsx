@@ -12,6 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Package,
+  Radio,
+  GraduationCap,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -46,6 +48,8 @@ const mainNavItems: NavItem[] = [
 
 const toolsNavItems: NavItem[] = [
   { label: "Gestão de Ativos", icon: Package, href: "/ferramentas/ativos/dashboard" },
+  { label: "Dispatch Center", icon: Radio, href: "/ferramentas/dispatch/dashboard" },
+  { label: "Faiston Academy", icon: GraduationCap, href: "/ferramentas/academy/dashboard" },
 ];
 
 const secondaryNavItems: NavItem[] = [
