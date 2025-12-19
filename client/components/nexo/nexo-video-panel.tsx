@@ -226,12 +226,6 @@ export function NexoVideoPanel() {
         )}
       </div>
 
-      {/* Footer Note */}
-      <div className="p-4 lg:p-6 border-t border-border">
-        <p className="text-sm text-text-muted text-center">
-          Avatar AI gerado com <span className="text-cyan-400">HeyGen</span> • Voz sintetizada com <span className="text-magenta-light">ElevenLabs</span>
-        </p>
-      </div>
     </motion.div>
   );
 }
