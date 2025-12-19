@@ -126,14 +126,20 @@ export function Sidebar() {
               )}
             </AnimatePresence>
             <div className="mt-2 space-y-1">
-              {toolsNavItems.map((item) => (
-                <NavLink
-                  key={item.href}
-                  item={item}
-                  isActive={pathname === item.href || pathname.startsWith(item.href)}
-                  isCollapsed={isCollapsed}
-                />
-              ))}
+              {toolsNavItems.map((item) => {
+                // For tools, check if pathname is within the module base path
+                // e.g., /ferramentas/ativos/* should highlight "Gestão de Ativos"
+                const basePath = item.href.replace(/\/dashboard$/, "");
+                const isActive = pathname === item.href || pathname.startsWith(basePath + "/");
+                return (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    isActive={isActive}
+                    isCollapsed={isCollapsed}
+                  />
+                );
+              })}
             </div>
           </div>
         </nav>
