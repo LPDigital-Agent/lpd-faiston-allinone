@@ -1,0 +1,251 @@
+{
+  "prd_id": "auth-frontend-v1",
+  "prd_name": "Autenticação Frontend Faiston NEXO",
+  "created_at": "2025-12-19",
+  "status": "completed",
+  "total_tasks": 24,
+  "completed_tasks": 24,
+  "phases": [
+    {
+      "phase_id": 1,
+      "phase_name": "Setup e Configuração",
+      "status": "completed",
+      "tasks": [
+        {
+          "task_id": "T001",
+          "title": "Instalar dependências de autenticação",
+          "description": "Adicionar amazon-cognito-identity-js, @apollo/client, graphql e types ao package.json",
+          "files": ["client/package.json"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        },
+        {
+          "task_id": "T002",
+          "title": "Criar arquivos de configuração de ambiente",
+          "description": "Criar .env.local e .env.example com variáveis do Cognito",
+          "files": ["client/.env.local", "client/.env.example"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        },
+        {
+          "task_id": "T003",
+          "title": "Criar configuração do Cognito",
+          "description": "Criar lib/config/cognito.ts com userPoolId, clientId, região e password requirements",
+          "files": ["client/lib/config/cognito.ts"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        }
+      ]
+    },
+    {
+      "phase_id": 2,
+      "phase_name": "Serviços de Autenticação",
+      "status": "completed",
+      "tasks": [
+        {
+          "task_id": "T004",
+          "title": "Criar serviço de autenticação (authService)",
+          "description": "Implementar todas as funções: signUp, confirmSignUp, signIn, signOut, forgotPassword, confirmForgotPassword, changePassword, getCurrentSession, getTokens, getUserAttributes, isAuthenticated, refreshSession",
+          "files": ["client/services/authService.ts"],
+          "status": "completed",
+          "estimated_complexity": "high"
+        },
+        {
+          "task_id": "T005",
+          "title": "Criar utilitário de tratamento de erros",
+          "description": "Implementar handleAuthError com mapeamento de todos os códigos de erro do Cognito para mensagens user-friendly em português",
+          "files": ["client/utils/authErrors.ts"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T006",
+          "title": "Criar utilitário de refresh de tokens",
+          "description": "Implementar ensureValidToken que verifica expiração e renova tokens automaticamente",
+          "files": ["client/utils/tokenRefresh.ts"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        }
+      ]
+    },
+    {
+      "phase_id": 3,
+      "phase_name": "Contexto e Providers",
+      "status": "completed",
+      "tasks": [
+        {
+          "task_id": "T007",
+          "title": "Criar AuthContext e AuthProvider",
+          "description": "Implementar contexto React com state (isAuthenticated, isLoading, user), métodos de auth e hook useAuth",
+          "files": ["client/contexts/AuthContext.tsx"],
+          "status": "completed",
+          "estimated_complexity": "high"
+        },
+        {
+          "task_id": "T008",
+          "title": "Configurar Apollo Client",
+          "description": "Criar apolloClient.ts com httpLink, authLink (token), errorLink (handle 401) e cache",
+          "files": ["client/lib/apolloClient.ts"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T009",
+          "title": "Criar queries e mutations GraphQL",
+          "description": "Implementar GET_ME, LIST_USERS, UPDATE_PROFILE, ADMIN_CREATE_USER",
+          "files": ["client/lib/graphql/queries.ts", "client/lib/graphql/mutations.ts"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        }
+      ]
+    },
+    {
+      "phase_id": 4,
+      "phase_name": "Componentes de Auth",
+      "status": "completed",
+      "tasks": [
+        {
+          "task_id": "T010",
+          "title": "Criar AuthLayout (layout das páginas de auth)",
+          "description": "Layout centralizado com logo Faiston, glassmorphism card, sem sidebar. Inclui animações com Framer Motion",
+          "files": ["client/components/auth/AuthLayout.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T011",
+          "title": "Criar componente ProtectedRoute",
+          "description": "Wrapper que verifica autenticação, mostra loading e redireciona para /login se não autenticado",
+          "files": ["client/components/auth/ProtectedRoute.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        }
+      ]
+    },
+    {
+      "phase_id": 5,
+      "phase_name": "Páginas de Autenticação",
+      "status": "completed",
+      "tasks": [
+        {
+          "task_id": "T012",
+          "title": "Criar layout group (auth)",
+          "description": "Criar app/(auth)/layout.tsx que usa AuthLayout e não inclui AppShell",
+          "files": ["client/app/(auth)/layout.tsx"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        },
+        {
+          "task_id": "T013",
+          "title": "Criar página de Login",
+          "description": "Formulário com email/senha, validação client-side, tratamento de erros, links para signup e forgot-password",
+          "files": ["client/app/(auth)/login/page.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T014",
+          "title": "Criar página de Cadastro (Sign Up)",
+          "description": "Formulário com nome, email, senha. Validação de password requirements, navegação para confirm-signup",
+          "files": ["client/app/(auth)/signup/page.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T015",
+          "title": "Criar página de Confirmação de Email",
+          "description": "Input para código de 6 dígitos, botão resend code, navegação para login após sucesso",
+          "files": ["client/app/(auth)/confirm-signup/page.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T016",
+          "title": "Criar página Forgot Password",
+          "description": "Formulário para email, navega para reset-password. Mostra mensagem genérica (prevent enumeration)",
+          "files": ["client/app/(auth)/forgot-password/page.tsx"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        },
+        {
+          "task_id": "T017",
+          "title": "Criar página Reset Password",
+          "description": "Formulário com código + nova senha + confirmação. Validação de match e requirements",
+          "files": ["client/app/(auth)/reset-password/page.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        }
+      ]
+    },
+    {
+      "phase_id": 6,
+      "phase_name": "Integração Final",
+      "status": "completed",
+      "tasks": [
+        {
+          "task_id": "T018",
+          "title": "Integrar providers no layout root",
+          "description": "Modificar app/layout.tsx para adicionar ApolloProvider e AuthProvider como wrappers",
+          "files": ["client/app/layout.tsx", "client/components/providers/Providers.tsx"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        },
+        {
+          "task_id": "T019",
+          "title": "Atualizar Header com user real e dropdown",
+          "description": "Substituir mockUser por useAuth().user, adicionar dropdown menu com opções de perfil e signout",
+          "files": ["client/components/layout/header.tsx", "client/components/ui/dropdown-menu.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T020",
+          "title": "Atualizar Sidebar com signout",
+          "description": "Adicionar botão de signout no footer da sidebar, usar useAuth().signOut",
+          "files": ["client/components/layout/sidebar.tsx"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        },
+        {
+          "task_id": "T021",
+          "title": "Proteger rotas do dashboard",
+          "description": "Modificar app-shell para usar ProtectedRoute, garantindo que páginas protegidas redirecionem se não autenticado",
+          "files": ["client/components/layout/app-shell.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        }
+      ]
+    },
+    {
+      "phase_id": 7,
+      "phase_name": "Fluxos Adicionais de Senha",
+      "status": "completed",
+      "tasks": [
+        {
+          "task_id": "T022",
+          "title": "Criar página New Password (usuários criados por admin)",
+          "description": "Página para usuários criados por admin definirem nova senha no primeiro login. Inclui validação de requisitos e tratamento do challenge NewPasswordRequired do Cognito",
+          "files": ["client/app/(auth)/new-password/page.tsx", "client/utils/newPasswordChallenge.ts"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T023",
+          "title": "Criar página Change Password (usuários autenticados)",
+          "description": "Página protegida para usuários autenticados alterarem sua senha. Requer senha atual para confirmação de identidade",
+          "files": ["client/app/(protected)/change-password/page.tsx", "client/app/(protected)/layout.tsx"],
+          "status": "completed",
+          "estimated_complexity": "medium"
+        },
+        {
+          "task_id": "T024",
+          "title": "Atualizar Login para tratar NewPasswordRequired",
+          "description": "Modificar página de login para detectar challenge NewPasswordRequired e redirecionar para /new-password. Adicionar suporte a mensagens de sucesso via query params",
+          "files": ["client/app/(auth)/login/page.tsx"],
+          "status": "completed",
+          "estimated_complexity": "low"
+        }
+      ]
+    }
+  ]
+}

@@ -18,13 +18,15 @@ import {
   MessageCircle,
   Brain,
   PenSquare,
+  LogOut,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * Sidebar - Main navigation sidebar for Faiston One
@@ -73,6 +75,13 @@ const secondaryNavItems: NavItem[] = [
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const { isAuthenticated, signOut } = useAuth();
+
+  const handleSignOut = () => {
+    signOut();
+    router.push("/login");
+  };
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -226,6 +235,14 @@ export function Sidebar() {
                 isCollapsed={isCollapsed}
               />
             ))}
+
+            {/* Sign Out Button */}
+            {isAuthenticated && (
+              <SignOutButton
+                isCollapsed={isCollapsed}
+                onClick={handleSignOut}
+              />
+            )}
           </div>
         </div>
 
@@ -328,6 +345,51 @@ function NavLink({ item, isActive, isCollapsed }: NavLinkProps) {
             </span>
           )}
         </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return content;
+}
+
+interface SignOutButtonProps {
+  isCollapsed: boolean;
+  onClick: () => void;
+}
+
+function SignOutButton({ isCollapsed, onClick }: SignOutButtonProps) {
+  const content = (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg",
+        "transition-all duration-150",
+        "text-accent-warning/80 hover:text-accent-warning hover:bg-accent-warning/10"
+      )}
+    >
+      <LogOut className="w-5 h-5 shrink-0" />
+
+      <AnimatePresence mode="wait">
+        {!isCollapsed && (
+          <motion.span
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: "auto" }}
+            exit={{ opacity: 0, width: 0 }}
+            transition={{ duration: 0.15 }}
+            className="text-sm font-medium whitespace-nowrap overflow-hidden"
+          >
+            Sair
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </button>
+  );
+
+  if (isCollapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent side="right">Sair</TooltipContent>
       </Tooltip>
     );
   }

@@ -1,17 +1,31 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Command,
   Search,
   Bell,
   MessageSquare,
   ChevronDown,
+  User,
+  Settings,
+  LogOut,
+  Loader2,
 } from "lucide-react";
 import { getGreeting, getInitials } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 /**
  * Header - Top header bar for Faiston One
@@ -19,24 +33,27 @@ import { getGreeting, getInitials } from "@/lib/utils";
  * Features:
  * - Search trigger (opens Command Palette)
  * - Notifications
- * - User profile
+ * - User profile with dropdown menu
+ * - Sign out functionality
  */
-
-// Mock user data - will come from auth context later
-const mockUser = {
-  name: "Fábio Santos",
-  email: "fabio@faiston.com",
-  avatar: null,
-  role: "Desenvolvedor",
-};
 
 interface HeaderProps {
   onOpenCommandPalette?: () => void;
 }
 
 export function Header({ onOpenCommandPalette }: HeaderProps) {
+  const router = useRouter();
+  const { user, isLoading, isAuthenticated, signOut } = useAuth();
+
   const greeting = getGreeting();
-  const initials = getInitials(mockUser.name);
+  const userName = user?.name || user?.email?.split("@")[0] || "Usuário";
+  const initials = getInitials(userName);
+
+  // Handler para signout
+  const handleSignOut = () => {
+    signOut();
+    router.push("/login");
+  };
 
   return (
     <header
@@ -55,7 +72,7 @@ export function Header({ onOpenCommandPalette }: HeaderProps) {
           <p className="text-sm text-text-secondary">
             {greeting},{" "}
             <span className="text-text-primary font-medium">
-              {mockUser.name.split(" ")[0]}
+              {userName.split(" ")[0]}
             </span>
           </p>
         </div>
@@ -112,23 +129,72 @@ export function Header({ onOpenCommandPalette }: HeaderProps) {
         {/* Divider */}
         <div className="w-px h-8 bg-border mx-2" />
 
-        {/* User Profile */}
-        <Button
-          variant="ghost"
-          className="flex items-center gap-3 px-2 hover:bg-white/5"
-        >
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={mockUser.avatar || undefined} alt={mockUser.name} />
-            <AvatarFallback className="bg-gradient-to-br from-blue-mid to-magenta-mid text-white text-sm">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="hidden lg:block text-left">
-            <p className="text-sm font-medium text-text-primary">{mockUser.name}</p>
-            <p className="text-xs text-text-muted">{mockUser.role}</p>
+        {/* User Profile Dropdown */}
+        {isLoading ? (
+          <div className="flex items-center gap-2 px-2">
+            <Loader2 className="w-5 h-5 animate-spin text-text-muted" />
           </div>
-          <ChevronDown className="w-4 h-4 text-text-muted hidden lg:block" />
-        </Button>
+        ) : isAuthenticated ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="flex items-center gap-3 px-2 hover:bg-white/5"
+              >
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={undefined} alt={userName} />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-mid to-magenta-mid text-white text-sm">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden lg:block text-left">
+                  <p className="text-sm font-medium text-text-primary">{userName}</p>
+                  <p className="text-xs text-text-muted">{user?.email}</p>
+                </div>
+                <ChevronDown className="w-4 h-4 text-text-muted hidden lg:block" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium">{userName}</p>
+                  <p className="text-xs text-text-muted">{user?.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => router.push("/perfil")}
+                className="cursor-pointer"
+              >
+                <User className="mr-2 h-4 w-4" />
+                <span>Meu Perfil</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push("/configuracoes")}
+                className="cursor-pointer"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Configurações</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={handleSignOut}
+                className="cursor-pointer text-accent-warning focus:text-accent-warning"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                <span>Sair</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/login")}
+            className="text-text-secondary hover:text-text-primary"
+          >
+            Entrar
+          </Button>
+        )}
       </div>
     </header>
   );

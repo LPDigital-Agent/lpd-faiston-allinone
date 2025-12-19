@@ -5,12 +5,14 @@ import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 
 /**
  * AppShell - Main layout wrapper for Faiston One
  *
  * Combines Sidebar, Header, and main content area.
  * Handles the Command Palette state.
+ * Protected by authentication - redirects to login if not authenticated.
  */
 
 // Lazy load Command Palette for better initial load
@@ -21,12 +23,14 @@ const CommandPalette = dynamic(
 
 interface AppShellProps {
   children: React.ReactNode;
+  /** Se true, não exige autenticação (default: false) */
+  requireAuth?: boolean;
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, requireAuth = true }: AppShellProps) {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
 
-  return (
+  const content = (
     <div className="min-h-screen bg-faiston-bg">
       {/* Sidebar */}
       <Sidebar />
@@ -49,6 +53,14 @@ export function AppShell({ children }: AppShellProps) {
       />
     </div>
   );
+
+  // Se requireAuth é false, retornar conteúdo sem proteção
+  if (!requireAuth) {
+    return content;
+  }
+
+  // Proteger rotas que requerem autenticação
+  return <ProtectedRoute>{content}</ProtectedRoute>;
 }
 
 export default AppShell;

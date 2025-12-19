@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Roboto, Roboto_Slab } from "next/font/google";
 import "./globals.css";
+import { Providers } from "@/components/providers/Providers";
 
 /**
  * Faiston One - Root Layout
@@ -57,7 +58,7 @@ export default function RootLayout({
       <body
         className={`${roboto.variable} ${robotoSlab.variable} font-sans antialiased`}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

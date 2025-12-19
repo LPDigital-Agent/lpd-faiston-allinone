@@ -6,7 +6,8 @@ import { GradientText } from "@/components/shared/gradient-text";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Calendar, MessageSquare, Newspaper, ArrowRight } from "lucide-react";
 import { getGreeting } from "@/lib/utils";
-import { nexoConversation, currentUser } from "@/mocks/mock-data";
+import { nexoConversation } from "@/mocks/mock-data";
+import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
 
 /**
@@ -19,8 +20,9 @@ import { motion } from "framer-motion";
  */
 
 export function NEXOHero() {
+  const { user } = useAuth();
   const greeting = getGreeting();
-  const firstName = currentUser.name.split(" ")[0];
+  const firstName = user?.name ? user.name.split(" ")[0] : "Usuário";
   const summary = nexoConversation.messages[1];
 
   return (
