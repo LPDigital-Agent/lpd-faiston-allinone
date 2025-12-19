@@ -203,7 +203,7 @@ export default function ComunicacaoPage() {
                                 )}
                               </div>
                               <p className="text-xs text-text-muted mt-0.5">
-                                {remetente?.name || "Usuário desconhecido"}
+                                {remetente?.nome || "Usuário desconhecido"}
                               </p>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
