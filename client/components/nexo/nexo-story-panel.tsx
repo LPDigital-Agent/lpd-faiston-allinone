@@ -27,7 +27,7 @@ export function NexoStoryPanel() {
         <div className="p-6 lg:p-8">
           {/* Header */}
           <h2 className="text-2xl font-bold text-text-primary mb-6">
-            Conheça o <span className="gradient-text-nexo">Nexo</span>
+            Minha <span className="gradient-text-nexo">História</span>
           </h2>
 
           {/* Story content */}
