@@ -1,12 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { motion } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-
-// MANDATORY: All NEXO images must use the official avatar
-const NEXO_AVATAR_PATH = "/Avatars/nexo-avatar.png";
 
 /**
  * NexoStoryPanel - Glass panel with the NEXO AI story
@@ -29,21 +25,10 @@ export function NexoStoryPanel() {
     >
       <ScrollArea className="h-full">
         <div className="p-6 lg:p-8">
-          {/* Header with NEXO Avatar */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-cyan-400/50 shadow-lg shadow-cyan-400/20">
-              <Image
-                src={NEXO_AVATAR_PATH}
-                alt="NEXO Avatar"
-                width={48}
-                height={48}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <h2 className="text-2xl font-bold text-text-primary">
-              Conheça o <span className="gradient-text-nexo">Nexo</span>
-            </h2>
-          </div>
+          {/* Header */}
+          <h2 className="text-2xl font-bold text-text-primary mb-6">
+            Conheça o <span className="gradient-text-nexo">Nexo</span>
+          </h2>
 
           {/* Story content */}
           <div className="space-y-6 text-text-secondary leading-relaxed">
