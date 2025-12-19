@@ -66,18 +66,13 @@ jobs:
       - name: Sync to S3
         working-directory: client
         run: |
+          # Upload all files with immutable cache
           aws s3 sync out/ s3://${{ env.S3_BUCKET }} \
             --delete \
-            --cache-control "public, max-age=31536000, immutable" \
-            --exclude "*.html" \
-            --exclude "_next/data/*"
+            --cache-control "public, max-age=31536000, immutable"
 
-          # HTML files with shorter cache (for updates)
-          aws s3 sync out/ s3://${{ env.S3_BUCKET }} \
-            --delete \
-            --cache-control "public, max-age=0, must-revalidate" \
-            --include "*.html" \
-            --exclude "*"
+          # Override HTML files with no-cache for instant updates
+          find out -name "*.html" -exec sh -c 'for f; do aws s3 cp "$f" "s3://${{ env.S3_BUCKET }}/${f#out/}" --cache-control "public, max-age=0, must-revalidate"; done' _ {} +
 
       - name: Invalidate CloudFront cache
         run: |
