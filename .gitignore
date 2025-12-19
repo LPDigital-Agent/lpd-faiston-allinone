@@ -36,7 +36,13 @@ venv/
 .terraform/
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+# Note: .terraform.lock.hcl should be committed to version control
 
 # Logs
 *.log

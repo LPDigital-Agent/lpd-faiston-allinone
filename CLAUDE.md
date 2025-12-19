@@ -186,7 +186,7 @@ AgentCore has a **30-second cold start limit**. Exceeding this causes HTTP 424 e
 
 ---
 
-## Important Notes
+## Important Notes (Do not Delete)
 
 - All docs in `docs/` folder (not root)
 - Only essential files in root: package.json, configs, CLAUDE.md, README.md
@@ -199,3 +199,4 @@ AgentCore has a **30-second cold start limit**. Exceeding this causes HTTP 424 e
 - MUST USE MCP Context7 to check documentations a make sure you are using the best practices to build that functions or Code
 - USE All Best practices for the SDLC (Software Developer Life Cicle) includes comments in all code e principios de Clean Code.
 - MUST MANDATORY when create any Terraform check the MCP Terraform to make sure you are using the best practices to create terraform IaC and the last version of the modules.
+- MUST Check the /docs/Claude Code/ and read the documentations about best practices in how to create prompts and working better with claude code and apply in all you are doing with claude code to make it better to build softwares and solutions.
