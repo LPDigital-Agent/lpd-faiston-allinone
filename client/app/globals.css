@@ -336,3 +336,166 @@ body {
   background: var(--faiston-magenta-mid);
   color: white;
 }
+
+/* ============================================
+   Asset Management Module Styles
+   ============================================ */
+
+/* Navigation Tabs - Horizontal module navigation */
+.asset-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.asset-nav-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.asset-nav-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) ease;
+  position: relative;
+}
+
+.asset-nav-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.asset-nav-tab.active {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Gradient underline indicator for active tab */
+.asset-nav-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 75%;
+  height: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #960A9C, #FD11A4, #FD5665);
+}
+
+/* Asset Status Badges */
+.asset-status-disponivel {
+  background: rgba(34, 197, 94, 0.2);
+  color: rgb(74, 222, 128);
+}
+
+.asset-status-em-uso {
+  background: rgba(59, 130, 246, 0.2);
+  color: rgb(96, 165, 250);
+}
+
+.asset-status-manutencao {
+  background: rgba(234, 179, 8, 0.2);
+  color: rgb(250, 204, 21);
+}
+
+.asset-status-em-transito {
+  background: rgba(253, 17, 164, 0.2);
+  color: var(--faiston-magenta-light);
+}
+
+.asset-status-baixado {
+  background: rgba(113, 113, 122, 0.2);
+  color: var(--text-muted);
+}
+
+/* Asset Priority Badges */
+.asset-priority-urgente {
+  background: rgba(239, 68, 68, 0.2);
+  color: rgb(248, 113, 113);
+}
+
+.asset-priority-alta {
+  background: rgba(249, 115, 22, 0.2);
+  color: rgb(251, 146, 60);
+}
+
+.asset-priority-normal {
+  background: rgba(59, 130, 246, 0.2);
+  color: rgb(96, 165, 250);
+}
+
+.asset-priority-baixa {
+  background: rgba(113, 113, 122, 0.2);
+  color: var(--text-muted);
+}
+
+/* Asset Category Badges */
+.asset-category-hardware {
+  background: rgba(0, 250, 251, 0.2);
+  color: var(--faiston-blue-light);
+}
+
+.asset-category-mobiliario {
+  background: rgba(168, 85, 247, 0.2);
+  color: rgb(192, 132, 252);
+}
+
+.asset-category-veiculos {
+  background: rgba(34, 197, 94, 0.2);
+  color: rgb(74, 222, 128);
+}
+
+.asset-category-equipamentos {
+  background: rgba(234, 179, 8, 0.2);
+  color: rgb(250, 204, 21);
+}
+
+/* Kanban Column Styles */
+.kanban-column {
+  min-height: 300px;
+}
+
+.kanban-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-default);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  cursor: grab;
+  transition: all var(--duration-fast) ease;
+}
+
+.kanban-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--border-hover);
+}
+
+.kanban-card:active {
+  cursor: grabbing;
+}
+
+/* Empty State */
+.asset-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.asset-empty-state svg {
+  opacity: 0.5;
+  margin-bottom: 1rem;
+}
