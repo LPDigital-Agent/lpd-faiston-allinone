@@ -11,6 +11,7 @@ import {
   HelpCircle,
   ChevronLeft,
   ChevronRight,
+  Package,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -41,6 +42,10 @@ const mainNavItems: NavItem[] = [
   { label: "Notícias", icon: Newspaper, href: "/noticias" },
   { label: "Calendário", icon: Calendar, href: "/calendario" },
   { label: "Teams", icon: MessageSquare, href: "/teams", badge: 5 },
+];
+
+const toolsNavItems: NavItem[] = [
+  { label: "Gestão de Ativos", icon: Package, href: "/ferramentas/ativos" },
 ];
 
 const secondaryNavItems: NavItem[] = [
@@ -104,6 +109,32 @@ export function Sidebar() {
                 isCollapsed={isCollapsed}
               />
             ))}
+          </div>
+
+          {/* Tools Section */}
+          <div className="mt-6 pt-4 border-t border-border">
+            <AnimatePresence mode="wait">
+              {!isCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-3 text-xs font-semibold text-text-muted uppercase tracking-wider"
+                >
+                  Ferramentas
+                </motion.span>
+              )}
+            </AnimatePresence>
+            <div className="mt-2 space-y-1">
+              {toolsNavItems.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  isActive={pathname === item.href || pathname.startsWith(item.href)}
+                  isCollapsed={isCollapsed}
+                />
+              ))}
+            </div>
           </div>
         </nav>
 
