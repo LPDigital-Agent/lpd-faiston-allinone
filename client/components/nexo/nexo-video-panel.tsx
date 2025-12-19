@@ -108,18 +108,18 @@ export function NexoVideoPanel() {
         </h2>
       </div>
 
-      {/* Video Container */}
+      {/* Video Container - constrained to panel size */}
       <div
-        className="relative flex-1 bg-black/50"
+        className="relative flex-1 bg-black/50 min-h-0 overflow-hidden"
         onMouseEnter={() => setShowControls(true)}
         onMouseLeave={() => isPlaying && setShowControls(false)}
       >
-        {/* Video Element */}
+        {/* Video Element - contained within panel bounds */}
         <video
           ref={videoRef}
           src="/Videos/Nexo%20Apresenta%C3%A7%C3%A3o.mp4"
           poster={NEXO_AVATAR_PATH}
-          className="w-full h-full object-contain"
+          className="absolute inset-0 w-full h-full object-contain"
           preload="metadata"
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleVideoEnd}
