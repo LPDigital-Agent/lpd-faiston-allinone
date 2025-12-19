@@ -76,7 +76,7 @@ export function Sidebar() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
               >
-                <FaistonLogo variant="negative" size="md" />
+                <FaistonLogo variant="color" size="md" />
               </motion.div>
             ) : (
               <motion.div

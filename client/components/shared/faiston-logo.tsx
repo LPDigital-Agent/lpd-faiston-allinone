@@ -12,7 +12,7 @@ import Image from "next/image";
 
 export interface FaistonLogoProps {
   /** Logo variant based on background */
-  variant?: "white" | "negative" | "positive";
+  variant?: "white" | "negative" | "positive" | "color";
   /** Size preset */
   size?: "sm" | "md" | "lg" | "xl";
   /** Custom className */
@@ -32,6 +32,7 @@ const logoSources = {
   white: "/logos/faiston-white.png",
   negative: "/logos/faiston-negative.png",
   positive: "/logos/faiston-positive.png",
+  color: "/logos/faiston-color.png",
 };
 
 export function FaistonLogo({
