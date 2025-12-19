@@ -19,6 +19,7 @@ import {
   Brain,
   PenSquare,
   LogOut,
+  UserCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -63,6 +64,7 @@ const toolsNavItems: NavItem[] = [
 
 // NEXO AI Section - AI Assistant features
 const nexoNavItems: NavItem[] = [
+  { label: "Conheça o Nexo", icon: UserCircle, href: "/nexo/conheca" },
   { label: "Chat com NEXO", icon: MessageCircle, href: "/nexo/chat" },
   { label: "Análises AI", icon: Brain, href: "/nexo/analises" },
 ];

@@ -24,13 +24,28 @@ import {
 import { cognitoConfig } from '@/lib/config/cognito';
 
 // =============================================================================
-// Inicialização do User Pool
+// Inicialização do User Pool (Lazy)
 // =============================================================================
+// Lazy initialization to prevent build errors during static export
+// when environment variables are not available.
 
-const userPool = new CognitoUserPool({
-  UserPoolId: cognitoConfig.userPoolId,
-  ClientId: cognitoConfig.clientId,
-});
+let _userPool: CognitoUserPool | null = null;
+
+const getUserPool = (): CognitoUserPool => {
+  if (!_userPool) {
+    if (!cognitoConfig.userPoolId || !cognitoConfig.clientId) {
+      throw new Error(
+        'Configuração do Cognito incompleta. Verifique NEXT_PUBLIC_USER_POOL_ID e NEXT_PUBLIC_USER_POOL_CLIENT_ID.'
+      );
+    }
+    _userPool = new CognitoUserPool({
+      UserPoolId: cognitoConfig.userPoolId,
+      ClientId: cognitoConfig.clientId,
+    });
+  }
+  return _userPool;
+};
+
 
 // =============================================================================
 // Tipos e Interfaces
@@ -106,7 +121,7 @@ export const signUp = (params: SignUpParams): Promise<ISignUpResult> => {
       );
     }
 
-    userPool.signUp(
+    getUserPool().signUp(
       email, // username = email
       password,
       attributeList,
@@ -144,7 +159,7 @@ export const confirmSignUp = (
   return new Promise((resolve, reject) => {
     const cognitoUser = new CognitoUser({
       Username: email,
-      Pool: userPool,
+      Pool: getUserPool(),
     });
 
     cognitoUser.confirmRegistration(code, true, (err, result) => {
@@ -170,7 +185,7 @@ export const resendVerificationCode = (email: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     const cognitoUser = new CognitoUser({
       Username: email,
-      Pool: userPool,
+      Pool: getUserPool(),
     });
 
     cognitoUser.resendConfirmationCode((err) => {
@@ -201,7 +216,7 @@ export const signIn = (params: SignInParams): Promise<CognitoUserSession> => {
 
     const cognitoUser = new CognitoUser({
       Username: email,
-      Pool: userPool,
+      Pool: getUserPool(),
     });
 
     const authenticationDetails = new AuthenticationDetails({
@@ -271,7 +286,7 @@ export const completeNewPasswordChallenge = (
  * Limpa tokens do localStorage
  */
 export const signOut = (): void => {
-  const cognitoUser = userPool.getCurrentUser();
+  const cognitoUser = getUserPool().getCurrentUser();
   if (cognitoUser) {
     cognitoUser.signOut();
   }
@@ -283,7 +298,7 @@ export const signOut = (): void => {
  */
 export const globalSignOut = (): Promise<void> => {
   return new Promise((resolve, reject) => {
-    const cognitoUser = userPool.getCurrentUser();
+    const cognitoUser = getUserPool().getCurrentUser();
     if (!cognitoUser) {
       resolve();
       return;
@@ -322,7 +337,7 @@ export const forgotPassword = (email: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     const cognitoUser = new CognitoUser({
       Username: email,
-      Pool: userPool,
+      Pool: getUserPool(),
     });
 
     cognitoUser.forgotPassword({
@@ -355,7 +370,7 @@ export const confirmForgotPassword = (
   return new Promise((resolve, reject) => {
     const cognitoUser = new CognitoUser({
       Username: email,
-      Pool: userPool,
+      Pool: getUserPool(),
     });
 
     cognitoUser.confirmPassword(code, newPassword, {
@@ -384,7 +399,7 @@ export const changePassword = (
   newPassword: string
 ): Promise<void> => {
   return new Promise((resolve, reject) => {
-    const cognitoUser = userPool.getCurrentUser();
+    const cognitoUser = getUserPool().getCurrentUser();
     if (!cognitoUser) {
       reject(new Error('Nenhum usuário autenticado'));
       return;
@@ -415,7 +430,7 @@ export const changePassword = (
  * Retorna o usuário Cognito atual ou null se não autenticado
  */
 export const getCurrentUser = (): CognitoUser | null => {
-  return userPool.getCurrentUser();
+  return getUserPool().getCurrentUser();
 };
 
 // =============================================================================
@@ -429,7 +444,7 @@ export const getCurrentUser = (): CognitoUser | null => {
  */
 export const getCurrentSession = (): Promise<CognitoUserSession | null> => {
   return new Promise((resolve, reject) => {
-    const cognitoUser = userPool.getCurrentUser();
+    const cognitoUser = getUserPool().getCurrentUser();
     if (!cognitoUser) {
       resolve(null);
       return;
@@ -492,7 +507,7 @@ export const getAccessToken = async (): Promise<string | null> => {
  */
 export const getUserAttributes = (): Promise<UserAttributes | null> => {
   return new Promise((resolve, reject) => {
-    const cognitoUser = userPool.getCurrentUser();
+    const cognitoUser = getUserPool().getCurrentUser();
     if (!cognitoUser) {
       resolve(null);
       return;
@@ -561,7 +576,7 @@ export const isAuthenticated = async (): Promise<boolean> => {
  */
 export const refreshSession = (): Promise<CognitoUserSession> => {
   return new Promise((resolve, reject) => {
-    const cognitoUser = userPool.getCurrentUser();
+    const cognitoUser = getUserPool().getCurrentUser();
     if (!cognitoUser) {
       reject(new Error('Nenhum usuário autenticado'));
       return;
