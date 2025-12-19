@@ -5,7 +5,7 @@
  * @description Página de Login do Faiston NEXO
  */
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -21,10 +21,24 @@ import { saveNewPasswordChallenge } from '@/utils/newPasswordChallenge';
 import type { NewPasswordRequiredError } from '@/services/authService';
 
 // =============================================================================
-// Componente
+// Loading Fallback
 // =============================================================================
 
-export default function LoginPage() {
+function LoadingFallback() {
+  return (
+    <AuthLayout title="Entrar" subtitle="Carregando...">
+      <div className="flex justify-center py-8">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-primary" />
+      </div>
+    </AuthLayout>
+  );
+}
+
+// =============================================================================
+// Componente Interno (usa useSearchParams)
+// =============================================================================
+
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signIn } = useAuth();
@@ -233,5 +247,17 @@ export default function LoginPage() {
         </div>
       </form>
     </AuthLayout>
+  );
+}
+
+// =============================================================================
+// Componente Principal (com Suspense)
+// =============================================================================
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <LoginContent />
+    </Suspense>
   );
 }

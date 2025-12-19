@@ -5,7 +5,7 @@
  * @description Página de Confirmação de Email (código de verificação)
  */
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -84,10 +84,24 @@ function CodeInput({ value, onChange, disabled }: CodeInputProps) {
 }
 
 // =============================================================================
-// Componente Principal
+// Loading Fallback
 // =============================================================================
 
-export default function ConfirmSignUpPage() {
+function LoadingFallback() {
+  return (
+    <AuthLayout title="Verificar email" subtitle="Carregando...">
+      <div className="flex justify-center py-8">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-primary" />
+      </div>
+    </AuthLayout>
+  );
+}
+
+// =============================================================================
+// Componente Interno (usa useSearchParams)
+// =============================================================================
+
+function ConfirmSignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { confirmSignUp, resendVerificationCode } = useAuth();
@@ -283,5 +297,17 @@ export default function ConfirmSignUpPage() {
         </div>
       </form>
     </AuthLayout>
+  );
+}
+
+// =============================================================================
+// Componente Principal (com Suspense)
+// =============================================================================
+
+export default function ConfirmSignUpPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <ConfirmSignUpContent />
+    </Suspense>
   );
 }

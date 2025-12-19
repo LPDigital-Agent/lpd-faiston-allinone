@@ -20,6 +20,7 @@ import {
 } from '@apollo/client/core';
 import { setContext } from '@apollo/client/link/context';
 import { onError } from '@apollo/client/link/error';
+import type { GraphQLError } from 'graphql';
 import { ensureValidToken } from '@/utils/tokenRefresh';
 import { signOut } from '@/services/authService';
 import { cognitoConfig } from '@/lib/config/cognito';
@@ -73,7 +74,11 @@ const authLink = setContext(async (_, { headers }) => {
  * Link de tratamento de erros
  * Redireciona para login em caso de erros de autenticação
  */
-const errorLink = onError(({ graphQLErrors, networkError, operation }) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const errorLink = onError((errorHandler: any) => {
+  const graphQLErrors = errorHandler.graphQLErrors as readonly GraphQLError[] | undefined;
+  const networkError = errorHandler.networkError;
+  const operation = errorHandler.operation;
   // Tratar erros GraphQL
   if (graphQLErrors) {
     for (const err of graphQLErrors) {
@@ -196,10 +201,6 @@ export const apolloClient = new ApolloClient({
       errorPolicy: 'all',
     },
   },
-
-  // Identificador do cliente (útil para debugging)
-  name: 'faiston-nexo-web',
-  version: '1.0.0',
 });
 
 // =============================================================================

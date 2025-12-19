@@ -5,7 +5,7 @@
  * @description Página de Redefinição de Senha (com código + nova senha)
  */
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -83,10 +83,24 @@ function PasswordRequirements({ password }: PasswordRequirementsProps) {
 }
 
 // =============================================================================
-// Componente Principal
+// Loading Fallback
 // =============================================================================
 
-export default function ResetPasswordPage() {
+function LoadingFallback() {
+  return (
+    <AuthLayout title="Redefinir senha" subtitle="Carregando...">
+      <div className="flex justify-center py-8">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-primary" />
+      </div>
+    </AuthLayout>
+  );
+}
+
+// =============================================================================
+// Componente Interno (usa useSearchParams)
+// =============================================================================
+
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { confirmForgotPassword } = useAuth();
@@ -337,5 +351,17 @@ export default function ResetPasswordPage() {
         </div>
       </form>
     </AuthLayout>
+  );
+}
+
+// =============================================================================
+// Componente Principal (com Suspense)
+// =============================================================================
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
