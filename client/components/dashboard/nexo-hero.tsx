@@ -1,14 +1,18 @@
 "use client";
 
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { GlassCard } from "@/components/shared/glass-card";
 import { GradientText } from "@/components/shared/gradient-text";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Calendar, MessageSquare, Newspaper, ArrowRight } from "lucide-react";
+import { Calendar, MessageSquare, Newspaper, ArrowRight } from "lucide-react";
 import { getGreeting } from "@/lib/utils";
 import { nexoConversation } from "@/mocks/mock-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
+
+// MANDATORY: All NEXO images must use the official avatar
+const NEXO_AVATAR_PATH = "/Avatars/nexo-avatar.png";
 
 /**
  * NEXOHero - Main AI assistant widget for the dashboard
@@ -27,20 +31,27 @@ export function NEXOHero() {
 
   return (
     <GlassCard className="h-full p-6 flex flex-col" hoverGlow={false}>
-      {/* Header with NEXO branding */}
+      {/* Header with NEXO Avatar - MANDATORY: Use official avatar */}
       <div className="flex items-center gap-3 mb-4">
         <motion.div
-          className="w-12 h-12 rounded-xl gradient-nexo flex items-center justify-center"
+          className="w-14 h-14 rounded-full overflow-hidden border-2 border-cyan-400/50"
           animate={{
             boxShadow: [
-              "0 0 20px rgba(0, 250, 251, 0.3)",
-              "0 0 30px rgba(0, 250, 251, 0.5)",
-              "0 0 20px rgba(0, 250, 251, 0.3)",
+              "0 0 15px rgba(0, 250, 251, 0.3)",
+              "0 0 25px rgba(0, 250, 251, 0.5)",
+              "0 0 15px rgba(0, 250, 251, 0.3)",
             ],
           }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
         >
-          <Sparkles className="w-6 h-6 text-white" />
+          <Image
+            src={NEXO_AVATAR_PATH}
+            alt="NEXO Avatar"
+            width={56}
+            height={56}
+            className="w-full h-full object-cover"
+            priority
+          />
         </motion.div>
         <div>
           <GradientText variant="nexo" size="lg" bold>
