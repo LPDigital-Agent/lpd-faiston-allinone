@@ -45,7 +45,7 @@ const mainNavItems: NavItem[] = [
 ];
 
 const toolsNavItems: NavItem[] = [
-  { label: "Gestão de Ativos", icon: Package, href: "/ferramentas/ativos" },
+  { label: "Gestão de Ativos", icon: Package, href: "/ferramentas/ativos/dashboard" },
 ];
 
 const secondaryNavItems: NavItem[] = [
