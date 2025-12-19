@@ -14,6 +14,9 @@ import {
   Package,
   Radio,
   GraduationCap,
+  Sparkles,
+  MessageCircle,
+  Brain,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -39,17 +42,25 @@ interface NavItem {
   badge?: number;
 }
 
-const mainNavItems: NavItem[] = [
+// Intranet Section - Core portal features
+const intranetNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
   { label: "Notícias", icon: Newspaper, href: "/noticias" },
   { label: "Calendário", icon: Calendar, href: "/calendario" },
   { label: "Teams", icon: MessageSquare, href: "/teams", badge: 5 },
 ];
 
+// Ferramentas Section - Business tools
 const toolsNavItems: NavItem[] = [
   { label: "Gestão de Ativos", icon: Package, href: "/ferramentas/ativos/dashboard" },
   { label: "Dispatch Center", icon: Radio, href: "/ferramentas/dispatch/dashboard" },
   { label: "Faiston Academy", icon: GraduationCap, href: "/ferramentas/academy/dashboard" },
+];
+
+// NEXO AI Section - AI Assistant features
+const nexoNavItems: NavItem[] = [
+  { label: "Chat com NEXO", icon: MessageCircle, href: "/nexo/chat" },
+  { label: "Análises AI", icon: Brain, href: "/nexo/analises" },
 ];
 
 const secondaryNavItems: NavItem[] = [
@@ -104,24 +115,39 @@ export function Sidebar() {
 
         {/* Main Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
-          <div className="space-y-1">
-            {mainNavItems.map((item) => {
-              // For root path, check both "/" and empty string
-              const isActive = item.href === "/"
-                ? pathname === "/" || pathname === ""
-                : pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <NavLink
-                  key={item.href}
-                  item={item}
-                  isActive={isActive}
-                  isCollapsed={isCollapsed}
-                />
-              );
-            })}
+          {/* Intranet Section */}
+          <div>
+            <AnimatePresence mode="wait">
+              {!isCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-3 text-xs font-semibold text-text-muted uppercase tracking-wider"
+                >
+                  Intranet
+                </motion.span>
+              )}
+            </AnimatePresence>
+            <div className="mt-2 space-y-1">
+              {intranetNavItems.map((item) => {
+                // For root path, check both "/" and empty string
+                const isActive = item.href === "/"
+                  ? pathname === "/" || pathname === ""
+                  : pathname === item.href || pathname.startsWith(item.href + "/");
+                return (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    isActive={isActive}
+                    isCollapsed={isCollapsed}
+                  />
+                );
+              })}
+            </div>
           </div>
 
-          {/* Tools Section */}
+          {/* Ferramentas Section */}
           <div className="mt-6 pt-4 border-t border-border">
             <AnimatePresence mode="wait">
               {!isCollapsed && (
@@ -139,6 +165,39 @@ export function Sidebar() {
               {toolsNavItems.map((item) => {
                 // For tools, check if pathname is within the module base path
                 // e.g., /ferramentas/ativos/* should highlight "Gestão de Ativos"
+                const basePath = item.href.replace(/\/dashboard$/, "");
+                const isActive = pathname === item.href || pathname.startsWith(basePath + "/");
+                return (
+                  <NavLink
+                    key={item.href}
+                    item={item}
+                    isActive={isActive}
+                    isCollapsed={isCollapsed}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* NEXO Assistente AI Section */}
+          <div className="mt-6 pt-4 border-t border-border">
+            <AnimatePresence mode="wait">
+              {!isCollapsed && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="px-3 flex items-center gap-2"
+                >
+                  <Sparkles className="w-3 h-3 text-magenta-light" />
+                  <span className="text-xs font-semibold text-text-muted uppercase tracking-wider">
+                    NEXO AI
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div className="mt-2 space-y-1">
+              {nexoNavItems.map((item) => {
                 const basePath = item.href.replace(/\/dashboard$/, "");
                 const isActive = pathname === item.href || pathname.startsWith(basePath + "/");
                 return (
