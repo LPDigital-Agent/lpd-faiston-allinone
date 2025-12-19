@@ -17,6 +17,7 @@ import {
   Sparkles,
   MessageCircle,
   Brain,
+  PenSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -46,6 +47,7 @@ interface NavItem {
 const intranetNavItems: NavItem[] = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
   { label: "Notícias", icon: Newspaper, href: "/noticias" },
+  { label: "Blog", icon: PenSquare, href: "/blog" },
   { label: "Calendário", icon: Calendar, href: "/calendario" },
   { label: "Teams", icon: MessageSquare, href: "/teams", badge: 5 },
 ];
