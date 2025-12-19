@@ -1,0 +1,18 @@
+# =============================================================================
+# AWS Bedrock AgentCore Runtime Dependencies - Faiston Academy
+# =============================================================================
+# MINIMAL DEPENDENCIES - Cold start must complete in <30 seconds!
+#
+# Framework: Google ADK with native Gemini 3.0 Pro
+#
+# Note: Many common packages (boto3, httpx, tenacity, etc.) are pre-installed
+# on AgentCore Runtime. Only add dependencies that are NOT pre-installed.
+# =============================================================================
+
+# Core framework - REQUIRED
+google-adk
+google-genai>=1.0.0
+bedrock-agentcore
+
+# Audio class TTS
+elevenlabs>=1.0.0

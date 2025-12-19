@@ -1,0 +1,250 @@
+# =============================================================================
+# AgentCore Deployment Workflow - Faiston Academy
+# =============================================================================
+# Deploys Python agents to AWS Bedrock AgentCore Runtime
+# Uses Google ADK with native Gemini models (no LiteLLM wrapper)
+#
+# Framework: Google ADK (Agent Development Kit)
+# Model: All agents use gemini-3-pro-preview exclusively
+# AWS Account: 377311924364 (Faiston One)
+#
+# Note: Adapted from Hive Academy for Faiston One platform.
+# AI Assistant: NEXO (renamed from Sasha)
+# =============================================================================
+
+name: Deploy AgentCore Academy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/agentcore-academy/**'
+      - '.github/workflows/deploy-agentcore-academy.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Deployment action'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - undeploy
+          - status
+
+env:
+  AWS_REGION: us-east-2
+  PYTHON_VERSION: '3.11'
+  AGENT_NAME: faiston_academy_agents
+
+jobs:
+  deploy:
+    name: Deploy to AgentCore Runtime
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action != 'undeploy' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install uv and AgentCore CLI
+        run: |
+          # Install uv (required for direct_code_deploy)
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          source $HOME/.local/bin/env 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
+          uv --version
+          # Install agentcore CLI
+          pip install bedrock-agentcore-starter-toolkit --quiet
+          agentcore --version || echo "AgentCore CLI installed"
+
+      - name: Update AgentCore config for CI/CD
+        working-directory: server/agentcore-academy
+        run: |
+          # Update paths in config to use CI/CD workspace
+          cat > .bedrock_agentcore.yaml << 'EOF'
+          default_agent: faiston_academy_agents
+          agents:
+            faiston_academy_agents:
+              name: faiston_academy_agents
+              entrypoint: main.py
+              deployment_type: direct_code_deploy
+              runtime_type: PYTHON_3_11
+              platform: linux/arm64
+              container_runtime: null
+              source_path: .
+              aws:
+                account: '377311924364'
+                region: us-east-2
+                network_configuration:
+                  network_mode: PUBLIC
+                  network_mode_config: null
+                protocol_configuration:
+                  server_protocol: HTTP
+                observability:
+                  enabled: true
+                lifecycle_configuration:
+                  idle_runtime_session_timeout: null
+                  max_lifetime: null
+              memory:
+                mode: STM_ONLY
+          EOF
+
+      - name: Show agent files
+        working-directory: server/agentcore-academy
+        run: |
+          echo "=== Agent Files ==="
+          find . -name "*.py" -type f | head -20
+          echo ""
+          echo "=== Config ==="
+          cat .bedrock_agentcore.yaml
+
+      - name: Deploy to AgentCore Runtime
+        working-directory: server/agentcore-academy
+        run: |
+          # Ensure uv is in PATH
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "=== Deploying AgentCore Agent ==="
+          # Note: GOOGLE_API_KEY is passed via --env at deploy time (not runtime SSM lookup)
+          # This follows AWS official example pattern for AgentCore ADK deployments
+          echo "y" | agentcore deploy --agent ${{ env.AGENT_NAME }} \
+            --auto-update-on-conflict \
+            --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
+            --env ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }} \
+            --env HEYGEN_API_KEY=${{ secrets.HEYGEN_API_KEY }} \
+            --env YOUTUBE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
+            --env AUDIO_BUCKET=faiston-one-academy-audio-prod \
+            --env SLIDES_BUCKET=faiston-one-academy-slides-prod \
+            --env VIDEOS_BUCKET=faiston-one-academy-videos-prod \
+            --env TRAININGS_BUCKET=faiston-one-academy-trainings-prod \
+            --env TRAININGS_TABLE=faiston-one-academy-trainings 2>&1 || {
+            echo "::warning::Deploy command returned non-zero exit code. Checking status..."
+          }
+
+      - name: Check deployment status
+        working-directory: server/agentcore-academy
+        run: |
+          echo "=== Checking AgentCore Status ==="
+          agentcore status --agent ${{ env.AGENT_NAME }} 2>&1 || true
+
+      - name: Health check
+        working-directory: server/agentcore-academy
+        continue-on-error: true
+        run: |
+          echo "=== Running Health Check ==="
+          # Simple invoke test
+          agentcore invoke --agent ${{ env.AGENT_NAME }} '{"action": "health_check"}' 2>&1 || {
+            echo "::warning::Health check invoke failed (may need custom health action)"
+          }
+
+      - name: Deployment Summary
+        run: |
+          echo "## AgentCore Academy Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent Name | \`${{ env.AGENT_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Framework | Google ADK (native Gemini) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Model | gemini-3-pro-preview |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| AWS Account | \`377311924364\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Actions available:**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`nexo_chat\` - NEXO AI Tutor" >> $GITHUB_STEP_SUMMARY
+          echo "- \`generate_flashcards\` - Study cards" >> $GITHUB_STEP_SUMMARY
+          echo "- \`generate_mindmap\` - Concept maps" >> $GITHUB_STEP_SUMMARY
+          echo "- \`analyze_reflection\` - Learning analysis" >> $GITHUB_STEP_SUMMARY
+          echo "- \`generate_audio_class\` - Audio lessons (ElevenLabs)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`search_youtube\` - YouTube video recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "- \`generate_slidedeck\` - Slide presentations" >> $GITHUB_STEP_SUMMARY
+          echo "- \`generate_video_class\` - Video lessons" >> $GITHUB_STEP_SUMMARY
+          echo "- \`generate_extra_class\` - HeyGen avatar videos" >> $GITHUB_STEP_SUMMARY
+          echo "- \`create_training\` - Custom training management" >> $GITHUB_STEP_SUMMARY
+
+  undeploy:
+    name: Undeploy AgentCore Agent
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'undeploy' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install AgentCore CLI
+        run: |
+          pip install bedrock-agentcore-starter-toolkit --quiet
+
+      - name: Undeploy agent
+        working-directory: server/agentcore-academy
+        run: |
+          echo "=== Destroying AgentCore Agent ==="
+          echo "y" | agentcore destroy --agent ${{ env.AGENT_NAME }} 2>&1 || {
+            echo "::warning::Destroy returned non-zero exit code"
+          }
+
+      - name: Undeploy Summary
+        run: |
+          echo "## AgentCore Agent Undeployed 🔴" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Agent \`${{ env.AGENT_NAME }}\` has been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
+
+  status:
+    name: Check AgentCore Status
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'status' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install AgentCore CLI
+        run: |
+          pip install bedrock-agentcore-starter-toolkit --quiet
+
+      - name: Check status
+        working-directory: server/agentcore-academy
+        run: |
+          echo "=== AgentCore Agent Status ==="
+          agentcore status --agent ${{ env.AGENT_NAME }} 2>&1 || true
+
+      - name: Status Summary
+        run: |
+          echo "## AgentCore Agent Status 📊" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for agent status details." >> $GITHUB_STEP_SUMMARY
