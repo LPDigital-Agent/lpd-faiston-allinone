@@ -84,7 +84,6 @@ export function NexoVideoPanel() {
       className={cn(
         "glass-elevated rounded-2xl overflow-hidden",
         "border border-border",
-        "h-[600px] lg:h-[700px]",
         "flex flex-col"
       )}
     >
@@ -95,17 +94,17 @@ export function NexoVideoPanel() {
         </h2>
       </div>
 
-      {/* Video Container - constrained to panel size */}
+      {/* Video Container - portrait aspect ratio (9:16) */}
       <div
-        className="relative flex-1 bg-black/50 min-h-0 overflow-hidden"
+        className="relative aspect-[9/16] bg-black/20"
         onMouseEnter={() => setShowControls(true)}
         onMouseLeave={() => isPlaying && setShowControls(false)}
       >
-        {/* Video Element - contained within panel bounds */}
+        {/* Video Element - fills container */}
         <video
           ref={videoRef}
           src="/Videos/Nexo%20Apresenta%C3%A7%C3%A3o.mp4"
-          className="absolute inset-0 w-full h-full object-contain"
+          className="absolute inset-0 w-full h-full object-cover"
           preload="metadata"
           onTimeUpdate={handleTimeUpdate}
           onEnded={handleVideoEnd}

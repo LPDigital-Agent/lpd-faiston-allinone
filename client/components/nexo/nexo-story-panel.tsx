@@ -1,14 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 /**
  * NexoStoryPanel - Glass panel with the NEXO AI story
  *
  * Displays the history and capabilities of NEXO
- * in a beautiful glassmorphism container with scroll support.
+ * in a beautiful glassmorphism container.
  */
 
 export function NexoStoryPanel() {
@@ -18,13 +17,11 @@ export function NexoStoryPanel() {
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.5, delay: 0.1 }}
       className={cn(
-        "glass-elevated rounded-2xl overflow-hidden",
+        "glass-elevated rounded-2xl",
         "border border-border",
-        "h-[600px] lg:h-[700px]"
+        "p-6 lg:p-8"
       )}
     >
-      <ScrollArea className="h-full">
-        <div className="p-6 lg:p-8">
           {/* Header */}
           <h2 className="text-2xl font-bold text-text-primary mb-6">
             Minha <span className="gradient-text-nexo">História</span>
@@ -122,8 +119,6 @@ export function NexoStoryPanel() {
               </p>
             </div>
           </div>
-        </div>
-      </ScrollArea>
     </motion.div>
   );
 }

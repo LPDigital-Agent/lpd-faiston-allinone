@@ -39,12 +39,12 @@ export default function ConhecaNexoPage() {
         </p>
       </motion.div>
 
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Panel - Story */}
+      {/* Two Column Layout - Asymmetric for portrait video */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 items-start">
+        {/* Left Panel - Story (flexible width) */}
         <NexoStoryPanel />
 
-        {/* Right Panel - Video */}
+        {/* Right Panel - Video (fixed width for portrait) */}
         <NexoVideoPanel />
       </div>
     </div>
