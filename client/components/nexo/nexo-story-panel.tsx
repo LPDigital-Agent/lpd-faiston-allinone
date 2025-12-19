@@ -19,7 +19,8 @@ export function NexoStoryPanel() {
       className={cn(
         "glass-elevated rounded-2xl",
         "border border-border",
-        "p-4 lg:p-6"
+        "p-4 lg:p-6",
+        "h-full flex flex-col"
       )}
     >
           {/* Header */}
@@ -28,7 +29,7 @@ export function NexoStoryPanel() {
           </h2>
 
           {/* Story content */}
-          <div className="space-y-3 text-text-secondary leading-snug text-sm">
+          <div className="flex-1 space-y-3 text-text-secondary leading-snug text-sm">
             {/* Introduction */}
             <p>
               O Nexo nasceu de uma ideia simples:{" "}
