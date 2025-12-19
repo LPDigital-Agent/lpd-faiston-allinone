@@ -1,85 +1,143 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { PenSquare, Construction, Users, Clock, Heart, MessageSquare } from "lucide-react";
+import { PenSquare, Filter } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { BlogCategory, CATEGORY_CONFIG } from "@/lib/blog/types";
+import {
+  BLOG_POSTS,
+  getFeaturedPost,
+  getNonFeaturedPosts,
+} from "@/mocks/blog-mock-data";
+import { BlogHero } from "@/components/blog/blog-hero";
+import { BlogCard } from "@/components/blog/blog-card";
 
 /**
  * Blog Page - Internal Company Blog
  *
- * Placeholder page for the corporate blog.
- * This will feature company news, employee stories,
- * culture content, and internal announcements.
+ * Displays articles from faiston.com/blogs/ reformatted
+ * for the Faiston One design system with glassmorphism,
+ * bento grid layout, and category filtering.
  */
+
+type FilterCategory = "all" | BlogCategory;
+
+const FILTER_OPTIONS: { value: FilterCategory; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "seguranca", label: "Seguranca" },
+  { value: "infraestrutura", label: "Infraestrutura" },
+  { value: "cloud", label: "Cloud" },
+  { value: "inovacao", label: "Inovacao" },
+  { value: "blog-news", label: "Blog & News" },
+];
+
 export default function BlogPage() {
+  const [activeFilter, setActiveFilter] = useState<FilterCategory>("all");
+
+  const featuredPost = getFeaturedPost();
+  const nonFeaturedPosts = getNonFeaturedPosts();
+
+  // Filter posts based on selected category
+  const filteredPosts =
+    activeFilter === "all"
+      ? nonFeaturedPosts
+      : nonFeaturedPosts.filter((post) => post.category === activeFilter);
+
+  // Show featured in filtered results if matches filter
+  const showFeatured =
+    activeFilter === "all" ||
+    (featuredPost && featuredPost.category === activeFilter);
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+    <div className="min-h-screen">
+      {/* Page Header */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="max-w-md"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="mb-8"
       >
-        {/* Icon */}
-        <div className="relative mx-auto mb-6">
-          <div className="w-24 h-24 rounded-2xl gradient-nexo flex items-center justify-center">
-            <PenSquare className="w-12 h-12 text-white" />
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-xl gradient-nexo flex items-center justify-center">
+            <PenSquare className="w-5 h-5 text-white" />
           </div>
-          <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
-            <Construction className="w-5 h-5 text-yellow-400" />
-          </div>
+          <h1 className="text-2xl font-bold text-text-primary">Blog Faiston</h1>
         </div>
-
-        {/* Title */}
-        <h1 className="text-2xl font-bold text-text-primary mb-3">
-          Blog Faiston
-        </h1>
-
-        {/* Description */}
-        <p className="text-text-secondary mb-6">
-          Histórias, novidades e cultura da nossa empresa.
-          Fique por dentro de tudo que acontece na Faiston
-          e conecte-se com seus colegas.
+        <p className="text-text-secondary">
+          Novidades, tecnologia e insights para sua empresa
         </p>
+      </motion.div>
 
-        {/* Coming Soon Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-yellow-500/10 border border-yellow-500/30">
-          <Construction className="w-4 h-4 text-yellow-400" />
-          <span className="text-sm font-medium text-yellow-400">
-            Em Desenvolvimento
-          </span>
+      {/* Featured Article */}
+      {showFeatured && featuredPost && (
+        <div className="mb-8">
+          <BlogHero post={featuredPost} />
         </div>
+      )}
 
-        {/* Feature Preview */}
-        <div className="mt-8 grid grid-cols-2 gap-3 text-left">
-          <div className="p-3 rounded-lg bg-white/5 border border-border">
-            <div className="flex items-center gap-2 mb-1">
-              <Users className="w-4 h-4 text-blue-light" />
-              <p className="text-sm font-medium text-text-primary">Histórias</p>
-            </div>
-            <p className="text-xs text-text-muted">Colaboradores</p>
+      {/* Filter Bar */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+        className="mb-6"
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 text-text-muted mr-2">
+            <Filter className="w-4 h-4" />
+            <span className="text-sm">Filtrar:</span>
           </div>
-          <div className="p-3 rounded-lg bg-white/5 border border-border">
-            <div className="flex items-center gap-2 mb-1">
-              <Clock className="w-4 h-4 text-magenta-light" />
-              <p className="text-sm font-medium text-text-primary">Novidades</p>
-            </div>
-            <p className="text-xs text-text-muted">Últimas notícias</p>
-          </div>
-          <div className="p-3 rounded-lg bg-white/5 border border-border">
-            <div className="flex items-center gap-2 mb-1">
-              <Heart className="w-4 h-4 text-red-400" />
-              <p className="text-sm font-medium text-text-primary">Cultura</p>
-            </div>
-            <p className="text-xs text-text-muted">Valores e missão</p>
-          </div>
-          <div className="p-3 rounded-lg bg-white/5 border border-border">
-            <div className="flex items-center gap-2 mb-1">
-              <MessageSquare className="w-4 h-4 text-green-400" />
-              <p className="text-sm font-medium text-text-primary">Comentários</p>
-            </div>
-            <p className="text-xs text-text-muted">Interação</p>
-          </div>
+          {FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => setActiveFilter(option.value)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-sm font-medium",
+                "transition-all duration-200",
+                "border",
+                activeFilter === option.value
+                  ? "bg-magenta-mid/20 border-magenta-mid/40 text-magenta-light"
+                  : "bg-white/5 border-border text-text-muted hover:text-text-primary hover:bg-white/10"
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
+      </motion.div>
+
+      {/* Articles Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {filteredPosts.map((post, index) => (
+          <BlogCard key={post.id} post={post} index={index} />
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {filteredPosts.length === 0 && !showFeatured && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-16"
+        >
+          <p className="text-text-muted">
+            Nenhum artigo encontrado nesta categoria.
+          </p>
+        </motion.div>
+      )}
+
+      {/* Article Count */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+        className="mt-8 text-center"
+      >
+        <p className="text-sm text-text-muted">
+          Exibindo {filteredPosts.length + (showFeatured && featuredPost ? 1 : 0)}{" "}
+          de {BLOG_POSTS.length} artigos
+        </p>
       </motion.div>
     </div>
   );
