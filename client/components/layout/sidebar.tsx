@@ -101,14 +101,20 @@ export function Sidebar() {
         {/* Main Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-2">
           <div className="space-y-1">
-            {mainNavItems.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                isActive={pathname === item.href}
-                isCollapsed={isCollapsed}
-              />
-            ))}
+            {mainNavItems.map((item) => {
+              // For root path, check both "/" and empty string
+              const isActive = item.href === "/"
+                ? pathname === "/" || pathname === ""
+                : pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  isActive={isActive}
+                  isCollapsed={isCollapsed}
+                />
+              );
+            })}
           </div>
 
           {/* Tools Section */}
