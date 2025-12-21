@@ -1,12 +1,12 @@
 # =============================================================================
 # AWS Bedrock AgentCore Configuration - Faiston Academy
 # =============================================================================
-# Initial configuration for AgentCore deployment.
-# Values like agent_id, memory_id will be populated after first deploy.
+# Configuration for AgentCore deployment.
 #
 # Framework: Google ADK with native Gemini 3.0 Pro
 # AWS Account: 377311924364 (Faiston One)
 # Region: us-east-2
+# Deployed: 2025-12-21
 # =============================================================================
 
 default_agent: faiston_academy_agents
@@ -29,5 +29,9 @@ agents:
         server_protocol: HTTP
       observability:
         enabled: true
+    bedrock_agentcore:
+      agent_id: faiston_academy_agents-ODNvP6HxCD
+      agent_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_academy_agents-ODNvP6HxCD
     memory:
       mode: STM_ONLY
+      memory_id: faiston_academy_agents_mem-DNh4D14Rbv
