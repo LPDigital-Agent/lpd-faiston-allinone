@@ -22,6 +22,7 @@ agents:
     aws:
       account: '377311924364'
       region: us-east-2
+      execution_role_auto_create: true
       network_configuration:
         network_mode: PUBLIC
       protocol_configuration:
