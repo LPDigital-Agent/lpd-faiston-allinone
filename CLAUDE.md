@@ -105,13 +105,28 @@ lpd-faiston-allinone/
 ├── docs faiston/           # Brand assets and guidelines
 ├── product-development/    # PRD, feature docs, JTBD
 │   ├── current-feature/    # Active feature documentation
-│   │   ├── PRD.md         # Product Requirements Document
-│   │   ├── feature.md     # Feature specification
-│   │   └── JTBD.md        # Jobs to Be Done analysis
 │   └── resources/         # Templates and product overview
-├── client/                 # Next.js frontend (to be created)
-├── server/                 # Python backend + AgentCore agents (to be created)
-└── terraform/              # AWS infrastructure (to be created)
+├── client/                 # Next.js 15 frontend (App Router)
+│   ├── app/               # App Router pages
+│   ├── components/        # React components
+│   │   ├── ui/           # shadcn/ui library
+│   │   └── ferramentas/  # Ferramentas modules
+│   │       └── academy/  # Faiston Academy (migrated from Hive Academy)
+│   │           ├── classroom/  # 14 floating panels
+│   │           └── dashboard/  # 5 dashboard components
+│   ├── contexts/          # React contexts (Academy*, etc.)
+│   ├── hooks/             # Custom hooks
+│   │   └── academy/      # 11 Academy-specific hooks
+│   ├── lib/               # Utilities
+│   │   └── academy/      # Academy types, constants
+│   └── services/          # API clients (academyAgentcore.ts, etc.)
+├── server/                 # Python backend
+│   └── agentcore-academy/ # Faiston Academy AgentCore agents
+│       ├── main.py        # BedrockAgentCoreApp entrypoint (19 actions)
+│       ├── agents/        # Google ADK Agents (NEXO, flashcards, mindmap, etc.)
+│       └── tools/         # Agent tools (elevenlabs, heygen, youtube)
+└── terraform/             # AWS Infrastructure as Code
+    └── main/              # Academy resources (Cognito, S3, DynamoDB, IAM)
 ```
 
 ## Available Commands
@@ -162,6 +177,56 @@ Frontend (Next.js 15 - CloudFront + S3)
 - **AI-First**: Every feature should leverage NEXO AI assistant
 - **Office 365 Integration**: Teams messages + Outlook Calendar via Microsoft Graph API
 - **News Aggregation**: Tech news (Cloud, AI) from Brazil and international sources
+
+---
+
+## Faiston Academy Module
+
+Migrated from Hive Academy to `/ferramentas/academy/`. Educational platform with AI-powered learning features.
+
+### Academy Components (Sprint 4 Complete)
+
+**Classroom Panels (14):**
+- `FloatingPanel` - Draggable/resizable container with macOS-style controls
+- `PanelTitleBar` - Traffic light buttons (close/minimize/maximize)
+- `ClassroomToolbar` - Panel toggle buttons
+- `VideoPlayerPanel` - YouTube player with transcript sync
+- `NexoAIPanel` - AI tutor chat (renamed from Sasha)
+- `TranscriptionPanel` - Video transcript with timestamp navigation
+- `FlashcardsPanel` - AI-generated study cards
+- `MindMapPanel` - Hierarchical concept visualization
+- `AudioClassPanel` - ElevenLabs TTS podcast-style lessons
+- `SlideDeckPanel` - AI-generated slide presentations
+- `LibraryPanel` - Materials + YouTube recommendations
+- `NotesEditorPanel` - Auto-save notes with localStorage
+- `ExtraClassPanel` - HeyGen personalized video lessons
+- `ReflectionModal` - Learning reflection with AI feedback
+
+**Dashboard Components (5):**
+- `CourseCard` - Course thumbnail with progress
+- `CourseCarousel` - Horizontal scrollable course list
+- `CoachNexoCard` - AI coach recommendations
+- `MetricCard` - Stat display with trend indicators
+- `LearningMapSection` - Learning journey progress
+
+### Academy Hooks (11)
+`client/hooks/academy/`: useNexoAI, useFlashcards, useMindMap, useAudioClass, useSlideDeck, useReflection, useFloatingPanel, useExtraClass, useVideoClass, useYouTubeRecommendations, index
+
+### Academy Services (2)
+- `academyAgentcore.ts` - AgentCore Runtime invocation with JWT auth
+- `academyCognito.ts` - Cognito token management
+
+### Academy Contexts (3)
+- `AcademyClassroomContext` - Panel state, current episode
+- `AcademyTrainingContext` - NEXO Tutor custom trainings
+- `AcademyZoomContext` - Live class with Zoom SDK
+
+### Key Adaptations (Hive → Faiston)
+- Renamed "Sasha" → "NEXO" throughout
+- Colors: cyan/purple → `var(--faiston-magenta-mid)` / `var(--faiston-blue-mid)`
+- Storage keys: `hive_` → `faiston_academy_`
+- Router: react-router-dom → Next.js useRouter
+- IDs: number → string (for Next.js params)
 
 ## Key Documentation
 

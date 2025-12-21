@@ -202,7 +202,7 @@ Frontend (Next.js 15 - CloudFront + S3)
 - Colored (dark bg): `Logotipo_Faiston_negativo.png`
 - Colored (light bg): `Logotipo_Faiston_positivo.png`
 
-### Directory Structure (Planned)
+### Directory Structure (Current)
 
 ```
 lpd-faiston-allinone/
@@ -211,30 +211,48 @@ lpd-faiston-allinone/
 │   └── skills/             # Specialist skills
 ├── docs faiston/           # Brand assets and guidelines
 ├── product-development/    # PRD, feature docs, JTBD
-│   ├── current-feature/    # Active feature documentation
-│   └── resources/          # Templates and product overview
 ├── client/                 # Next.js 15 frontend (App Router)
 │   ├── app/               # App Router pages
 │   ├── components/        # React components
 │   │   ├── ui/           # shadcn/ui library
-│   │   ├── dashboard/    # Bento Grid dashboard
-│   │   ├── nexo/         # NEXO AI assistant UI
-│   │   └── widgets/      # Calendar, Teams, News widgets
-│   ├── lib/              # Utilities
-│   └── services/         # API clients (agentcore.ts, ms-graph.ts)
+│   │   └── ferramentas/  # Ferramentas modules
+│   │       └── academy/  # Faiston Academy (migrated from Hive)
+│   │           ├── classroom/  # 14 floating panels
+│   │           └── dashboard/  # 5 dashboard components
+│   ├── contexts/          # React contexts (Academy*, etc.)
+│   ├── hooks/             # Custom hooks
+│   │   └── academy/      # 11 Academy-specific hooks
+│   ├── lib/               # Utilities
+│   │   └── academy/      # Academy types, constants
+│   └── services/          # API clients (academyAgentcore.ts, etc.)
 ├── server/                 # Python backend
-│   └── agentcore/         # AgentCore Runtime
-│       ├── main.py        # BedrockAgentCoreApp entrypoint
-│       ├── agents/        # Google ADK Agents
-│       │   ├── nexo_orchestrator.py
-│       │   ├── news_agent.py
-│       │   ├── calendar_agent.py
-│       │   └── teams_agent.py
-│       └── tools/         # Agent tools
+│   └── agentcore-academy/ # Faiston Academy AgentCore agents
+│       ├── main.py        # BedrockAgentCoreApp entrypoint (19 actions)
+│       ├── agents/        # Google ADK Agents (NEXO, flashcards, etc.)
+│       └── tools/         # Agent tools (elevenlabs, heygen)
 └── terraform/             # AWS Infrastructure as Code
-    ├── backend/          # Terraform state
-    └── main/             # All AWS resources
+    └── main/              # Academy resources (Cognito, S3, DynamoDB)
 ```
+
+---
+
+## Faiston Academy Module (Migrated from Hive Academy)
+
+Educational platform at `/ferramentas/academy/` with AI-powered features.
+
+### Academy Migration Progress
+- ✅ Sprint 1: Terraform Infrastructure (Cognito, S3, DynamoDB, IAM)
+- ✅ Sprint 2: Backend AgentCore (19 actions, NEXO agent, tools)
+- ✅ Sprint 3: Frontend Foundation (services, contexts, hooks)
+- ✅ Sprint 4: Frontend Components (14 classroom + 5 dashboard)
+- ⏳ Sprint 5: Frontend Pages (routes)
+- ⏳ Sprint 6: Style and Polish
+
+### Key Adaptations (Hive → Faiston)
+- "Sasha" → "NEXO" (AI tutor)
+- Colors: cyan/purple → `var(--faiston-magenta-mid)` / `var(--faiston-blue-mid)`
+- Storage: `hive_` → `faiston_academy_`
+- Router: react-router-dom → Next.js App Router
 
 ---
 
