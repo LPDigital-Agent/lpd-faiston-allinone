@@ -666,12 +666,22 @@ async def _start_inventory_count(payload: dict, user_id: str) -> dict:
 
     Creates a counting session for specified locations/items.
     """
-    # TODO: Implement with ReconciliacaoAgent
-    return {
-        "success": True,
-        "campaign_id": None,
-        "message": "Counting campaign implemented in Sprint 3",
-    }
+    from agents.reconciliacao_agent import ReconciliacaoAgent
+
+    agent = ReconciliacaoAgent()
+    result = await agent.start_campaign(
+        name=payload.get("name", ""),
+        description=payload.get("description", ""),
+        location_ids=payload.get("location_ids"),
+        project_ids=payload.get("project_ids"),
+        part_numbers=payload.get("part_numbers"),
+        start_date=payload.get("start_date"),
+        end_date=payload.get("end_date"),
+        created_by=user_id,
+        require_double_count=payload.get("require_double_count", False),
+    )
+
+    return result.to_dict()
 
 
 async def _submit_count_result(payload: dict, user_id: str) -> dict:
@@ -680,11 +690,28 @@ async def _submit_count_result(payload: dict, user_id: str) -> dict:
 
     Records counted quantity for reconciliation.
     """
-    # TODO: Implement with ReconciliacaoAgent
-    return {
-        "success": True,
-        "message": "Count submission implemented in Sprint 3",
-    }
+    campaign_id = payload.get("campaign_id", "")
+    part_number = payload.get("part_number", "")
+    location_id = payload.get("location_id", "")
+
+    if not campaign_id or not part_number or not location_id:
+        return {"success": False, "error": "campaign_id, part_number, and location_id required"}
+
+    from agents.reconciliacao_agent import ReconciliacaoAgent
+
+    agent = ReconciliacaoAgent()
+    result = await agent.submit_count(
+        campaign_id=campaign_id,
+        part_number=part_number,
+        location_id=location_id,
+        counted_quantity=payload.get("counted_quantity", 0),
+        counted_serials=payload.get("counted_serials"),
+        counted_by=user_id,
+        evidence_keys=payload.get("evidence_keys"),
+        notes=payload.get("notes"),
+    )
+
+    return result.to_dict()
 
 
 async def _analyze_divergences(payload: dict) -> dict:
@@ -693,12 +720,14 @@ async def _analyze_divergences(payload: dict) -> dict:
 
     Returns list of discrepancies with suggested actions.
     """
-    # TODO: Implement with ReconciliacaoAgent
-    return {
-        "success": True,
-        "divergences": [],
-        "message": "Divergence analysis implemented in Sprint 3",
-    }
+    campaign_id = payload.get("campaign_id", "")
+    if not campaign_id:
+        return {"success": False, "error": "campaign_id required"}
+
+    from agents.reconciliacao_agent import ReconciliacaoAgent
+
+    agent = ReconciliacaoAgent()
+    return await agent.analyze_divergences(campaign_id=campaign_id)
 
 
 async def _propose_adjustment(payload: dict, user_id: str) -> dict:
@@ -707,12 +736,25 @@ async def _propose_adjustment(payload: dict, user_id: str) -> dict:
 
     Always creates HIL task for approval.
     """
-    # TODO: Implement with ReconciliacaoAgent
-    return {
-        "success": True,
-        "task_id": None,
-        "message": "Adjustment proposal implemented in Sprint 3",
-    }
+    campaign_id = payload.get("campaign_id", "")
+    part_number = payload.get("part_number", "")
+    location_id = payload.get("location_id", "")
+
+    if not campaign_id or not part_number or not location_id:
+        return {"success": False, "error": "campaign_id, part_number, and location_id required"}
+
+    from agents.reconciliacao_agent import ReconciliacaoAgent
+
+    agent = ReconciliacaoAgent()
+    result = await agent.propose_adjustment(
+        campaign_id=campaign_id,
+        part_number=part_number,
+        location_id=location_id,
+        proposed_by=user_id,
+        adjustment_reason=payload.get("adjustment_reason", ""),
+    )
+
+    return result.to_dict()
 
 
 # =============================================================================
