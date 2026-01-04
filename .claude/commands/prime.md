@@ -57,6 +57,13 @@ cat CLAUDE.md
 | SSM Parameter | `/faiston-nexo/{param}` | `/faiston-nexo/ms-graph-secret` |
 | AgentCore Academy | `faiston_academy_agents` | `faiston_academy_agents-ODNvP6HxCD` |
 | AgentCore Inventory | `faiston_asset_management` | `faiston_asset_management` |
+| CloudFront Function | `faiston-one-{name}` | `faiston-one-url-rewriter` |
+
+### AWS Profile (Local Development)
+```bash
+# Profile: faiston-aio (account 377311924364)
+aws sts get-caller-identity --profile faiston-aio
+```
 
 ---
 

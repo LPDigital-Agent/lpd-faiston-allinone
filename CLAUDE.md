@@ -478,6 +478,18 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `dynamodb_sga_audit.tf` - Audit log
 - `s3_sga_documents.tf` - NF-e and evidence storage
 - `iam_sga_agentcore.tf` - AgentCore IAM policies
+- `cloudfront.tf` - CDN with URL rewriter function for Next.js static export
+
+### CloudFront URL Rewriter (CRITICAL)
+Next.js static export with `trailingSlash: true` requires a CloudFront Function to rewrite URLs.
+S3 REST API (via OAC) doesn't support automatic `index.html` resolution.
+
+**Function**: `faiston-one-url-rewriter` (viewer-request)
+- `/path` → `/path/index.html`
+- `/path/` → `/path/index.html`
+- `/path.js` → unchanged (file extension)
+
+Without this function, navigation to modules like `/ferramentas/ativos/dashboard` fails and shows root dashboard.
 
 ### Static Export Pattern (IMPORTANT)
 For dynamic routes (`[id]`, `[slug]`) with `output: 'export'`:
