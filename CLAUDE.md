@@ -296,12 +296,14 @@ Exceeding this causes **HTTP 424 errors** and **BREAKS ALL AI FEATURES**.
 
 ### ✅ ALWAYS DO
 
-1. Keep `requirements.txt` minimal  
+1. Keep `requirements.txt` minimal
    Current baseline: `google-adk`, `google-genai`, `bedrock-agentcore`, `elevenlabs`
-2. Use **lazy imports** in `main.py`  
+2. Use **lazy imports** in `main.py`
    Import each agent **ONLY inside** its handler function.
-3. Check AWS AgentCore pre-installed packages BEFORE adding any dependency  
+3. Check AWS AgentCore pre-installed packages BEFORE adding any dependency
    Do not ship packages that already exist in the runtime.
+4. Use Python stdlib for XML parsing (`xml.etree.ElementTree`)
+   **NEVER use lxml** - it's a heavy C extension that violates cold start limits.
 
 ---
 
@@ -430,6 +432,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ Sprint 6: Movement Forms (entrada, saida, transferencia, reserva, ajuste)
 - ✅ Sprint 7: NEXO Copilot (NexoCopilot, NexoSearchBar, UnifiedSearch)
 - ✅ Sprint 8: Mobile/PWA (MobileScanner, MobileChecklist, ConfirmationButton)
+- ✅ Audit: ADK/AgentCore compliance (95% - lxml fixed, memory strategies pending)
 
 ### SGA Backend Agents (5)
 `server/agentcore-inventory/agents/`:

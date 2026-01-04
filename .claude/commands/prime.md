@@ -53,9 +53,10 @@ cat CLAUDE.md
 |----------|---------|---------|
 | S3 Bucket | `faiston-nexo-{purpose}-{env}` | `faiston-nexo-frontend-prod` |
 | Lambda | `faiston-nexo-{function}` | `faiston-nexo-api` |
-| DynamoDB | `faiston-nexo-{feature}-{env}` | `faiston-nexo-users-prod` |
+| DynamoDB | `faiston-one-sga-{feature}-{env}` | `faiston-one-sga-inventory-prod` |
 | SSM Parameter | `/faiston-nexo/{param}` | `/faiston-nexo/ms-graph-secret` |
-| AgentCore Runtime | `faiston_nexo_agents` | `faiston_nexo_agents` |
+| AgentCore Academy | `faiston_academy_agents` | `faiston_academy_agents-ODNvP6HxCD` |
+| AgentCore Inventory | `faiston_asset_management` | `faiston_asset_management` |
 
 ---
 
@@ -261,6 +262,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ Sprint 4: Frontend Foundation (6 contexts, 12 hooks, services)
 - ✅ Sprint 5-6: Frontend Pages (15+ pages, movement forms)
 - ✅ Sprint 7-8: NEXO Copilot + Mobile/PWA components
+- ✅ Audit: ADK/AgentCore compliance (95% - lxml fixed)
 
 ### SGA Key Components
 | Category | Components |
