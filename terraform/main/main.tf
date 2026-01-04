@@ -15,14 +15,14 @@ terraform {
     }
   }
 
-  # Remote state backend - to be configured after S3 bucket exists
-  # backend "s3" {
-  #   bucket         = "faiston-terraform-state"
-  #   key            = "faiston-one/frontend/terraform.tfstate"
-  #   region         = "us-east-2"
-  #   encrypt        = true
-  #   dynamodb_table = "faiston-terraform-locks"
-  # }
+  # Remote state backend - S3 with DynamoDB locking
+  backend "s3" {
+    bucket         = "faiston-terraform-state"
+    key            = "faiston-one/terraform.tfstate"
+    region         = "us-east-2"
+    encrypt        = true
+    dynamodb_table = "faiston-terraform-locks"
+  }
 }
 
 provider "aws" {
