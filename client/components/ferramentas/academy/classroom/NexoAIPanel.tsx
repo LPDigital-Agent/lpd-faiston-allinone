@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useNexoAI, ConversationMessage } from '@/hooks/academy/useNexoAI';
+import { useNexoAIChatMutation } from '@/hooks/academy/useNexoAI';
 import { ACADEMY_STORAGE_KEYS } from '@/lib/academy/constants';
 
 interface ChatMessage {
@@ -41,8 +41,14 @@ function getStorageKey(courseId: string, episodeId: string): string {
   return `${ACADEMY_STORAGE_KEYS.NOTES_PREFIX}nexo_${courseId}_${episodeId}`;
 }
 
+// Gemini conversation format (internal use only)
+interface GeminiMessage {
+  role: 'user' | 'model';
+  parts: { text: string }[];
+}
+
 // Convert UI messages to Gemini conversation format
-function toGeminiHistory(messages: ChatMessage[]): ConversationMessage[] {
+function toGeminiHistory(messages: ChatMessage[]): GeminiMessage[] {
   // Skip the welcome message (first one) and convert
   return messages.slice(1).map((msg) => ({
     role: msg.role === 'user' ? 'user' : 'model',
@@ -67,7 +73,7 @@ export function NexoAIPanel({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // API hook
-  const { mutateAsync: askNexo, isPending: isTyping, error: apiError } = useNexoAI();
+  const { mutateAsync: askNexo, isPending: isTyping, error: apiError } = useNexoAIChatMutation();
 
   // Generate welcome message based on episode
   const getWelcomeMessage = useCallback((): ChatMessage => {

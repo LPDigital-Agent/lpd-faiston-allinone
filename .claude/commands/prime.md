@@ -10,27 +10,7 @@ Load essential project context after `/clear` or new session start.
 
 ---
 
-## Phase 1: Load Memory Context (MCP)
-
-### Search Knowledge Graph for Project Context
-
-```mcp
-mcp__memory__search_nodes "Faiston NEXO"
-```
-
-```mcp
-mcp__memory__search_nodes "project decisions architecture"
-```
-
-```mcp
-mcp__memory__search_nodes "current tasks progress plans"
-```
-
-> **Note**: If memory is empty, continue with file-based context below.
-
----
-
-## Phase 2: Load Project Instructions
+## Phase 1: Load Project Instructions
 
 ### CLAUDE.md (CRITICAL - Must Read)
 

@@ -499,6 +499,8 @@ export const ACADEMY_STORAGE_KEYS = {
   YOUTUBE_RECOMMENDATIONS_PREFIX: 'faiston_academy_youtube_',
   NOTES_PREFIX: 'faiston_academy_notes_',
   PROGRESS_PREFIX: 'faiston_academy_progress_',
+  LIBRARY_PREFIX: 'faiston_academy_library_',
+  TRANSCRIPTION_PREFIX: 'faiston_academy_transcription_',
 
   // NEXO Tutor training storage
   TRAINING_PREFIX: 'faiston_academy_training_',

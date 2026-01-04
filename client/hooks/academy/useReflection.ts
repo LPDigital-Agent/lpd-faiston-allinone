@@ -230,3 +230,6 @@ export function useReflection({ courseId, episodeId, onSeek }: UseReflectionOpti
     getScoreColor,
   };
 }
+
+// Re-export types for convenience
+export type { ProximoPasso } from '@/lib/academy/types';

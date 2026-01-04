@@ -172,3 +172,6 @@ export function useMindMap({
     hasMindMap: mindMapData !== null,
   };
 }
+
+// Re-export types for convenience
+export type { MindMapNode } from '@/lib/academy/types';

@@ -180,6 +180,67 @@ Frontend (Next.js 15 - CloudFront + S3)
 
 ---
 
+## DO NOT REMOVE
+###Important (Never Change or replace it)
+### Important (Never Change or replace it)
+
+- MUST MANDATORY use ONLY **Gemini 3.0 Family** models (**Pro or Flash**).
+- USING ANY OTHER MODEL, VERSION, OR FAMILY IS **STRICTLY FORBIDDEN**.
+
+- MUST MUST MANDATORY use **Agent Architecture** for **ALL microservices**, **WHEN IT MAKES SENSE**.
+  - “MAKES SENSE” means the service involves **reasoning, orchestration, decision-making, autonomy, learning, memory, workflows, or multi-step execution**.
+
+- If it DOES NOT MAKE SENSE:
+  - you MUST still design the service using **Agentic AI Architecture** based on **Google ADK, A2A, MCP, A2P, and Memory**.
+  - In this case, you MUST **STOP** and **ASK ME** to **VALIDATE AND APPROVE** the architectural decision **BEFORE IMPLEMENTING ANY CODE**.
+
+- ONLY IF I explicitly approve NOT using Agentic Architecture:
+  - you MUST then implement the service using **microservices**, **serverless**, and **event-driven architecture**.
+
+- ANY ASSUMPTION ABOUT ARCHITECTURE **WITHOUT MY EXPLICIT APPROVAL** IS **NOT ALLOWED**.
+
+- MUST MANDATORY use the **A2A Python SDK** located at:  
+  https://github.com/a2aproject/a2a-python
+
+- MUST MANDATORY use the **Google ADK Framework**, strictly following **OFFICIAL DOCUMENTATION**, including but not limited to:
+  - https://google.github.io/adk-docs/
+  - https://developers.googleblog.com/en/agent-development-kit-easy-to-build-multi-agent-applications/
+  - https://docs.cloud.google.com/agent-builder/agent-development-kit/overview
+  - https://cloud.google.com/blog/topics/developers-practitioners/build-your-first-adk-agent-workforce
+  - https://github.com/google/adk-python
+
+- MUST ONLY use **GEMINI 3 FAMILY MODELS**, as defined in **Google Official Documentation**:
+  - https://ai.google.dev/gemini-api/docs/models
+  - https://ai.google.dev/gemini-api/docs/gemini-3
+
+- USING OLDER GEMINI VERSIONS, EXPERIMENTAL MODELS, OR UNLISTED VARIANTS IS **NOT PERMITTED**.
+
+#### HARD STOP & FAILURE CONDITIONS
+
+- IF ANY RULE ABOVE CANNOT BE MET:
+  - YOU MUST **STOP IMMEDIATELY**.
+  - YOU MUST **EXPLAIN WHY**.
+  - YOU MUST **ASK FOR EXPLICIT APPROVAL OR GUIDANCE** BEFORE CONTINUING.
+
+- DO NOT AUTOFIX.
+- DO NOT SUBSTITUTE TECHNOLOGIES.
+- DO NOT SIMPLIFY THE ARCHITECTURE WITHOUT PERMISSION.
+
+#### DEFAULT BEHAVIOR
+
+- WHEN IN DOUBT → **ASK ME FIRST**.
+- WHEN A CHOICE EXISTS → **PRESENT OPTIONS AND TRADE-OFFS**.
+- WHEN A SHORTCUT EXISTS → **DO NOT TAKE IT WITHOUT APPROVAL**.
+
+> **Memory Architecture**: This file contains ONLY essential instructions.
+> Context-specific documentation is in subdirectory CLAUDE.md files (lazy-loaded).
+- NEVER create files on root unless necessary
+- ALL documentation in `docs/` folder
+- Be extremely concise in commits and interactions
+- Always create plans before implementation
+
+---
+
 ## Faiston Academy Module
 
 Migrated from Hive Academy to `/ferramentas/academy/`. Educational platform with AI-powered learning features.

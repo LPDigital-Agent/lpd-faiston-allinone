@@ -389,7 +389,12 @@ export function MindMapPanel({ episodeId, episodeTitle, onSeek }: MindMapPanelPr
     expandAll,
     collapseAll,
     resetMindMap,
-  } = useMindMap(courseId, episodeId, episodeTitle, handleSeekAndOpenVideo);
+  } = useMindMap({
+    courseId,
+    episodeId,
+    episodeTitle,
+    onSeek: handleSeekAndOpenVideo,
+  });
 
   // Load transcription when course/episode changes
   useEffect(() => {

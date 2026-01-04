@@ -106,6 +106,8 @@ interface AcademyClassroomContextType {
   // Episode info
   courseId: string;
   episodeId: string;
+  episodeTitle: string | null;
+  courseCategory: string | null;
 }
 
 // =============================================================================
@@ -246,12 +248,16 @@ interface AcademyClassroomProviderProps {
   children: ReactNode;
   courseId: string;
   episodeId: string;
+  episodeTitle?: string | null;
+  courseCategory?: string | null;
 }
 
 export function AcademyClassroomProvider({
   children,
   courseId,
   episodeId,
+  episodeTitle = null,
+  courseCategory = null,
 }: AcademyClassroomProviderProps) {
   const [zIndexCounter, setZIndexCounter] = useState(112);
 
@@ -606,6 +612,8 @@ export function AcademyClassroomProvider({
         generateAudioClass,
         courseId,
         episodeId,
+        episodeTitle,
+        courseCategory,
       }}
     >
       {children}

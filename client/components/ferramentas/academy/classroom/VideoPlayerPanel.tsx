@@ -59,7 +59,7 @@ export function VideoPlayerPanel({
   const [duration, setDuration] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const hasRestoredProgressRef = useRef(false);
   const prevEpisodeIdRef = useRef<string | null>(null);
   const pendingSeekTimeRef = useRef<number | null>(pendingSeekTime ?? null);

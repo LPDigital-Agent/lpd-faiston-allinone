@@ -75,7 +75,11 @@ export function ReflectionModal({
     canRetry,
     remainingAttempts,
     hasAnalysis,
-  } = useReflection(courseId, episodeId);
+  } = useReflection({
+    courseId,
+    episodeId,
+    onSeek: onSeekToTimestamp,
+  });
 
   // Reset state when modal opens
   useEffect(() => {

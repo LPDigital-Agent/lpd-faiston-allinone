@@ -50,3 +50,6 @@ export {
   prefetchYouTubeRecommendations,
   type YouTubeRecommendation,
 } from './useYouTubeRecommendations';
+
+// Library Hook
+export { useLibrary, type LibraryFile } from './useLibrary';

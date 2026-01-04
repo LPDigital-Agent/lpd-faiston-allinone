@@ -318,5 +318,7 @@ export function useSlideDeck({
   };
 }
 
-// Re-export types
+// Re-export types and constants for convenience
 export type { SlideDeckData, SlideDeckSettings, SlideDeckHistoryItem };
+export type { GenerationProgress } from '@/services/academyAgentcore';
+export { DECK_ARCHETYPES } from '@/lib/academy/constants';

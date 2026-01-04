@@ -144,3 +144,42 @@ export function useNexoAI({
     hasMessages: messages.length > 0,
   };
 }
+
+// Type alias for backwards compatibility
+export type ConversationMessage = ChatMessage;
+
+// =============================================================================
+// Standalone Chat Mutation (for custom message management)
+// =============================================================================
+
+interface NexoChatRequest {
+  question: string;
+  transcription: string;
+  episodeTitle?: string;
+  conversationHistory?: Array<{ role: string; parts: { text: string }[] }>;
+}
+
+/**
+ * Raw mutation hook for NEXO AI chat.
+ * Use this when you want to manage messages yourself.
+ */
+export function useNexoAIChatMutation() {
+  return useMutation({
+    mutationFn: async (request: NexoChatRequest): Promise<NexoChatResponse> => {
+      // Convert Gemini-style history to simple format for API
+      const conversationHistory = request.conversationHistory?.map((msg) => ({
+        role: msg.role === 'model' ? 'assistant' : msg.role,
+        content: msg.parts[0]?.text || '',
+      }));
+
+      const { data } = await nexoChat({
+        question: request.question,
+        transcription: request.transcription,
+        episode_title: request.episodeTitle,
+        conversation_history: conversationHistory,
+      });
+
+      return data;
+    },
+  });
+}

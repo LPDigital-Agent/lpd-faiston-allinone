@@ -530,15 +530,19 @@ export function FlashcardsPanel({ episodeId }: FlashcardsPanelProps) {
                   <ScrollArea className="flex-1 w-full px-2 min-h-0">
                     <div className="py-2">
                       <MarkdownContent
-                        content={isFlipped ? currentCard.back : currentCard.front}
+                        content={
+                          isFlipped
+                            ? (currentCard.back ?? currentCard.answer ?? '')
+                            : (currentCard.front ?? currentCard.question ?? '')
+                        }
                       />
                     </div>
                   </ScrollArea>
 
                   {/* Tags */}
-                  {currentCard.tags?.length > 0 && (
+                  {(currentCard.tags?.length ?? 0) > 0 && (
                     <div className="shrink-0 flex flex-wrap gap-1 mt-2 justify-center max-w-full px-2">
-                      {currentCard.tags.slice(0, 3).map((tag, index) => (
+                      {currentCard.tags?.slice(0, 3).map((tag, index) => (
                         <span
                           key={index}
                           className="px-2 py-0.5 rounded-full text-xs bg-white/10 text-white/60 truncate max-w-[100px]"

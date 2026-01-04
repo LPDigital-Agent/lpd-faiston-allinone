@@ -385,7 +385,12 @@ export function LibraryPanel({ episodeId }: LibraryPanelProps) {
     openInYouTube,
     selectedVideo,
     isModalOpen,
-  } = useYouTubeRecommendations(courseId, episodeId, episodeTitle || '', courseCategory || '');
+  } = useYouTubeRecommendations({
+    courseId,
+    episodeId,
+    episodeTitle: episodeTitle || undefined,
+    courseCategory: courseCategory || undefined,
+  });
 
   // Auto-fetch recommendations when transcription is available and no cache
   useEffect(() => {
@@ -470,7 +475,7 @@ export function LibraryPanel({ episodeId }: LibraryPanelProps) {
                   <Sparkles className="w-4 h-4 text-[var(--faiston-magenta-mid,#C31B8C)]" />
                   <span className="text-sm font-medium text-white/60">Recomendacoes do NEXO</span>
                   <Youtube className="w-4 h-4 text-red-500" />
-                  {hasRecommendations && (
+                  {hasRecommendations && transcription && (
                     <button
                       onClick={() => refreshRecommendations(transcription)}
                       className="ml-auto p-1 hover:bg-white/10 rounded transition-colors"
@@ -496,7 +501,7 @@ export function LibraryPanel({ episodeId }: LibraryPanelProps) {
                   </div>
                 ) : (
                   <EmptyRecommendations
-                    onRetry={() => fetchRecommendations(transcription)}
+                    onRetry={() => transcription && fetchRecommendations(transcription)}
                     hasTranscription={!!transcription}
                   />
                 )}

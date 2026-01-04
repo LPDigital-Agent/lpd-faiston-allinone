@@ -373,3 +373,7 @@ export function useAudioClass({
 
 // Re-export types
 export type { AudioClassSettings, AudioClassData };
+
+// Re-export constants for convenience
+export { PLAYBACK_RATES, VOICE_OPTIONS, AUDIO_MODE_LABELS as MODE_LABELS } from '@/lib/academy/constants';
+export type { AudioMode } from '@/lib/academy/types';

@@ -132,7 +132,7 @@ export function ExtraClassPanel({ episodeId, onSeek }: ExtraClassPanelProps) {
     deleteFromHistory,
     elapsedTime,
     maxPollMinutes,
-  } = useExtraClass(courseId, episodeId, onSeek, () => setExtraclassReady(true));
+  } = useExtraClass({ courseId, episodeId, onSeek, onVideoReady: () => setExtraclassReady(true) });
 
   // Load transcription when course/episode changes
   useEffect(() => {

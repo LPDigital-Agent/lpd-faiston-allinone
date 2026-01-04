@@ -31,7 +31,7 @@ import {
   type SlideDeckHistoryItem,
   type GenerationProgress,
 } from '@/hooks/academy/useSlideDeck';
-import type { Slide } from '@/services/academyAgentcore';
+import type { Slide } from '@/lib/academy/types';
 
 interface SlideDeckPanelProps {
   episodeId: string;
@@ -265,7 +265,11 @@ export function SlideDeckPanel({ episodeId }: SlideDeckPanelProps) {
     isFirstSlide,
     isLastSlide,
     progress,
-  } = useSlideDeck(courseId, episodeId, episodeTitle || `Aula ${episodeId}`);
+  } = useSlideDeck({
+    courseId,
+    episodeId,
+    episodeTitle: episodeTitle || `Aula ${episodeId}`,
+  });
 
   const progressPercentage = getProgressPercentage(progress);
   const progressMessage = getProgressMessage(progress);
