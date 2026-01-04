@@ -192,26 +192,36 @@ lpd-faiston-allinone/
 ├── docs faiston/           # Brand assets and guidelines
 ├── product-development/    # PRD, feature docs, JTBD
 ├── client/                 # Next.js 15 frontend (App Router)
-│   ├── app/               # App Router pages
+│   ├── app/               # App Router pages (55+ routes)
 │   ├── components/        # React components
-│   │   ├── ui/           # shadcn/ui library
+│   │   ├── ui/           # shadcn/ui library (15+ components)
 │   │   └── ferramentas/  # Ferramentas modules
-│   │       └── academy/  # Faiston Academy (migrated from Hive)
-│   │           ├── classroom/  # 14 floating panels
-│   │           └── dashboard/  # 5 dashboard components
-│   ├── contexts/          # React contexts (Academy*, etc.)
+│   │       ├── academy/  # Faiston Academy
+│   │       │   ├── classroom/  # 14 floating panels
+│   │       │   └── dashboard/  # 5 dashboard components
+│   │       └── ativos/   # Asset Management (SGA 2.0)
+│   │           └── estoque/    # Inventory management
+│   │               ├── mobile/  # 3 PWA components
+│   │               └── nexo/    # 4 NEXO AI components
+│   ├── contexts/          # React contexts
+│   │   ├── Academy*       # 3 Academy contexts
+│   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
-│   │   └── academy/      # 12 Academy-specific hooks
+│   │   ├── academy/      # 12 Academy-specific hooks
+│   │   └── ativos/       # 12 SGA-specific hooks
 │   ├── lib/               # Utilities
-│   │   └── academy/      # Academy types, constants
-│   └── services/          # API clients (academyAgentcore.ts, etc.)
+│   │   ├── academy/      # Academy types, constants
+│   │   └── ativos/       # SGA types, constants
+│   └── services/          # API clients
+│       ├── academyAgentcore.ts  # Academy AgentCore
+│       └── sgaAgentcore.ts      # SGA AgentCore
 ├── server/                 # Python backend
-│   └── agentcore-academy/ # Faiston Academy AgentCore agents
-│       ├── main.py        # BedrockAgentCoreApp entrypoint (19 actions)
-│       ├── agents/        # Google ADK Agents (NEXO, flashcards, etc.)
-│       └── tools/         # Agent tools (elevenlabs, heygen)
+│   ├── agentcore-academy/ # Faiston Academy AgentCore (19 actions)
+│   └── agentcore-inventory/ # SGA Inventory AgentCore (30+ actions)
+│       ├── agents/        # 5 Google ADK Agents
+│       └── tools/         # dynamodb, s3, nf_parser, hil
 └── terraform/             # AWS Infrastructure as Code
-    └── main/              # Academy resources (Cognito, S3, DynamoDB)
+    └── main/              # All AWS resources (20 files)
 ```
 
 ---
@@ -239,6 +249,38 @@ New types: `types/zoom-videosdk.d.ts`
 - Colors: cyan/purple → `var(--faiston-magenta-mid)` / `var(--faiston-blue-mid)`
 - Storage: `hive_` → `faiston_academy_`
 - Router: react-router-dom → Next.js App Router
+
+---
+
+## SGA Inventory Module (Gestao de Estoque)
+
+Asset management system at `/ferramentas/ativos/estoque/`. Complete product implementation.
+
+### SGA Implementation Progress (January 2026)
+- ✅ Sprint 1-3: Backend (Terraform + 5 AgentCore agents)
+- ✅ Sprint 4: Frontend Foundation (6 contexts, 12 hooks, services)
+- ✅ Sprint 5-6: Frontend Pages (15+ pages, movement forms)
+- ✅ Sprint 7-8: NEXO Copilot + Mobile/PWA components
+
+### SGA Key Components
+| Category | Components |
+|----------|------------|
+| **Backend Agents** | EstoqueControl, Intake, Reconciliacao, Compliance, Comunicacao |
+| **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
+| **Hooks** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner |
+| **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch |
+| **Mobile/PWA** | MobileScanner, MobileChecklist, ConfirmationButton |
+
+### SGA Pages Structure
+```
+/ferramentas/ativos/estoque/
+├── page.tsx           # Dashboard + KPIs
+├── [id]/              # Asset detail
+├── lista/             # Asset list
+├── cadastros/         # Part numbers, locations, projects
+├── movimentacoes/     # Entrada, saida, transferencia, reserva, ajuste
+└── inventario/        # Campaigns and counting
+```
 
 ---
 

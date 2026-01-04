@@ -109,24 +109,41 @@ lpd-faiston-allinone/
 ├── client/                 # Next.js 15 frontend (App Router)
 │   ├── app/               # App Router pages
 │   ├── components/        # React components
-│   │   ├── ui/           # shadcn/ui library
+│   │   ├── ui/           # shadcn/ui library (15+ components)
 │   │   └── ferramentas/  # Ferramentas modules
-│   │       └── academy/  # Faiston Academy (migrated from Hive Academy)
-│   │           ├── classroom/  # 14 floating panels
-│   │           └── dashboard/  # 5 dashboard components
-│   ├── contexts/          # React contexts (Academy*, etc.)
+│   │       ├── academy/  # Faiston Academy (migrated from Hive Academy)
+│   │       │   ├── classroom/  # 14 floating panels
+│   │       │   └── dashboard/  # 5 dashboard components
+│   │       └── ativos/   # Asset Management (SGA 2.0)
+│   │           └── estoque/    # Inventory management
+│   │               ├── mobile/  # 3 PWA components
+│   │               └── nexo/    # 4 NEXO AI components
+│   ├── contexts/          # React contexts
+│   │   ├── Academy*       # 3 Academy contexts
+│   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
-│   │   └── academy/      # 11 Academy-specific hooks
+│   │   ├── academy/      # 12 Academy-specific hooks
+│   │   └── ativos/       # 12 SGA-specific hooks
 │   ├── lib/               # Utilities
-│   │   └── academy/      # Academy types, constants
-│   └── services/          # API clients (academyAgentcore.ts, etc.)
+│   │   ├── academy/      # Academy types, constants
+│   │   └── ativos/       # SGA types, constants
+│   └── services/          # API clients
+│       ├── academyAgentcore.ts  # Academy AgentCore
+│       └── sgaAgentcore.ts      # SGA AgentCore
 ├── server/                 # Python backend
-│   └── agentcore-academy/ # Faiston Academy AgentCore agents
-│       ├── main.py        # BedrockAgentCoreApp entrypoint (19 actions)
-│       ├── agents/        # Google ADK Agents (NEXO, flashcards, mindmap, etc.)
-│       └── tools/         # Agent tools (elevenlabs, heygen, youtube)
+│   ├── agentcore-academy/ # Faiston Academy AgentCore agents
+│   │   ├── main.py        # BedrockAgentCoreApp entrypoint (19 actions)
+│   │   ├── agents/        # Google ADK Agents (NEXO, flashcards, etc.)
+│   │   └── tools/         # Agent tools (elevenlabs, heygen, youtube)
+│   └── agentcore-inventory/ # SGA Inventory AgentCore agents
+│       ├── main.py        # BedrockAgentCoreApp entrypoint (30+ actions)
+│       ├── agents/        # 5 Google ADK Agents
+│       └── tools/         # 4 tools (dynamodb, s3, nf_parser, hil)
 └── terraform/             # AWS Infrastructure as Code
-    └── main/              # Academy resources (Cognito, S3, DynamoDB, IAM)
+    └── main/              # All AWS resources
+        ├── Cognito, CloudFront, IAM
+        ├── DynamoDB (academy + 3 SGA tables)
+        └── S3 (6 buckets: academy + sga)
 ```
 
 ## Available Commands
@@ -391,4 +408,87 @@ Hooks that import types must re-export them for consumers:
 // At end of hook file
 export type { MindMapNode } from '@/lib/academy/types';
 export { DECK_ARCHETYPES } from '@/lib/academy/constants';
+```
+
+---
+## SGA Inventory Module (Gestao de Estoque)
+
+Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full product (not MVP) with AI-powered features.
+
+### SGA Implementation Progress (January 2026)
+- ✅ Sprint 1: Terraform Infrastructure (DynamoDB x3, S3, IAM)
+- ✅ Sprint 2: Backend Core Agents (EstoqueControl, Intake)
+- ✅ Sprint 3: Backend Advanced Agents (Reconciliacao, Compliance, Comunicacao)
+- ✅ Sprint 4: Frontend Foundation (contexts x6, hooks x12, services)
+- ✅ Sprint 5: Frontend Pages (15+ pages: dashboard, cadastros, movimentacoes, inventario)
+- ✅ Sprint 6: Movement Forms (entrada, saida, transferencia, reserva, ajuste)
+- ✅ Sprint 7: NEXO Copilot (NexoCopilot, NexoSearchBar, UnifiedSearch)
+- ✅ Sprint 8: Mobile/PWA (MobileScanner, MobileChecklist, ConfirmationButton)
+
+### SGA Backend Agents (5)
+`server/agentcore-inventory/agents/`:
+- `estoque_control_agent.py` - Core +/- movements
+- `intake_agent.py` - NF-e PDF/XML extraction
+- `reconciliacao_agent.py` - Divergence detection
+- `compliance_agent.py` - Policy validation
+- `comunicacao_agent.py` - Notifications
+
+### SGA Contexts (6)
+`client/contexts/ativos/`:
+- `AssetManagementContext` - Global state, filters
+- `InventoryOperationsContext` - Movement operations
+- `InventoryCountContext` - Physical counting sessions
+- `NexoEstoqueContext` - AI assistant state
+- `TaskInboxContext` - HIL approval tasks
+- `OfflineSyncContext` - PWA offline queue
+
+### SGA Hooks (12)
+`client/hooks/ativos/`:
+- `useAssets`, `useAssetDetail` - Asset queries
+- `useMovements`, `useMovementMutations`, `useMovementValidation` - Movement operations
+- `useLocations`, `usePartNumbers`, `useProjects` - Master data
+- `useBalanceQuery`, `useNFReader`, `useSerialScanner` - Utilities
+
+### SGA Frontend Pages (15+)
+`client/app/(main)/ferramentas/ativos/estoque/`:
+- `page.tsx` - Dashboard with KPIs and inbox
+- `[id]/page.tsx` - Asset detail with timeline
+- `lista/page.tsx` - Asset list with filters
+- `cadastros/` - Part numbers, locations, projects
+- `movimentacoes/` - Entrada, saida, transferencia, reserva, ajuste
+- `inventario/` - Campaigns and counting sessions
+
+### SGA Components
+**NEXO AI (4):** `NexoCopilot`, `NexoSearchBar`, `UnifiedSearch`, index
+**Mobile/PWA (3):** `MobileScanner`, `MobileChecklist`, `ConfirmationButton`
+
+### SGA Terraform Resources
+`terraform/main/`:
+- `dynamodb_sga_inventory.tf` - Main inventory table (6 GSIs)
+- `dynamodb_sga_hil.tf` - Human-in-the-Loop tasks
+- `dynamodb_sga_audit.tf` - Audit log
+- `s3_sga_documents.tf` - NF-e and evidence storage
+- `iam_sga_agentcore.tf` - AgentCore IAM policies
+
+### Static Export Pattern (IMPORTANT)
+For dynamic routes (`[id]`, `[slug]`) with `output: 'export'`:
+```tsx
+// page.tsx - Server Component
+import { ClientComponent } from './ClientComponent';
+
+export async function generateStaticParams(): Promise<{ id: string }[]> {
+  return [{ id: '_' }];  // Placeholder for SPA fallback
+}
+
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <ClientComponent id={id} />;
+}
+```
+```tsx
+// ClientComponent.tsx - Client Component
+'use client';
+export function ClientComponent({ id }: { id: string }) {
+  // All client-side logic here
+}
 ```
