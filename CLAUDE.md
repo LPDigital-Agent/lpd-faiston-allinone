@@ -152,6 +152,15 @@ lpd-faiston-allinone/
         └── S3 (6 buckets: academy + sga)
 ```
 
+## GitHub Actions Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `terraform.yml` | Push to `terraform/**` or manual | Plan on PR, Apply on merge to main |
+| `deploy-frontend.yml` | Push to `client/**` | Build Next.js and sync to S3 + CloudFront |
+| `deploy-agentcore-academy.yml` | Manual dispatch | Deploy Academy agents to Bedrock AgentCore |
+| `deploy-agentcore-inventory.yml` | Manual dispatch | Deploy SGA Inventory agents to Bedrock AgentCore |
+
 ## Available Commands
 
 | Command | Description |
@@ -160,6 +169,7 @@ lpd-faiston-allinone/
 | `/commit` | Create well-formatted commits |
 | `/create-prd` | Create Product Requirements Document |
 | `/ultra-think` | Deep analysis and problem solving |
+| `/sync-project` | Synchronize all project documentation |
 
 ## Available Skills
 
@@ -480,6 +490,13 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `iam_sga_agentcore.tf` - AgentCore IAM policies
 - `cloudfront.tf` - CDN with URL rewriter function for Next.js static export
 
+### Terraform State Management (January 2026)
+Remote state is enabled with S3 backend and DynamoDB locking:
+- **State bucket**: `faiston-terraform-state` (us-east-2, versioned, encrypted)
+- **Lock table**: `faiston-terraform-locks` (DynamoDB)
+- **State path**: `faiston-one/terraform.tfstate`
+- **Resources imported**: 74 AWS resources (CloudFront, S3 x6, DynamoDB x4, IAM, SSM)
+
 ### CloudFront URL Rewriter (CRITICAL)
 Next.js static export with `trailingSlash: true` requires a CloudFront Function to rewrite URLs.
 S3 REST API (via OAC) doesn't support automatic `index.html` resolution.
@@ -513,3 +530,34 @@ export function ClientComponent({ id }: { id: string }) {
   // All client-side logic here
 }
 ```
+
+---
+
+## Known Issues & Fixes (January 2026)
+
+### 1. S3 Bucket Tags - No Commas Allowed
+**Issue**: AWS S3 bucket tags reject values containing commas
+**Fix**: Use hyphens instead of commas in tag values
+```hcl
+# WRONG
+Purpose = "NF-e files, evidence photos, and documents"
+
+# CORRECT
+Purpose = "NF-e files - evidence photos - documents"
+```
+
+### 2. CloudFront Function Naming After Import
+**Issue**: When importing existing CloudFront Functions to Terraform, name mismatch causes destroy/recreate cycle that fails (function in use)
+**Fix**: Use explicit hardcoded name matching AWS resource, not pattern-based names
+```hcl
+# After import, use exact AWS name
+name = "faiston-one-url-rewriter"  # NOT ${local.name_prefix}-url-rewriter
+```
+
+### 3. Terraform State Lock Cleanup
+**Issue**: State lock remains after failed plan/apply
+**Fix**: `terraform force-unlock <LOCK_ID>`
+
+### 4. AgentCore Memory Mode
+**Issue**: `mode=read_write` fails with "STM is read only"
+**Fix**: Use `memory_manager(mode=MemoryMode.READ_ONLY)` for now (write pending AWS fix)

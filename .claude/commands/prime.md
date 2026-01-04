@@ -65,6 +65,20 @@ cat CLAUDE.md
 aws sts get-caller-identity --profile faiston-aio
 ```
 
+### Terraform State Management
+- **State bucket**: `faiston-terraform-state` (us-east-2, versioned, encrypted)
+- **Lock table**: `faiston-terraform-locks` (DynamoDB)
+- **State path**: `faiston-one/terraform.tfstate`
+- **Resources managed**: 74+ AWS resources
+
+### GitHub Actions Workflows
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `terraform.yml` | Push to `terraform/**` | Plan on PR, Apply on merge |
+| `deploy-frontend.yml` | Push to `client/**` | Build & deploy to S3/CloudFront |
+| `deploy-agentcore-academy.yml` | Manual | Deploy Academy agents |
+| `deploy-agentcore-inventory.yml` | Manual | Deploy SGA agents |
+
 ---
 
 ## Phase 3: Repository State
@@ -228,8 +242,15 @@ lpd-faiston-allinone/
 │   └── agentcore-inventory/ # SGA Inventory AgentCore (30+ actions)
 │       ├── agents/        # 5 Google ADK Agents
 │       └── tools/         # dynamodb, s3, nf_parser, hil
-└── terraform/             # AWS Infrastructure as Code
-    └── main/              # All AWS resources (20 files)
+├── terraform/             # AWS Infrastructure as Code
+│   └── main/              # All AWS resources (19 .tf files)
+│       ├── main.tf        # S3 backend, providers
+│       ├── cloudfront.tf  # CDN + URL rewriter function
+│       ├── s3*.tf         # 6 S3 buckets (frontend, academy, sga)
+│       ├── dynamodb*.tf   # 4 DynamoDB tables
+│       └── iam*.tf        # IAM roles/policies
+└── data/                   # Seed data
+    └── faiston_sga2_estoque_simulado_sap.csv  # SGA test data
 ```
 
 ---
