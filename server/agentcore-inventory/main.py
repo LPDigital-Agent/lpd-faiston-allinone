@@ -224,12 +224,38 @@ async def _search_assets(payload: dict) -> dict:
     - Project
     - Status
     """
-    # TODO: Implement with DynamoDB client
+    from tools.dynamodb_client import SGADynamoDBClient
+    from agents.utils import EntityPrefix
+
+    db = SGADynamoDBClient()
+
+    location_id = payload.get("location_id")
+    project_id = payload.get("project_id")
+    limit = payload.get("limit", 50)
+
+    assets = []
+
+    if location_id:
+        assets = db.get_assets_by_location(location_id, limit=limit)
+    elif project_id:
+        assets = db.query_gsi(
+            index_name="GSI3",
+            pk=f"{EntityPrefix.PROJECT}{project_id}",
+            sk_prefix="ASSET#",
+            limit=limit,
+        )
+    else:
+        # Query all assets by status
+        assets = db.query_gsi(
+            index_name="GSI4",
+            pk="STATUS#IN_STOCK",
+            limit=limit,
+        )
+
     return {
         "success": True,
-        "assets": [],
-        "count": 0,
-        "message": "Search implemented in Sprint 2",
+        "assets": assets,
+        "count": len(assets),
     }
 
 
@@ -243,15 +269,13 @@ async def _where_is_serial(payload: dict) -> dict:
     if not serial:
         return {"success": False, "error": "Serial number required"}
 
-    # TODO: Implement with DynamoDB GSI1 lookup
-    return {
-        "success": True,
-        "serial": serial,
-        "location": None,
-        "project": None,
-        "status": None,
-        "message": "Serial lookup implemented in Sprint 2",
-    }
+    # Use EstoqueControlAgent for query
+    from agents.estoque_control_agent import EstoqueControlAgent
+
+    agent = EstoqueControlAgent()
+    result = await agent.query_asset_location(serial_number=serial)
+
+    return result
 
 
 async def _get_balance(payload: dict) -> dict:
@@ -260,16 +284,23 @@ async def _get_balance(payload: dict) -> dict:
 
     Returns quantity available, reserved, and total.
     """
-    # TODO: Implement with DynamoDB client
-    return {
-        "success": True,
-        "balance": {
-            "total": 0,
-            "available": 0,
-            "reserved": 0,
-        },
-        "message": "Balance query implemented in Sprint 2",
-    }
+    part_number = payload.get("part_number", "")
+    location_id = payload.get("location_id")
+    project_id = payload.get("project_id")
+
+    if not part_number:
+        return {"success": False, "error": "part_number required"}
+
+    from agents.estoque_control_agent import EstoqueControlAgent
+
+    agent = EstoqueControlAgent()
+    result = await agent.query_balance(
+        part_number=part_number,
+        location_id=location_id,
+        project_id=project_id,
+    )
+
+    return result
 
 
 async def _get_asset_timeline(payload: dict) -> dict:
@@ -278,11 +309,20 @@ async def _get_asset_timeline(payload: dict) -> dict:
 
     Uses GSI6 for event sourcing pattern.
     """
-    # TODO: Implement with DynamoDB GSI6 query
+    asset_id = payload.get("asset_id", "")
+    if not asset_id:
+        return {"success": False, "error": "asset_id required"}
+
+    from tools.dynamodb_client import SGADynamoDBClient
+
+    db = SGADynamoDBClient()
+    timeline = db.get_asset_timeline(asset_id=asset_id, limit=100)
+
     return {
         "success": True,
-        "timeline": [],
-        "message": "Timeline implemented in Sprint 2",
+        "asset_id": asset_id,
+        "timeline": timeline,
+        "count": len(timeline),
     }
 
 
@@ -330,13 +370,26 @@ async def _process_nf_upload(payload: dict, user_id: str) -> dict:
 
     Returns extraction with confidence score.
     """
-    # TODO: Implement with IntakeAgent
-    return {
-        "success": True,
-        "extraction": {},
-        "confidence": {"overall": 0.0, "requires_hil": True},
-        "message": "NF processing implemented in Sprint 2",
-    }
+    s3_key = payload.get("s3_key", "")
+    file_type = payload.get("file_type", "xml")
+    project_id = payload.get("project_id", "")
+    destination_location_id = payload.get("destination_location_id", "ESTOQUE_CENTRAL")
+
+    if not s3_key:
+        return {"success": False, "error": "s3_key required"}
+
+    from agents.intake_agent import IntakeAgent
+
+    agent = IntakeAgent()
+    result = await agent.process_nf_upload(
+        s3_key=s3_key,
+        file_type=file_type,
+        project_id=project_id,
+        destination_location_id=destination_location_id,
+        uploaded_by=user_id,
+    )
+
+    return result.to_dict()
 
 
 async def _validate_nf_extraction(payload: dict) -> dict:
@@ -366,12 +419,24 @@ async def _confirm_nf_entry(payload: dict, user_id: str) -> dict:
     - Updates balances
     - Audit log entry
     """
-    # TODO: Implement with EstoqueControlAgent
-    return {
-        "success": True,
-        "movement_ids": [],
-        "message": "Entry confirmation implemented in Sprint 2",
-    }
+    entry_id = payload.get("entry_id", "")
+    item_mappings = payload.get("item_mappings")
+    notes = payload.get("notes")
+
+    if not entry_id:
+        return {"success": False, "error": "entry_id required"}
+
+    from agents.intake_agent import IntakeAgent
+
+    agent = IntakeAgent()
+    result = await agent.confirm_entry(
+        entry_id=entry_id,
+        confirmed_by=user_id,
+        item_mappings=item_mappings,
+        notes=notes,
+    )
+
+    return result.to_dict()
 
 
 # =============================================================================
@@ -402,22 +467,43 @@ async def _create_reservation(payload: dict, user_id: str) -> dict:
     - Have TTL for automatic expiration
     - Are linked to tickets/chamados
     """
-    # TODO: Implement with EstoqueControlAgent
-    return {
-        "success": True,
-        "reservation_id": None,
-        "expires_at": None,
-        "message": "Reservation implemented in Sprint 2",
-    }
+    from agents.estoque_control_agent import EstoqueControlAgent
+
+    agent = EstoqueControlAgent()
+    result = await agent.create_reservation(
+        part_number=payload.get("part_number", ""),
+        quantity=payload.get("quantity", 1),
+        project_id=payload.get("project_id", ""),
+        chamado_id=payload.get("chamado_id"),
+        serial_numbers=payload.get("serial_numbers"),
+        source_location_id=payload.get("source_location_id", "ESTOQUE_CENTRAL"),
+        destination_location_id=payload.get("destination_location_id"),
+        requested_by=user_id,
+        notes=payload.get("notes"),
+        ttl_hours=payload.get("ttl_hours", 72),
+    )
+
+    return result.to_dict()
 
 
 async def _cancel_reservation(payload: dict, user_id: str) -> dict:
     """Cancel an existing reservation."""
-    # TODO: Implement
-    return {
-        "success": True,
-        "message": "Reservation cancellation implemented in Sprint 2",
-    }
+    reservation_id = payload.get("reservation_id", "")
+    reason = payload.get("reason")
+
+    if not reservation_id:
+        return {"success": False, "error": "reservation_id required"}
+
+    from agents.estoque_control_agent import EstoqueControlAgent
+
+    agent = EstoqueControlAgent()
+    result = await agent.cancel_reservation(
+        reservation_id=reservation_id,
+        cancelled_by=user_id,
+        reason=reason,
+    )
+
+    return result.to_dict()
 
 
 async def _process_expedition(payload: dict, user_id: str) -> dict:
@@ -430,12 +516,27 @@ async def _process_expedition(payload: dict, user_id: str) -> dict:
     3. Update balances
     4. Clear reservation
     """
-    # TODO: Implement with EstoqueControlAgent
-    return {
-        "success": True,
-        "movement_id": None,
-        "message": "Expedition implemented in Sprint 2",
-    }
+    from agents.estoque_control_agent import EstoqueControlAgent
+
+    agent = EstoqueControlAgent()
+    result = await agent.process_expedition(
+        reservation_id=payload.get("reservation_id"),
+        part_number=payload.get("part_number"),
+        quantity=payload.get("quantity", 1),
+        serial_numbers=payload.get("serial_numbers"),
+        source_location_id=payload.get("source_location_id", "ESTOQUE_CENTRAL"),
+        destination=payload.get("destination", ""),
+        project_id=payload.get("project_id"),
+        chamado_id=payload.get("chamado_id"),
+        recipient_name=payload.get("recipient_name", ""),
+        recipient_contact=payload.get("recipient_contact", ""),
+        shipping_method=payload.get("shipping_method", "HAND_DELIVERY"),
+        processed_by=user_id,
+        notes=payload.get("notes"),
+        evidence_keys=payload.get("evidence_keys"),
+    )
+
+    return result.to_dict()
 
 
 async def _create_transfer(payload: dict, user_id: str) -> dict:
@@ -446,13 +547,32 @@ async def _create_transfer(payload: dict, user_id: str) -> dict:
     - Cross-project transfers
     - Restricted location access
     """
-    # TODO: Implement with EstoqueControlAgent + ComplianceAgent
-    return {
-        "success": True,
-        "movement_id": None,
-        "requires_approval": False,
-        "message": "Transfer implemented in Sprint 2",
-    }
+    part_number = payload.get("part_number", "")
+    quantity = payload.get("quantity", 1)
+    source_location_id = payload.get("source_location_id", "")
+    destination_location_id = payload.get("destination_location_id", "")
+    project_id = payload.get("project_id", "")
+
+    if not part_number:
+        return {"success": False, "error": "part_number required"}
+    if not source_location_id or not destination_location_id:
+        return {"success": False, "error": "source and destination locations required"}
+
+    from agents.estoque_control_agent import EstoqueControlAgent
+
+    agent = EstoqueControlAgent()
+    result = await agent.create_transfer(
+        part_number=part_number,
+        quantity=quantity,
+        source_location_id=source_location_id,
+        destination_location_id=destination_location_id,
+        project_id=project_id,
+        serial_numbers=payload.get("serial_numbers"),
+        requested_by=user_id,
+        notes=payload.get("notes"),
+    )
+
+    return result.to_dict()
 
 
 # =============================================================================
@@ -466,12 +586,20 @@ async def _get_pending_tasks(payload: dict, user_id: str) -> dict:
 
     Returns tasks sorted by priority and creation date.
     """
-    # TODO: Implement with DynamoDB HIL Tasks table
+    from tools.hil_workflow import HILWorkflowManager
+
+    manager = HILWorkflowManager()
+    tasks = manager.get_pending_tasks(
+        task_type=payload.get("task_type"),
+        assigned_to=payload.get("assigned_to") or user_id,
+        assigned_role=payload.get("assigned_role"),
+        limit=payload.get("limit", 50),
+    )
+
     return {
         "success": True,
-        "tasks": [],
-        "count": 0,
-        "message": "Task listing implemented in Sprint 2",
+        "tasks": tasks,
+        "count": len(tasks),
     }
 
 
@@ -481,11 +609,24 @@ async def _approve_task(payload: dict, user_id: str) -> dict:
 
     Executes the pending action and logs the approval.
     """
-    # TODO: Implement with ComplianceAgent
-    return {
-        "success": True,
-        "message": "Task approval implemented in Sprint 2",
-    }
+    task_id = payload.get("task_id", "")
+    notes = payload.get("notes")
+    modified_payload = payload.get("modified_payload")
+
+    if not task_id:
+        return {"success": False, "error": "task_id required"}
+
+    from tools.hil_workflow import HILWorkflowManager
+
+    manager = HILWorkflowManager()
+    result = await manager.approve_task(
+        task_id=task_id,
+        approved_by=user_id,
+        notes=notes,
+        modified_payload=modified_payload,
+    )
+
+    return result
 
 
 async def _reject_task(payload: dict, user_id: str) -> dict:
@@ -494,11 +635,24 @@ async def _reject_task(payload: dict, user_id: str) -> dict:
 
     Logs the rejection with optional reason.
     """
-    # TODO: Implement with ComplianceAgent
-    return {
-        "success": True,
-        "message": "Task rejection implemented in Sprint 2",
-    }
+    task_id = payload.get("task_id", "")
+    reason = payload.get("reason", "")
+
+    if not task_id:
+        return {"success": False, "error": "task_id required"}
+    if not reason:
+        return {"success": False, "error": "reason required for rejection"}
+
+    from tools.hil_workflow import HILWorkflowManager
+
+    manager = HILWorkflowManager()
+    result = await manager.reject_task(
+        task_id=task_id,
+        rejected_by=user_id,
+        reason=reason,
+    )
+
+    return result
 
 
 # =============================================================================
