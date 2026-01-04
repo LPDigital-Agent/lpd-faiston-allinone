@@ -33,7 +33,7 @@ export const ASSET_NAV_MODULES: AssetNavModule[] = [
   },
   {
     id: "estoque",
-    label: "Gestão de Estoque",
+    label: "Estoque",
     labelShort: "Estoque",
     href: "/ferramentas/ativos/estoque",
     icon: Package,

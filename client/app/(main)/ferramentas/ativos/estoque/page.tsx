@@ -391,7 +391,7 @@ export default function EstoquePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">
-            Gestão de Estoque
+            Estoque
           </h1>
           <p className="text-sm text-text-muted mt-1">
             Dashboard do módulo de inventário
