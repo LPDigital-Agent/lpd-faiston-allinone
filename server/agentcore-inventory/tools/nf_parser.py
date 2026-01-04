@@ -4,35 +4,21 @@
 # Parser for Brazilian NF-e (Nota Fiscal Eletrônica) documents.
 #
 # Features:
-# - XML parsing with lxml (lightweight, fast)
+# - XML parsing with stdlib ElementTree (no external dependencies)
 # - PDF text extraction support (via AI)
 # - Serial number extraction from descriptions
 # - Confidence scoring for extraction quality
 #
-# CRITICAL: Lazy imports for cold start optimization (<30s limit)
+# CRITICAL: Uses only Python stdlib for cold start optimization (<30s limit)
+# NOTE: Replaced lxml with xml.etree.ElementTree to comply with CLAUDE.md rules
+#       (lxml is a heavy C extension that violates cold start requirements)
 # =============================================================================
 
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any, Tuple
 import re
 import os
-
-# Lazy imports - lxml imported only when needed
-_etree = None
-
-
-def _get_etree():
-    """
-    Get lxml etree with lazy initialization.
-
-    Returns:
-        lxml.etree module
-    """
-    global _etree
-    if _etree is None:
-        from lxml import etree
-        _etree = etree
-    return _etree
+import xml.etree.ElementTree as ET
 
 
 # =============================================================================
@@ -207,27 +193,33 @@ class NFParser:
         extraction = NFExtraction(raw_xml=xml_content)
 
         try:
-            etree = _get_etree()
+            # Parse XML using stdlib ElementTree
+            root = ET.fromstring(xml_content)
 
-            # Parse XML
-            root = etree.fromstring(xml_content.encode("utf-8"))
+            # Try to find infNFe with namespace first, then without
+            # NF-e standard namespace
+            nfe_ns = "{http://www.portalfiscal.inf.br/nfe}"
 
-            # Handle namespace
-            ns = self.NAMESPACES
-
-            # Try to find infNFe with or without namespace
-            infNFe = root.find(".//nfe:infNFe", ns)
+            infNFe = root.find(f".//{nfe_ns}infNFe")
             if infNFe is None:
-                # Try without namespace
+                # Try without namespace (some files don't have it)
                 infNFe = root.find(".//infNFe")
             if infNFe is None:
-                # Try direct child
-                infNFe = root.find(".//{*}infNFe")
+                # Try as direct child
+                for elem in root.iter():
+                    if elem.tag.endswith("infNFe"):
+                        infNFe = elem
+                        break
 
             if infNFe is None:
                 extraction.errors.append("Could not find infNFe element")
                 extraction.confidence = {"overall": 0.0}
                 return extraction
+
+            # Detect namespace from found element
+            self._detected_ns = ""
+            if infNFe.tag.startswith("{"):
+                self._detected_ns = infNFe.tag.split("}")[0] + "}"
 
             # Extract NF key from Id attribute
             nf_id = infNFe.get("Id", "")
@@ -260,26 +252,62 @@ class NFParser:
 
     def _find_element(self, parent, path: str) -> Optional[Any]:
         """Find element with or without namespace."""
-        etree = _get_etree()
+        # Use detected namespace from parse_xml
+        ns = getattr(self, "_detected_ns", "")
 
-        # Try with namespace
-        elem = parent.find(f".//nfe:{path}", self.NAMESPACES)
-        if elem is not None:
-            return elem
+        # Try with detected namespace
+        if ns:
+            elem = parent.find(f".//{ns}{path}")
+            if elem is not None:
+                return elem
 
         # Try without namespace
         elem = parent.find(f".//{path}")
         if elem is not None:
             return elem
 
-        # Try with wildcard namespace
-        elem = parent.find(f".//{{{etree.QName(parent).namespace or '*'}}}{path}")
-        return elem
+        # Try to find by tag suffix (handles any namespace)
+        for elem in parent.iter():
+            if elem.tag.endswith(path) or elem.tag == path:
+                return elem
+
+        return None
 
     def _get_text(self, parent, path: str, default: str = "") -> str:
-        """Get text content of element."""
-        elem = self._find_element(parent, path)
-        return elem.text.strip() if elem is not None and elem.text else default
+        """
+        Get text content of element, supporting nested paths like 'ide/nNF'.
+
+        Args:
+            parent: Parent element to search from
+            path: Path to element (e.g., 'ide/nNF' or 'emit/CNPJ')
+            default: Default value if not found
+
+        Returns:
+            Text content of the element or default
+        """
+        ns = getattr(self, "_detected_ns", "")
+        parts = path.split("/")
+
+        current = parent
+        for part in parts:
+            found = None
+            # Try with namespace
+            if ns:
+                found = current.find(f"{ns}{part}")
+            # Try without namespace
+            if found is None:
+                found = current.find(part)
+            # Try by suffix
+            if found is None:
+                for child in current:
+                    if child.tag.endswith(part):
+                        found = child
+                        break
+            if found is None:
+                return default
+            current = found
+
+        return current.text.strip() if current is not None and current.text else default
 
     def _parse_ide(self, infNFe, extraction: NFExtraction) -> None:
         """Parse identification (ide) section."""
@@ -301,29 +329,52 @@ class NFParser:
 
     def _parse_items(self, infNFe, extraction: NFExtraction) -> None:
         """Parse items (det) section."""
-        # Find all det elements
-        etree = _get_etree()
+        # Use detected namespace
+        ns = getattr(self, "_detected_ns", "")
 
-        det_elements = infNFe.findall(".//nfe:det", self.NAMESPACES)
+        # Find all det elements with or without namespace
+        det_elements = []
+        if ns:
+            det_elements = infNFe.findall(f".//{ns}det")
         if not det_elements:
             det_elements = infNFe.findall(".//det")
+        if not det_elements:
+            # Fallback: find by tag suffix
+            det_elements = [elem for elem in infNFe.iter() if elem.tag.endswith("det")]
 
         for det in det_elements:
             try:
                 item_number = int(det.get("nItem", 0))
 
-                # Get product info
-                prod = det.find("nfe:prod", self.NAMESPACES)
+                # Get product info (prod element)
+                prod = None
+                if ns:
+                    prod = det.find(f"{ns}prod")
                 if prod is None:
                     prod = det.find("prod")
+                if prod is None:
+                    # Find by suffix
+                    for elem in det:
+                        if elem.tag.endswith("prod"):
+                            prod = elem
+                            break
 
                 if prod is None:
                     continue
 
-                def get_prod_text(path: str) -> str:
-                    elem = prod.find(f"nfe:{path}", self.NAMESPACES)
+                def get_prod_text(tag_name: str) -> str:
+                    """Get text from a child element of prod."""
+                    elem = None
+                    if ns:
+                        elem = prod.find(f"{ns}{tag_name}")
                     if elem is None:
-                        elem = prod.find(path)
+                        elem = prod.find(tag_name)
+                    if elem is None:
+                        # Find by suffix
+                        for child in prod:
+                            if child.tag.endswith(tag_name):
+                                elem = child
+                                break
                     return elem.text.strip() if elem is not None and elem.text else ""
 
                 description = get_prod_text("xProd")

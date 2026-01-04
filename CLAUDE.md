@@ -26,6 +26,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **NO AWS Amplify** - EVER
 - **Cognito**: PRIMARY authentication method (direct API, no SDK)
 
+## AWS Configuration
+
+- **MANDATORY** to Deploy for Developer:
+  - AWS Account ID: 377311924364\
+  - AWS Regionb: us-east-2 
+  
 ---
 
 ## Infrastructure Policy (MANDATORY)

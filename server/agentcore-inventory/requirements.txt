@@ -17,12 +17,13 @@
 # - python-dateutil
 # - chardet
 # - Pillow
+#
+# NF-e XML Parsing:
+# Using Python stdlib xml.etree.ElementTree (no external dependency needed)
+# REMOVED lxml - violates CLAUDE.md cold start rules (C extension, ~50MB)
 # =============================================================================
 
 # Core framework - REQUIRED
 google-adk
 google-genai>=1.0.0
 bedrock-agentcore
-
-# NF-e XML parsing (lightweight XML library)
-lxml>=5.0.0
