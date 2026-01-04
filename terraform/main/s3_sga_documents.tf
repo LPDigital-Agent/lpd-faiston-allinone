@@ -41,7 +41,7 @@ resource "aws_s3_bucket" "sga_documents" {
     Environment = var.environment
     Module      = "Gestao de Ativos"
     Feature     = "Gestao de Estoque"
-    Purpose     = "NF-e files, evidence photos, and inventory documents"
+    Purpose     = "NF-e files - evidence photos - inventory documents"
     Compliance  = "Fiscal"
   }
 }

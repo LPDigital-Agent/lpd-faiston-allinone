@@ -17,7 +17,10 @@
 # -----------------------------------------------------------------------------
 
 resource "aws_cloudfront_function" "url_rewriter" {
-  name    = "${local.name_prefix}-url-rewriter"
+  # NOTE: Using explicit name to match existing AWS resource (created before Terraform import)
+  # Standard pattern would be: "${local.name_prefix}-url-rewriter" = "faiston-one-prod-url-rewriter"
+  # But AWS has: "faiston-one-url-rewriter" - keeping this to avoid destroy/recreate cycle
+  name    = "faiston-one-url-rewriter"
   runtime = "cloudfront-js-2.0"
   comment = "Rewrite URLs to index.html for Next.js static export"
   publish = true
