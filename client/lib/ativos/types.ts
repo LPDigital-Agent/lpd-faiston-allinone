@@ -397,3 +397,834 @@ export interface PaginatedResponse<T> {
   data: T[];
   pagination: PaginationInfo;
 }
+
+// =============================================================================
+// SGA (Sistema de Gestao de Ativos) - Inventory Module Types
+// =============================================================================
+// Extended types for the AI-powered inventory management system.
+// These types align with the DynamoDB single-table design and AgentCore agents.
+// =============================================================================
+
+// =============================================================================
+// SGA Base Types & Enums
+// =============================================================================
+
+/**
+ * SGA Movement types (event sourcing pattern).
+ */
+export type SGAMovementType =
+  | 'ENTRY'           // Inbound from NF-e
+  | 'EXIT'            // Outbound expedition
+  | 'TRANSFER'        // Internal location transfer
+  | 'ADJUSTMENT_IN'   // Inventory adjustment (+)
+  | 'ADJUSTMENT_OUT'  // Inventory adjustment (-)
+  | 'RESERVE'         // Block for expedition
+  | 'UNRESERVE'       // Release reservation
+  | 'RETURN';         // Reversa (customer return)
+
+/**
+ * SGA Asset status lifecycle.
+ */
+export type SGAAssetStatus =
+  | 'AVAILABLE'       // Ready for use
+  | 'RESERVED'        // Blocked for expedition
+  | 'IN_TRANSIT'      // Being moved
+  | 'WITH_CUSTOMER'   // Deployed at customer site
+  | 'IN_REPAIR'       // Under maintenance
+  | 'QUARANTINE'      // Quality hold
+  | 'DISPOSED';       // Scrapped/discarded
+
+/**
+ * HIL Task status for approval workflows.
+ */
+export type HILTaskStatus =
+  | 'PENDING'         // Awaiting action
+  | 'APPROVED'        // Approved by reviewer
+  | 'REJECTED'        // Rejected by reviewer
+  | 'EXPIRED'         // TTL exceeded
+  | 'CANCELLED';      // Cancelled by requestor
+
+/**
+ * HIL Task types.
+ */
+export type HILTaskType =
+  | 'ADJUSTMENT_APPROVAL'
+  | 'ENTRY_REVIEW'
+  | 'TRANSFER_APPROVAL'
+  | 'DISPOSAL_APPROVAL'
+  | 'NEW_PN_APPROVAL';
+
+/**
+ * Divergence types from inventory counting.
+ */
+export type DivergenceType =
+  | 'POSITIVE'           // Count > expected
+  | 'NEGATIVE'           // Count < expected
+  | 'SERIAL_MISMATCH'    // Different serial found
+  | 'LOCATION_MISMATCH'; // Asset in wrong location
+
+/**
+ * Severity levels for compliance.
+ */
+export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+/**
+ * Approval roles in hierarchy.
+ */
+export type ApprovalRole = 'OPERATOR' | 'MANAGER' | 'SUPERVISOR' | 'DIRECTOR';
+
+/**
+ * Notification priority.
+ */
+export type NotificationPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+/**
+ * Notification channels.
+ */
+export type NotificationChannel = 'SYSTEM' | 'EMAIL' | 'WHATSAPP';
+
+/**
+ * NF-e entry status.
+ */
+export type NFEntryStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'PARTIAL';
+
+/**
+ * Inventory campaign status.
+ */
+export type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'ANALYSIS' | 'COMPLETED' | 'CANCELLED';
+
+// =============================================================================
+// SGA Core Entity Types
+// =============================================================================
+
+/**
+ * Part Number (catalog item/SKU).
+ */
+export interface SGAPartNumber {
+  id: string;
+  part_number: string;
+  description: string;
+  category: string;
+  unit_of_measure: string;
+  manufacturer?: string;
+  ncm_code?: string;
+  unit_cost?: number;
+  minimum_stock?: number;
+  maximum_stock?: number;
+  reorder_point?: number;
+  lead_time_days?: number;
+  is_serialized: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+}
+
+/**
+ * SGA Asset with serial number.
+ */
+export interface SGAAsset {
+  id: string;
+  part_number_id: string;
+  part_number: string;
+  serial_number: string;
+  description: string;
+  status: SGAAssetStatus;
+  location_id: string;
+  location_name?: string;
+  project_id?: string;
+  project_name?: string;
+  batch_number?: string;
+  acquisition_date?: string;
+  warranty_expiry?: string;
+  last_movement_at?: string;
+  last_movement_type?: SGAMovementType;
+  notes?: string;
+  custom_fields?: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * SGA Stock location.
+ */
+export interface SGALocation {
+  id: string;
+  name: string;
+  code: string;
+  type: 'WAREHOUSE' | 'SHELF' | 'BIN' | 'CUSTOMER' | 'TRANSIT' | 'VIRTUAL';
+  parent_location_id?: string;
+  address?: string;
+  is_restricted: boolean;
+  restriction_type?: 'COFRE' | 'QUARENTENA' | 'DESCARTE';
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * SGA Project/client.
+ */
+export interface SGAProject {
+  id: string;
+  code: string;
+  name: string;
+  client_name: string;
+  is_active: boolean;
+  start_date?: string;
+  end_date?: string;
+  manager_id?: string;
+  manager_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Stock balance projection.
+ */
+export interface SGABalance {
+  part_number_id: string;
+  part_number: string;
+  location_id: string;
+  location_name?: string;
+  project_id?: string;
+  project_name?: string;
+  quantity_available: number;
+  quantity_reserved: number;
+  quantity_total: number;
+  last_updated: string;
+}
+
+/**
+ * SGA Movement event (immutable).
+ */
+export interface SGAMovement {
+  id: string;
+  type: SGAMovementType;
+  part_number_id: string;
+  part_number: string;
+  quantity: number;
+  serial_numbers?: string[];
+  source_location_id?: string;
+  source_location_name?: string;
+  destination_location_id?: string;
+  destination_location_name?: string;
+  project_id?: string;
+  project_name?: string;
+  document_number?: string;
+  document_type?: 'NF' | 'CHAMADO' | 'INTERNAL';
+  reference_id?: string;
+  reason?: string;
+  notes?: string;
+  created_by: string;
+  created_by_name?: string;
+  created_at: string;
+  evidence_urls?: string[];
+}
+
+/**
+ * Stock reservation.
+ */
+export interface SGAReservation {
+  id: string;
+  part_number_id: string;
+  part_number: string;
+  quantity: number;
+  project_id: string;
+  project_name?: string;
+  location_id: string;
+  location_name?: string;
+  chamado_number?: string;
+  reserved_by: string;
+  reserved_by_name?: string;
+  reserved_at: string;
+  expires_at: string;
+  status: 'ACTIVE' | 'FULFILLED' | 'CANCELLED' | 'EXPIRED';
+  notes?: string;
+}
+
+// =============================================================================
+// HIL (Human-in-the-Loop) Types
+// =============================================================================
+
+/**
+ * HIL task for approval workflows.
+ */
+export interface HILTask {
+  id: string;
+  type: HILTaskType;
+  title: string;
+  description: string;
+  status: HILTaskStatus;
+  priority: NotificationPriority;
+  requested_by: string;
+  requested_by_name?: string;
+  assigned_to?: string;
+  assigned_to_name?: string;
+  required_role: ApprovalRole;
+  entity_type: string;
+  entity_id: string;
+  context: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  expires_at?: string;
+  resolved_at?: string;
+  resolved_by?: string;
+  resolution_notes?: string;
+}
+
+// =============================================================================
+// NF-e Processing Types
+// =============================================================================
+
+/**
+ * NF-e item extracted from XML/PDF.
+ */
+export interface NFItem {
+  item_number: number;
+  product_code: string;
+  description: string;
+  ncm_code?: string;
+  cfop?: string;
+  unit_of_measure: string;
+  quantity: number;
+  unit_value: number;
+  total_value: number;
+  serial_numbers?: string[];
+}
+
+/**
+ * NF-e extraction result.
+ */
+export interface NFExtraction {
+  nf_number: string;
+  nf_series: string;
+  nf_key?: string;
+  issue_date: string;
+  supplier_cnpj: string;
+  supplier_name: string;
+  total_value: number;
+  items: NFItem[];
+  raw_xml_url?: string;
+  confidence_score: number;
+  extraction_warnings?: string[];
+}
+
+/**
+ * Pending NF-e entry awaiting confirmation.
+ */
+export interface PendingNFEntry {
+  id: string;
+  nf_number: string;
+  nf_series: string;
+  supplier_name: string;
+  total_items: number;
+  total_value: number;
+  destination_location_id: string;
+  destination_location_name?: string;
+  project_id: string;
+  project_name?: string;
+  status: NFEntryStatus;
+  extraction: NFExtraction;
+  item_mappings?: NFItemMapping[];
+  uploaded_by: string;
+  uploaded_by_name?: string;
+  uploaded_at: string;
+  confirmed_by?: string;
+  confirmed_at?: string;
+  notes?: string;
+}
+
+/**
+ * Mapping between NF item and part number.
+ */
+export interface NFItemMapping {
+  nf_item_number: number;
+  part_number_id: string;
+  part_number: string;
+  quantity_confirmed: number;
+  serial_numbers?: string[];
+  match_confidence: number;
+  match_method: 'EXACT' | 'SUPPLIER_CODE' | 'DESCRIPTION' | 'NCM' | 'MANUAL';
+}
+
+// =============================================================================
+// Inventory Counting Types
+// =============================================================================
+
+/**
+ * Inventory counting campaign.
+ */
+export interface InventoryCampaign {
+  id: string;
+  name: string;
+  description?: string;
+  status: CampaignStatus;
+  location_ids: string[];
+  project_ids?: string[];
+  part_numbers?: string[];
+  require_double_count: boolean;
+  created_by: string;
+  created_by_name?: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  total_items_to_count: number;
+  items_counted: number;
+  divergences_found: number;
+}
+
+/**
+ * Individual count result.
+ */
+export interface CountResult {
+  id: string;
+  campaign_id: string;
+  part_number_id: string;
+  part_number: string;
+  location_id: string;
+  expected_quantity: number;
+  counted_quantity: number;
+  serial_numbers_found?: string[];
+  count_number: number;
+  counted_by: string;
+  counted_by_name?: string;
+  counted_at: string;
+  notes?: string;
+}
+
+/**
+ * Divergence detected during counting.
+ */
+export interface Divergence {
+  id: string;
+  campaign_id: string;
+  part_number_id: string;
+  part_number: string;
+  location_id: string;
+  location_name?: string;
+  type: DivergenceType;
+  expected_quantity: number;
+  counted_quantity: number;
+  difference: number;
+  serial_expected?: string;
+  serial_found?: string;
+  status: 'OPEN' | 'ADJUSTMENT_PROPOSED' | 'ADJUSTED' | 'IGNORED';
+  resolution?: string;
+  resolved_by?: string;
+  resolved_at?: string;
+}
+
+/**
+ * Adjustment proposal for divergence.
+ */
+export interface AdjustmentProposal {
+  id: string;
+  divergence_id: string;
+  campaign_id: string;
+  part_number_id: string;
+  part_number: string;
+  location_id: string;
+  adjustment_type: 'ADJUSTMENT_IN' | 'ADJUSTMENT_OUT';
+  quantity: number;
+  reason: string;
+  proposed_by: string;
+  proposed_by_name?: string;
+  proposed_at: string;
+  hil_task_id?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+}
+
+// =============================================================================
+// Compliance Types
+// =============================================================================
+
+/**
+ * Compliance validation result.
+ */
+export interface ComplianceValidation {
+  is_valid: boolean;
+  requires_approval: boolean;
+  approval_role?: ApprovalRole;
+  violations: ComplianceViolation[];
+  warnings: string[];
+}
+
+/**
+ * Compliance violation record.
+ */
+export interface ComplianceViolation {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  violation_type: string;
+  description: string;
+  severity: Severity;
+  flagged_by: string;
+  flagged_at: string;
+  resolved?: boolean;
+  resolved_by?: string;
+  resolved_at?: string;
+  resolution_notes?: string;
+}
+
+// =============================================================================
+// Confidence Scoring Types
+// =============================================================================
+
+/**
+ * AI decision confidence score.
+ */
+export interface ConfidenceScore {
+  overall: number;
+  extraction_quality: number;
+  evidence_strength: number;
+  historical_match: number;
+  risk_level: 'low' | 'medium' | 'high';
+  factors: string[];
+}
+
+// =============================================================================
+// SGA AgentCore Request Types
+// =============================================================================
+
+export interface SGASearchAssetsRequest {
+  query?: string;
+  part_number?: string;
+  location_id?: string;
+  project_id?: string;
+  status?: SGAAssetStatus;
+  page?: number;
+  page_size?: number;
+}
+
+export interface SGAGetBalanceRequest {
+  part_number: string;
+  location_id?: string;
+  project_id?: string;
+}
+
+export interface SGAWhereIsSerialRequest {
+  serial_number: string;
+}
+
+export interface SGAProcessNFUploadRequest {
+  s3_key: string;
+  file_type: 'xml' | 'pdf';
+  project_id: string;
+  destination_location_id: string;
+}
+
+export interface SGAConfirmNFEntryRequest {
+  entry_id: string;
+  item_mappings: NFItemMapping[];
+  notes?: string;
+}
+
+export interface SGAGetUploadUrlRequest {
+  filename: string;
+  content_type: string;
+}
+
+export interface SGACreateReservationRequest {
+  part_number: string;
+  quantity: number;
+  project_id: string;
+  location_id?: string;
+  chamado_number?: string;
+  notes?: string;
+}
+
+export interface SGACancelReservationRequest {
+  reservation_id: string;
+  reason: string;
+}
+
+export interface SGAProcessExpeditionRequest {
+  reservation_id: string;
+  part_number: string;
+  quantity: number;
+  serial_numbers?: string[];
+  destination_location_id: string;
+  technician_id?: string;
+  notes?: string;
+  evidence_urls?: string[];
+}
+
+export interface SGACreateTransferRequest {
+  part_number: string;
+  quantity: number;
+  serial_numbers?: string[];
+  source_location_id: string;
+  destination_location_id: string;
+  project_id?: string;
+  reason: string;
+  notes?: string;
+}
+
+export interface SGAProcessReturnRequest {
+  part_number: string;
+  quantity: number;
+  serial_numbers?: string[];
+  source_location_id: string;
+  destination_location_id: string;
+  project_id?: string;
+  chamado_number?: string;
+  condition: 'GOOD' | 'DAMAGED' | 'FOR_REPAIR';
+  notes?: string;
+}
+
+export interface SGAGetPendingTasksRequest {
+  assigned_to?: string;
+  type?: HILTaskType;
+  status?: HILTaskStatus;
+}
+
+export interface SGAApproveTaskRequest {
+  task_id: string;
+  notes?: string;
+}
+
+export interface SGARejectTaskRequest {
+  task_id: string;
+  reason: string;
+}
+
+export interface SGAStartCampaignRequest {
+  name: string;
+  description?: string;
+  location_ids: string[];
+  project_ids?: string[];
+  part_numbers?: string[];
+  require_double_count?: boolean;
+}
+
+export interface SGASubmitCountRequest {
+  campaign_id: string;
+  part_number: string;
+  location_id: string;
+  counted_quantity: number;
+  serial_numbers_found?: string[];
+  notes?: string;
+}
+
+export interface SGAProposeAdjustmentRequest {
+  campaign_id: string;
+  part_number: string;
+  location_id: string;
+  reason: string;
+}
+
+export interface SGAValidateOperationRequest {
+  operation_type: SGAMovementType;
+  part_number: string;
+  quantity: number;
+  source_location_id?: string;
+  destination_location_id?: string;
+  project_id?: string;
+}
+
+export interface SGANexoChatRequest {
+  question: string;
+  context?: Record<string, unknown>;
+  conversation_history?: Array<{ role: string; content: string }>;
+}
+
+// =============================================================================
+// SGA AgentCore Response Types
+// =============================================================================
+
+export interface SGASearchAssetsResponse {
+  assets: SGAAsset[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_more: boolean;
+}
+
+export interface SGAGetBalanceResponse {
+  balances: SGABalance[];
+  total_available: number;
+  total_reserved: number;
+}
+
+export interface SGAWhereIsSerialResponse {
+  found: boolean;
+  asset?: SGAAsset;
+  timeline?: SGAMovement[];
+}
+
+export interface SGAProcessNFUploadResponse {
+  entry_id: string;
+  extraction: NFExtraction;
+  suggested_mappings: NFItemMapping[];
+  requires_review: boolean;
+  confidence_score: ConfidenceScore;
+}
+
+export interface SGAConfirmNFEntryResponse {
+  success: boolean;
+  movements_created: number;
+  assets_created: number;
+  errors?: string[];
+}
+
+export interface SGAGetUploadUrlResponse {
+  upload_url: string;
+  s3_key: string;
+  expires_in: number;
+}
+
+export interface SGACreateReservationResponse {
+  reservation: SGAReservation;
+  requires_approval: boolean;
+  hil_task_id?: string;
+}
+
+export interface SGAProcessExpeditionResponse {
+  movement: SGAMovement;
+  assets_updated: number;
+}
+
+export interface SGACreateTransferResponse {
+  movement?: SGAMovement;
+  requires_approval: boolean;
+  hil_task_id?: string;
+}
+
+export interface SGAProcessReturnResponse {
+  movement: SGAMovement;
+  condition_assessment?: string;
+}
+
+export interface SGAGetPendingTasksResponse {
+  tasks: HILTask[];
+  total: number;
+}
+
+export interface SGAApproveTaskResponse {
+  task: HILTask;
+  action_executed: boolean;
+  result?: Record<string, unknown>;
+}
+
+export interface SGARejectTaskResponse {
+  task: HILTask;
+}
+
+export interface SGAStartCampaignResponse {
+  campaign: InventoryCampaign;
+  items_to_count: number;
+}
+
+export interface SGASubmitCountResponse {
+  count_result: CountResult;
+  divergence_detected?: boolean;
+  divergence?: Divergence;
+}
+
+export interface SGAAnalyzeDivergencesResponse {
+  divergences: Divergence[];
+  total_positive: number;
+  total_negative: number;
+  summary: string;
+}
+
+export interface SGAProposeAdjustmentResponse {
+  proposal: AdjustmentProposal;
+  hil_task_id: string;
+}
+
+export interface SGAValidateOperationResponse {
+  validation: ComplianceValidation;
+}
+
+export interface SGANexoChatResponse {
+  answer: string;
+  data?: Record<string, unknown>;
+  suggestions?: string[];
+}
+
+// =============================================================================
+// SGA UI State Types
+// =============================================================================
+
+/**
+ * SGA Asset filter state.
+ */
+export interface SGAAssetFilters {
+  search: string;
+  part_number?: string;
+  location_id?: string;
+  project_id?: string;
+  status?: SGAAssetStatus;
+  date_from?: string;
+  date_to?: string;
+}
+
+/**
+ * SGA Movement filter state.
+ */
+export interface SGAMovementFilters {
+  search: string;
+  type?: SGAMovementType;
+  part_number?: string;
+  location_id?: string;
+  project_id?: string;
+  date_from?: string;
+  date_to?: string;
+}
+
+/**
+ * Sort configuration.
+ */
+export interface SGASortConfig {
+  field: string;
+  direction: 'asc' | 'desc';
+}
+
+/**
+ * Offline sync queue item.
+ */
+export interface SGAOfflineQueueItem {
+  id: string;
+  action: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+  retries: number;
+  last_error?: string;
+}
+
+// =============================================================================
+// SGA Dashboard Types
+// =============================================================================
+
+/**
+ * KPI metric for dashboard.
+ */
+export interface SGAKPIMetric {
+  label: string;
+  value: number | string;
+  unit?: string;
+  change?: number;
+  change_period?: string;
+  trend?: 'up' | 'down' | 'stable';
+  icon?: string;
+}
+
+/**
+ * Dashboard summary.
+ */
+export interface SGADashboardSummary {
+  total_assets: number;
+  total_part_numbers: number;
+  total_locations: number;
+  total_projects: number;
+  pending_tasks: number;
+  pending_entries: number;
+  pending_reversals: number;
+  movements_today: number;
+  movements_this_week: number;
+  active_campaigns: number;
+  open_divergences: number;
+}
