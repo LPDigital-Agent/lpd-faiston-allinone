@@ -2,6 +2,49 @@
 # CloudFront Distribution - CDN for Frontend
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# CloudFront Function - URL Rewriter for Next.js Static Export
+# -----------------------------------------------------------------------------
+# Next.js static export with trailingSlash generates folders with index.html.
+# S3 REST API (via OAC) does NOT support automatic index document resolution.
+# This function rewrites URLs to append /index.html for directory requests.
+#
+# Examples:
+#   /ferramentas/ativos/dashboard  → /ferramentas/ativos/dashboard/index.html
+#   /ferramentas/ativos/dashboard/ → /ferramentas/ativos/dashboard/index.html
+#   /                              → /index.html
+#   /_next/static/chunk.js         → /_next/static/chunk.js (unchanged)
+# -----------------------------------------------------------------------------
+
+resource "aws_cloudfront_function" "url_rewriter" {
+  name    = "${local.name_prefix}-url-rewriter"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite URLs to index.html for Next.js static export"
+  publish = true
+
+  code = <<-EOF
+    function handler(event) {
+      var request = event.request;
+      var uri = request.uri;
+
+      // If URI has a file extension, serve as-is (static assets)
+      if (uri.match(/\.[a-zA-Z0-9]+$/)) {
+        return request;
+      }
+
+      // If URI ends with /, append index.html
+      if (uri.endsWith('/')) {
+        request.uri = uri + 'index.html';
+        return request;
+      }
+
+      // Otherwise, append /index.html (handles /path → /path/index.html)
+      request.uri = uri + '/index.html';
+      return request;
+    }
+  EOF
+}
+
 # Origin Access Control for S3 (modern approach, replaces OAI)
 resource "aws_cloudfront_origin_access_control" "frontend" {
   name                              = "${local.name_prefix}-oac"
@@ -38,6 +81,13 @@ resource "aws_cloudfront_distribution" "frontend" {
 
     viewer_protocol_policy = "redirect-to-https"
     compress               = true
+
+    # URL rewriter function for Next.js static export
+    # Rewrites /path and /path/ to /path/index.html
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.url_rewriter.arn
+    }
   }
 
   # SPA error responses - redirect 403/404 to index.html for client-side routing
