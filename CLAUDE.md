@@ -241,6 +241,77 @@ Frontend (Next.js 15 - CloudFront + S3)
 
 ---
 
+## Key Documentation
+
+- **PRD**  
+  `product-development/current-feature/PRD.md`  
+  Complete product requirements and scope.
+
+- **Brand Guide**  
+  `docs faiston/manual_Faiston_FINAL.pdf`  
+  Visual identity rules (colors, typography, spacing, logo usage).
+
+- **AgentCore Guide**  
+  `.claude/skills/adk-agentcore-architect/IMPLEMENTATION_GUIDE.md`  
+  AgentCore architecture + implementation rules.
+
+---
+
+## 🚨 Cold Start Limit (30 seconds) — CRITICAL
+
+AgentCore has a **30-SECOND COLD START LIMIT**.  
+Exceeding this causes **HTTP 424 errors** and **BREAKS ALL AI FEATURES**.
+
+### ❌ NEVER DO
+
+1. Add heavy dependencies to `requirements.txt`  
+   Examples: `trafilatura`, `beautifulsoup4`, `lxml`, `Pillow`, or anything similar/heavy.
+2. Add imports to `agents/__init__.py` or `tools/__init__.py`  
+   These files **MUST remain EMPTY**.
+3. Import agents at module level  
+   Each Google ADK import may take ~**5–6 seconds** and will destroy cold start.
+
+### ✅ ALWAYS DO
+
+1. Keep `requirements.txt` minimal  
+   Current baseline: `google-adk`, `google-genai`, `bedrock-agentcore`, `elevenlabs`
+2. Use **lazy imports** in `main.py`  
+   Import each agent **ONLY inside** its handler function.
+3. Check AWS AgentCore pre-installed packages BEFORE adding any dependency  
+   Do not ship packages that already exist in the runtime.
+
+---
+
+## Important Notes (DO NOT DELETE)
+
+- All docs MUST stay in `docs/` folder (NOT root).
+- Only essential files are allowed in root: `package.json`, configs, `CLAUDE.md`, `README.md`.
+- ALL deployments via GitHub Actions — **NEVER local console**.
+- TypeScript strict mode: **DISABLED** (rapid prototyping).
+
+- Antes de criar, atualizar ou fazer qualquer análise de agentes usando o AgentCore,  
+  MUST consultar o documento: `@docs/AgentCore/IMPLEMENTATION_GUIDE.md`.
+
+- BE CAREFUL with Brazilian Portuguese in UI text and scripts (voices/videos).  
+  Accent marks are MANDATORY (ex: “ação”, “técnico”, “integração”).
+
+- MUST USE Claude Skills available in all tasks.
+
+- ATTENTION AND MANDATORY:  
+  A documentação oficial da AWS mostra que o AgentCore Runtime já tem dezenas de bibliotecas pré-instaladas.  
+  Antes de adicionar qualquer dependência ao deploy package, VALIDAR se já não existe no runtime.
+
+- MUST USE MCP Context7 to check documentation and ensure best practices before implementing any function or code.
+
+- USE best practices for the SDLC (Software Development Life Cycle):  
+  comments in all code + Clean Code principles.
+
+- MUST MANDATORY when creating ANY Terraform:  
+  check MCP Terraform to ensure best practices and latest stable modules/providers.
+
+- MUST check `/docs/Claude Code/` and apply best practices for prompts and working with Claude Code in ALL tasks.
+
+---
 ## Faiston Academy Module
 
 Migrated from Hive Academy to `/ferramentas/academy/`. Educational platform with AI-powered learning features.
@@ -270,8 +341,8 @@ Migrated from Hive Academy to `/ferramentas/academy/`. Educational platform with
 - `MetricCard` - Stat display with trend indicators
 - `LearningMapSection` - Learning journey progress
 
-### Academy Hooks (11)
-`client/hooks/academy/`: useNexoAI, useFlashcards, useMindMap, useAudioClass, useSlideDeck, useReflection, useFloatingPanel, useExtraClass, useVideoClass, useYouTubeRecommendations, index
+### Academy Hooks (12)
+`client/hooks/academy/`: useNexoAI, useFlashcards, useMindMap, useAudioClass, useSlideDeck, useReflection, useFloatingPanel, useExtraClass, useVideoClass, useYouTubeRecommendations, useLibrary, index
 
 ### Academy Services (2)
 - `academyAgentcore.ts` - AgentCore Runtime invocation with JWT auth
@@ -289,40 +360,35 @@ Migrated from Hive Academy to `/ferramentas/academy/`. Educational platform with
 - Router: react-router-dom → Next.js useRouter
 - IDs: number → string (for Next.js params)
 
-## Key Documentation
+### Sprint 4 TypeScript Fixes (January 2026)
+Components and utilities added to fix build errors:
 
-- **PRD**: `product-development/current-feature/PRD.md` - Complete product requirements
-- **Brand Guide**: `docs faiston/manual_Faiston_FINAL.pdf` - Visual identity rules
-- **AgentCore Guide**: `.claude/skills/adk-agentcore-architect/IMPLEMENTATION_GUIDE.md`
+**New shadcn/ui Components:**
+- `client/components/ui/textarea.tsx` - Textarea form control
+- `client/components/ui/slider.tsx` - Slider input control
+- `client/components/ui/markdown-content.tsx` - Markdown rendering with react-markdown
+- `client/components/ui/use-toast.ts` - Toast notification hook
 
-### 🚨 Cold Start Limit (30 seconds) - CRITICAL
-AgentCore has a **30-second cold start limit**. Exceeding this causes HTTP 424 errors and breaks ALL AI features.
+**New Hooks:**
+- `client/hooks/academy/useLibrary.ts` - Library file management
 
-**NEVER DO:**
-1. Add heavy dependencies to `requirements.txt` (trafilatura, beautifulsoup4, lxml, Pillow, etc.)
-2. Add imports to `agents/__init__.py` or `tools/__init__.py` - **MUST remain EMPTY**
-3. Import agents at module level - each Google ADK import takes ~5-6 seconds
+**New Type Declarations:**
+- `client/types/zoom-videosdk.d.ts` - Zoom Video SDK types for dynamic import
 
-**ALWAYS DO:**
-1. Keep `requirements.txt` minimal (currently: google-adk, google-genai, bedrock-agentcore, elevenlabs)
-2. Use lazy imports in `main.py` - import agent only inside its handler function
-3. Check AWS AgentCore pre-installed packages before adding new dependencies
+**Hook API Pattern:**
+All Academy hooks use **object-based parameters**:
+```tsx
+// CORRECT
+useMindMap({ courseId, episodeId, episodeTitle, onSeek });
 
----
+// WRONG (positional args)
+useMindMap(courseId, episodeId, episodeTitle, onSeek);
+```
 
----
-
-## Important Notes (Do not Delete)
-
-- All docs in `docs/` folder (not root)
-- Only essential files in root: package.json, configs, CLAUDE.md, README.md
-- All deployments via GitHub Actions (NEVER local console)
-- TypeScript strict mode: DISABLED (rapid prototyping)
-- Antes de criar, atualizar or fazer qualquer analise de agentes usando o AgentCore deve consultar o documento @docs/AgentCore/IMPLEMENTATION_GUIDE.md
-- BE CAREFUL with the brazilian portuguese language when you write on the UI or text, do not forget the accent mark in the words also in the scripts to create voices end videos
-- MUST USE Claude Skills avilable in all tasks.
-- ATTENTION AND MANDATORY A documentação oficial da AWS mostra que o AgentCore Runtime já tem dezenas de bibliotecas pré-instaladas, antes de colocar bibliotecas adicionais no pacote de deploy dos agentes validar se estas já não são providas pela AWS no AgentCore Runtime.
-- MUST USE MCP Context7 to check documentations a make sure you are using the best practices to build that functions or Code
-- USE All Best practices for the SDLC (Software Developer Life Cicle) includes comments in all code e principios de Clean Code.
-- MUST MANDATORY when create any Terraform check the MCP Terraform to make sure you are using the best practices to create terraform IaC and the last version of the modules.
-- MUST Check the /docs/Claude Code/ and read the documentations about best practices in how to create prompts and working better with claude code and apply in all you are doing with claude code to make it better to build softwares and solutions.
+**Type Re-exports:**
+Hooks that import types must re-export them for consumers:
+```tsx
+// At end of hook file
+export type { MindMapNode } from '@/lib/academy/types';
+export { DECK_ARCHETYPES } from '@/lib/academy/constants';
+```

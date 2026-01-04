@@ -201,7 +201,7 @@ lpd-faiston-allinone/
 │   │           └── dashboard/  # 5 dashboard components
 │   ├── contexts/          # React contexts (Academy*, etc.)
 │   ├── hooks/             # Custom hooks
-│   │   └── academy/      # 11 Academy-specific hooks
+│   │   └── academy/      # 12 Academy-specific hooks
 │   ├── lib/               # Utilities
 │   │   └── academy/      # Academy types, constants
 │   └── services/          # API clients (academyAgentcore.ts, etc.)
@@ -224,9 +224,15 @@ Educational platform at `/ferramentas/academy/` with AI-powered features.
 - ✅ Sprint 1: Terraform Infrastructure (Cognito, S3, DynamoDB, IAM)
 - ✅ Sprint 2: Backend AgentCore (19 actions, NEXO agent, tools)
 - ✅ Sprint 3: Frontend Foundation (services, contexts, hooks)
-- ✅ Sprint 4: Frontend Components (14 classroom + 5 dashboard)
+- ✅ Sprint 4: Frontend Components (14 classroom + 5 dashboard) + TypeScript Fixes
 - ⏳ Sprint 5: Frontend Pages (routes)
 - ⏳ Sprint 6: Style and Polish
+
+### Sprint 4 Build Fixes (January 2026)
+New components added: `textarea.tsx`, `slider.tsx`, `markdown-content.tsx`, `use-toast.ts`
+New hooks: `useLibrary.ts`
+New types: `types/zoom-videosdk.d.ts`
+**Pattern**: All Academy hooks use object-based parameters (not positional)
 
 ### Key Adaptations (Hive → Faiston)
 - "Sasha" → "NEXO" (AI tutor)
