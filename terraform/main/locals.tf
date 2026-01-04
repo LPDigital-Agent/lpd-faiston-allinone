@@ -86,4 +86,14 @@ locals {
   academy_audio_bucket_name     = aws_s3_bucket.academy_audio.id
   academy_slides_bucket_name    = aws_s3_bucket.academy_slides.id
   academy_videos_bucket_name    = aws_s3_bucket.academy_videos.id
+
+  # =============================================================================
+  # SGA Resource References (Gestao de Ativos - Estoque)
+  # =============================================================================
+  # These are passed to AgentCore as environment variables
+
+  sga_inventory_table_name  = aws_dynamodb_table.sga_inventory.name
+  sga_hil_tasks_table_name  = aws_dynamodb_table.sga_hil_tasks.name
+  sga_audit_log_table_name  = aws_dynamodb_table.sga_audit_log.name
+  sga_documents_bucket_name = aws_s3_bucket.sga_documents.id
 }
