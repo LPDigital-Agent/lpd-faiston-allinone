@@ -1,190 +1,496 @@
-"use client";
+'use client';
 
-import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/shared/glass-card";
-import { AssetManagementHeader } from "@/components/ferramentas/ativos/asset-management-header";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input";
+// =============================================================================
+// Estoque Page - SGA Inventory Module (Dashboard + Inbox)
+// =============================================================================
+// Main entry point for the inventory management module.
+// Features: KPIs, Task Inbox, Quick Actions, Asset Overview
+// =============================================================================
+
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import {
+  GlassCard,
+  GlassCardHeader,
+  GlassCardTitle,
+  GlassCardContent,
+} from '@/components/shared/glass-card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import {
   Package,
   Search,
-  Filter,
   Plus,
-  Download,
-  MoreVertical,
-  ChevronRight,
-} from "lucide-react";
+  FileUp,
+  ArrowRightLeft,
+  ClipboardCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  TrendingUp,
+  TrendingDown,
+  ArrowRight,
+  RefreshCw,
+  Inbox,
+  Filter,
+} from 'lucide-react';
+import { useAssets, useTaskInbox, useAssetManagement } from '@/hooks/ativos';
 import {
-  mockAssets,
-} from "@/mocks/ativos-mock-data";
-import {
-  ASSET_STATUS_LABELS,
-  ASSET_STATUS_COLORS,
-  ASSET_CATEGORY_LABELS,
-  formatCurrency,
-} from "@/lib/ativos/constants";
-import { motion } from "framer-motion";
+  SGA_STATUS_LABELS,
+  SGA_STATUS_COLORS,
+  HIL_STATUS_LABELS,
+  HIL_STATUS_COLORS,
+  HIL_TASK_TYPE_LABELS,
+  PRIORITY_LABELS,
+  PRIORITY_COLORS,
+} from '@/lib/ativos/constants';
 
-/**
- * Gestão de Estoque Page - Asset Inventory Management
- *
- * Lists all assets with search, filtering, and CRUD operations.
- */
+// =============================================================================
+// Dashboard Components
+// =============================================================================
 
-export default function EstoquePage() {
+function DashboardKPIs() {
+  const { masterDataLoading } = useAssetManagement();
+  const { assets, isLoading } = useAssets();
+
+  // Calculate KPIs from assets data
+  const totalAssets = assets.length;
+  const disponivel = assets.filter(a => a.status === 'AVAILABLE').length;
+  const reservado = assets.filter(a => a.status === 'RESERVED').length;
+  const emCampo = assets.filter(a => a.status === 'WITH_CUSTOMER').length;
+
+  const kpis = [
+    {
+      label: 'Total de Ativos',
+      value: totalAssets,
+      icon: Package,
+      trend: null,
+      color: 'text-blue-light',
+      bgColor: 'bg-blue-mid/20',
+    },
+    {
+      label: 'Disponíveis',
+      value: disponivel,
+      icon: CheckCircle2,
+      trend: { value: 5, positive: true },
+      color: 'text-green-400',
+      bgColor: 'bg-green-500/20',
+    },
+    {
+      label: 'Reservados',
+      value: reservado,
+      icon: Clock,
+      trend: { value: 2, positive: false },
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-500/20',
+    },
+    {
+      label: 'Em Campo',
+      value: emCampo,
+      icon: ArrowRightLeft,
+      trend: { value: 3, positive: true },
+      color: 'text-magenta-mid',
+      bgColor: 'bg-magenta-dark/20',
+    },
+  ];
+
+  const loading = masterDataLoading || isLoading;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <AssetManagementHeader
-        title="Gestão de Estoque"
-        subtitle="Gerencie todos os ativos do seu inventário"
-        primaryAction={{
-          label: "Novo Ativo",
-          onClick: () => console.log("Novo ativo"),
-          icon: <Plus className="w-4 h-4" />,
-        }}
-        secondaryActions={[
-          {
-            label: "Exportar",
-            onClick: () => console.log("Exportar"),
-            icon: <Download className="w-4 h-4" />,
-          },
-        ]}
-      />
-
-      {/* Filters Bar */}
-      <GlassCard className="p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-            <Input
-              placeholder="Buscar por nome, código ou serial..."
-              className="pl-10 bg-white/5 border-border"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="border-border">
-              <Filter className="w-4 h-4 mr-2" />
-              Filtros
-            </Button>
-          </div>
-        </div>
-
-        {/* Quick Filters */}
-        <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
-          <Badge variant="outline" className="cursor-pointer hover:bg-white/10 whitespace-nowrap">
-            Todos ({mockAssets.length})
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer hover:bg-white/10 bg-green-500/10 text-green-400 border-green-500/30 whitespace-nowrap">
-            Disponíveis ({mockAssets.filter(a => a.status === "disponivel").length})
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer hover:bg-white/10 bg-blue-500/10 text-blue-400 border-blue-500/30 whitespace-nowrap">
-            Em Uso ({mockAssets.filter(a => a.status === "em_uso").length})
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer hover:bg-white/10 bg-yellow-500/10 text-yellow-400 border-yellow-500/30 whitespace-nowrap">
-            Manutenção ({mockAssets.filter(a => a.status === "manutencao").length})
-          </Badge>
-        </div>
-      </GlassCard>
-
-      {/* Asset List */}
-      <GlassCard>
-        <GlassCardHeader>
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <Package className="w-4 h-4 text-blue-light" />
-              <GlassCardTitle>Lista de Ativos</GlassCardTitle>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {kpis.map((kpi, index) => (
+        <motion.div
+          key={kpi.label}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.1 }}
+        >
+          <GlassCard className="p-4">
+            <div className="flex items-start justify-between">
+              <div className={`p-2 rounded-lg ${kpi.bgColor}`}>
+                <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
+              </div>
+              {kpi.trend && (
+                <div className={`flex items-center gap-1 text-xs ${kpi.trend.positive ? 'text-green-400' : 'text-red-400'}`}>
+                  {kpi.trend.positive ? (
+                    <TrendingUp className="w-3 h-3" />
+                  ) : (
+                    <TrendingDown className="w-3 h-3" />
+                  )}
+                  {kpi.trend.value}%
+                </div>
+              )}
             </div>
-            <Badge variant="outline">{mockAssets.length} ativos</Badge>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-text-primary">
+                {loading ? '...' : kpi.value.toLocaleString('pt-BR')}
+              </p>
+              <p className="text-xs text-text-muted mt-1">{kpi.label}</p>
+            </div>
+          </GlassCard>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function TaskInboxSection() {
+  const {
+    tasks,
+    tasksLoading: isLoading,
+    refreshTasks,
+  } = useTaskInbox();
+
+  const pendingCount = tasks.filter(t => t.status === 'PENDING').length;
+
+  const displayedTasks = tasks.slice(0, 5);
+
+  return (
+    <GlassCard>
+      <GlassCardHeader>
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <Inbox className="w-4 h-4 text-magenta-mid" />
+            <GlassCardTitle>Tarefas Pendentes</GlassCardTitle>
+            {pendingCount > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {pendingCount}
+              </Badge>
+            )}
           </div>
-        </GlassCardHeader>
-
-        {/* Table Header */}
-        <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 border-b border-border text-xs font-medium text-text-muted uppercase tracking-wider">
-          <div className="col-span-4">Ativo</div>
-          <div className="col-span-2">Categoria</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-2">Valor</div>
-          <div className="col-span-2 text-right">Ações</div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refreshTasks()}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
+      </GlassCardHeader>
 
-        {/* Table Body */}
-        <ScrollArea className="max-h-[500px]">
-          <div className="divide-y divide-border">
-            {mockAssets.map((asset, index) => (
+      <GlassCardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="w-6 h-6 text-text-muted animate-spin" />
+          </div>
+        ) : displayedTasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <CheckCircle2 className="w-12 h-12 text-green-400 mb-3" />
+            <p className="text-sm text-text-muted">
+              Nenhuma tarefa pendente
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {displayedTasks.map((task) => (
               <motion.div
-                key={asset.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-4 hover:bg-white/5 transition-colors cursor-pointer items-center"
+                key={task.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
               >
-                {/* Asset Info */}
-                <div className="col-span-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-mid/20 flex items-center justify-center shrink-0">
-                    <Package className="w-5 h-5 text-blue-light" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-text-primary truncate">
-                      {asset.nome}
-                    </p>
-                    <p className="text-xs text-text-muted truncate">
-                      {asset.codigo} • {asset.localizacao.nome}
-                    </p>
-                  </div>
+                <div className={`p-2 rounded-lg ${
+                  task.priority === 'URGENT' ? 'bg-red-500/20' :
+                  task.priority === 'HIGH' ? 'bg-orange-500/20' :
+                  'bg-blue-mid/20'
+                }`}>
+                  {task.type === 'ADJUSTMENT_APPROVAL' ? (
+                    <ClipboardCheck className="w-4 h-4 text-blue-light" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                  )}
                 </div>
-
-                {/* Category */}
-                <div className="col-span-2">
-                  <Badge variant="outline" className="text-xs">
-                    {ASSET_CATEGORY_LABELS[asset.categoria]}
-                  </Badge>
-                </div>
-
-                {/* Status */}
-                <div className="col-span-2">
-                  <Badge className={ASSET_STATUS_COLORS[asset.status]}>
-                    {ASSET_STATUS_LABELS[asset.status]}
-                  </Badge>
-                </div>
-
-                {/* Value */}
-                <div className="col-span-2">
-                  <p className="text-sm text-text-primary">
-                    {formatCurrency(asset.valorAtual)}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-text-primary truncate">
+                    {HIL_TASK_TYPE_LABELS[task.type] || task.type}
                   </p>
-                  <p className="text-xs text-text-muted">
-                    Aquisição: {formatCurrency(asset.valorAquisicao)}
+                  <p className="text-xs text-text-muted truncate">
+                    {task.description || 'Aguardando ação'}
                   </p>
                 </div>
-
-                {/* Actions */}
-                <div className="col-span-2 flex items-center justify-end gap-2">
-                  <Button variant="ghost" size="sm" className="text-text-muted hover:text-text-primary">
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <Badge className={PRIORITY_COLORS[task.priority] || 'bg-blue-500/20'}>
+                    {PRIORITY_LABELS[task.priority] || task.priority}
+                  </Badge>
+                  <ArrowRight className="w-4 h-4 text-text-muted" />
                 </div>
               </motion.div>
             ))}
           </div>
-        </ScrollArea>
+        )}
 
-        {/* Pagination */}
-        <div className="flex items-center justify-between p-4 border-t border-border">
-          <p className="text-sm text-text-muted">
-            Mostrando 1-{mockAssets.length} de {mockAssets.length} ativos
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled>
-              Anterior
-            </Button>
-            <Button variant="outline" size="sm" disabled>
-              Próximo
+        {tasks.length > 5 && (
+          <div className="mt-4 text-center">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/ferramentas/ativos/estoque/tarefas">
+                Ver todas as tarefas ({tasks.length})
+              </Link>
             </Button>
           </div>
+        )}
+      </GlassCardContent>
+    </GlassCard>
+  );
+}
+
+function QuickActions() {
+  const actions = [
+    {
+      label: 'Nova Entrada',
+      description: 'Internalizar itens via NF-e',
+      icon: FileUp,
+      href: '/ferramentas/ativos/estoque/movimentacoes/entrada',
+      color: 'text-green-400',
+      bgColor: 'bg-green-500/20',
+    },
+    {
+      label: 'Expedição',
+      description: 'Enviar itens para campo',
+      icon: ArrowRightLeft,
+      href: '/ferramentas/ativos/estoque/movimentacoes/saida',
+      color: 'text-blue-light',
+      bgColor: 'bg-blue-mid/20',
+    },
+    {
+      label: 'Transferência',
+      description: 'Mover entre locais',
+      icon: RefreshCw,
+      href: '/ferramentas/ativos/estoque/movimentacoes/transferencia',
+      color: 'text-magenta-mid',
+      bgColor: 'bg-magenta-dark/20',
+    },
+    {
+      label: 'Inventário',
+      description: 'Iniciar contagem',
+      icon: ClipboardCheck,
+      href: '/ferramentas/ativos/estoque/inventario',
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-500/20',
+    },
+  ];
+
+  return (
+    <GlassCard>
+      <GlassCardHeader>
+        <div className="flex items-center gap-2">
+          <Plus className="w-4 h-4 text-blue-light" />
+          <GlassCardTitle>Ações Rápidas</GlassCardTitle>
         </div>
-      </GlassCard>
+      </GlassCardHeader>
+
+      <GlassCardContent>
+        <div className="grid grid-cols-2 gap-3">
+          {actions.map((action, index) => (
+            <motion.div
+              key={action.label}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: index * 0.1 }}
+            >
+              <Link href={action.href}>
+                <div className="p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-transparent hover:border-border transition-all cursor-pointer group">
+                  <div className={`p-2 rounded-lg ${action.bgColor} w-fit mb-3`}>
+                    <action.icon className={`w-5 h-5 ${action.color}`} />
+                  </div>
+                  <p className="text-sm font-medium text-text-primary group-hover:text-blue-light transition-colors">
+                    {action.label}
+                  </p>
+                  <p className="text-xs text-text-muted mt-1">
+                    {action.description}
+                  </p>
+                </div>
+              </Link>
+            </motion.div>
+          ))}
+        </div>
+      </GlassCardContent>
+    </GlassCard>
+  );
+}
+
+function RecentAssets() {
+  const { assets, isLoading } = useAssets();
+  const recentAssets = assets.slice(0, 5);
+
+  return (
+    <GlassCard>
+      <GlassCardHeader>
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-blue-light" />
+            <GlassCardTitle>Ativos Recentes</GlassCardTitle>
+          </div>
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/ferramentas/ativos/estoque/lista">
+              Ver todos
+            </Link>
+          </Button>
+        </div>
+      </GlassCardHeader>
+
+      <GlassCardContent>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="w-6 h-6 text-text-muted animate-spin" />
+          </div>
+        ) : recentAssets.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Package className="w-12 h-12 text-text-muted mb-3" />
+            <p className="text-sm text-text-muted">
+              Nenhum ativo cadastrado
+            </p>
+          </div>
+        ) : (
+          <ScrollArea className="max-h-[300px]">
+            <div className="space-y-2">
+              {recentAssets.map((asset) => (
+                <Link
+                  key={asset.id}
+                  href={`/ferramentas/ativos/estoque/${asset.id}`}
+                >
+                  <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors cursor-pointer">
+                    <div className="w-10 h-10 rounded-lg bg-blue-mid/20 flex items-center justify-center shrink-0">
+                      <Package className="w-5 h-5 text-blue-light" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate">
+                        {asset.serial_number || asset.id}
+                      </p>
+                      <p className="text-xs text-text-muted truncate">
+                        {asset.part_number_id}
+                      </p>
+                    </div>
+                    <Badge className={SGA_STATUS_COLORS[asset.status] || 'bg-gray-500/20'}>
+                      {SGA_STATUS_LABELS[asset.status] || asset.status}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </ScrollArea>
+        )}
+      </GlassCardContent>
+    </GlassCard>
+  );
+}
+
+// =============================================================================
+// Main Page Component
+// =============================================================================
+
+export default function EstoquePage() {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-text-primary">
+            Gestão de Estoque
+          </h1>
+          <p className="text-sm text-text-muted mt-1">
+            Dashboard do módulo de inventário
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+            <Input
+              placeholder="Buscar serial ou PN..."
+              className="pl-10 w-64 bg-white/5 border-border"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <Button asChild>
+            <Link href="/ferramentas/ativos/estoque/movimentacoes/entrada">
+              <Plus className="w-4 h-4 mr-2" />
+              Nova Entrada
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <DashboardKPIs />
+
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Task Inbox + Quick Actions */}
+        <div className="lg:col-span-2 space-y-6">
+          <TaskInboxSection />
+          <QuickActions />
+        </div>
+
+        {/* Right Column - Recent Assets */}
+        <div className="space-y-6">
+          <RecentAssets />
+        </div>
+      </div>
+
+      {/* Navigation Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Link href="/ferramentas/ativos/estoque/cadastros">
+          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-blue-mid/20">
+                <Package className="w-5 h-5 text-blue-light" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-text-primary">Cadastros</p>
+                <p className="text-xs text-text-muted">PN, Locais, Projetos</p>
+              </div>
+            </div>
+          </GlassCard>
+        </Link>
+
+        <Link href="/ferramentas/ativos/estoque/lista">
+          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-green-500/20">
+                <Search className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-text-primary">Lista de Ativos</p>
+                <p className="text-xs text-text-muted">Consultar inventário</p>
+              </div>
+            </div>
+          </GlassCard>
+        </Link>
+
+        <Link href="/ferramentas/ativos/estoque/movimentacoes">
+          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-magenta-dark/20">
+                <ArrowRightLeft className="w-5 h-5 text-magenta-mid" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-text-primary">Movimentações</p>
+                <p className="text-xs text-text-muted">Entrada, Saída, Transferência</p>
+              </div>
+            </div>
+          </GlassCard>
+        </Link>
+
+        <Link href="/ferramentas/ativos/estoque/inventario">
+          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-yellow-500/20">
+                <ClipboardCheck className="w-5 h-5 text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-text-primary">Inventário</p>
+                <p className="text-xs text-text-muted">Contagem e reconciliação</p>
+              </div>
+            </div>
+          </GlassCard>
+        </Link>
+      </div>
     </div>
   );
 }
