@@ -8,11 +8,11 @@
 # Local changes are for development reference only.
 # =============================================================================
 
-default_agent: faiston_sga_inventory_agents
+default_agent: faiston_asset_management
 
 agents:
-  faiston_sga_inventory_agents:
-    name: faiston_sga_inventory_agents
+  faiston_asset_management:
+    name: faiston_asset_management
     entrypoint: main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
@@ -34,5 +34,5 @@ agents:
         idle_runtime_session_timeout: null
         max_lifetime: null
     memory:
-      # Using STM_LTM for inventory context and historical patterns
-      mode: STM_LTM
+      # Using STM_AND_LTM for inventory context and historical patterns
+      mode: STM_AND_LTM

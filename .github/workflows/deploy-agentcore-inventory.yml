@@ -40,7 +40,7 @@ on:
 env:
   AWS_REGION: us-east-2
   PYTHON_VERSION: '3.11'
-  AGENT_NAME: faiston_sga_inventory_agents
+  AGENT_NAME: faiston_asset_management
 
 jobs:
   deploy:
@@ -79,10 +79,10 @@ jobs:
         run: |
           # Update paths in config to use CI/CD workspace
           cat > .bedrock_agentcore.yaml << 'EOF'
-          default_agent: faiston_sga_inventory_agents
+          default_agent: faiston_asset_management
           agents:
-            faiston_sga_inventory_agents:
-              name: faiston_sga_inventory_agents
+            faiston_asset_management:
+              name: faiston_asset_management
               entrypoint: main.py
               deployment_type: direct_code_deploy
               runtime_type: PYTHON_3_11
@@ -104,7 +104,7 @@ jobs:
                   idle_runtime_session_timeout: null
                   max_lifetime: null
               memory:
-                mode: STM_LTM
+                mode: STM_AND_LTM
           EOF
 
       - name: Show agent files
