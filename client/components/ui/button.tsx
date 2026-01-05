@@ -27,12 +27,13 @@ const buttonVariants = cva(
     "active:translate-y-0",
     "active:duration-[34ms]",
 
-    // Disabled
-    "disabled:pointer-events-none",
+    // Disabled - Note: NOT using pointer-events-none to allow cursor feedback
     "disabled:opacity-50",
     "disabled:cursor-not-allowed",
     "disabled:hover:transform-none",
     "disabled:hover:brightness-100",
+    "disabled:active:transform-none",
+    "disabled:active:brightness-100",
 
     // Focus (accessibility)
     "outline-none",

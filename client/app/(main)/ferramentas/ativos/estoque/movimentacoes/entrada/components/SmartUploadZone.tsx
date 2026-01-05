@@ -369,23 +369,37 @@ export function SmartUploadZone({
           )}
 
           {/* Upload Button */}
-          <Button
-            className="w-full bg-gradient-to-r from-blue-mid to-magenta-mid hover:from-blue-mid/80 hover:to-magenta-mid/80 text-white"
-            disabled={!selectedFile || !selectedLocation || isProcessing}
-            onClick={handleUpload}
-          >
-            {isProcessing ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Processando...
-              </>
-            ) : (
-              <>
-                <FileUp className="w-4 h-4 mr-2" />
-                Processar Arquivo
-              </>
+          <div className="space-y-2">
+            <Button
+              className="w-full bg-gradient-to-r from-blue-mid to-magenta-mid hover:from-blue-mid/80 hover:to-magenta-mid/80 text-white"
+              disabled={!selectedFile || !selectedLocation || isProcessing}
+              onClick={handleUpload}
+            >
+              {isProcessing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <FileUp className="w-4 h-4 mr-2" />
+                  Processar Arquivo
+                </>
+              )}
+            </Button>
+
+            {/* Validation feedback - show what's missing */}
+            {!isProcessing && (!selectedFile || !selectedLocation) && (
+              <p className="text-xs text-center text-amber-400">
+                <AlertTriangle className="w-3 h-3 inline mr-1" />
+                {!selectedFile && !selectedLocation
+                  ? 'Selecione um arquivo e o local de destino'
+                  : !selectedFile
+                    ? 'Selecione um arquivo para processar'
+                    : 'Selecione o local de destino (obrigatório)'}
+              </p>
             )}
-          </Button>
+          </div>
         </div>
       </GlassCardContent>
     </GlassCard>
