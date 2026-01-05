@@ -30,9 +30,14 @@ flowchart TB
         subgraph "Google ADK Agents"
             EstoqueCtrl[EstoqueControl Agent]
             Intake[Intake Agent]
+            Import[Import Agent]
             Reconciliacao[Reconciliacao Agent]
             Compliance[Compliance Agent]
             Comunicacao[Comunicacao Agent]
+        end
+
+        subgraph "Tools"
+            FileDetect[FileDetector\nMagic Bytes]
         end
     end
 
@@ -160,6 +165,14 @@ flowchart TB
         IA4[_match_items_to_pn]
     end
 
+    subgraph "ImportAgent"
+        IMP1[preview_import]
+        IMP2[execute_import]
+        IMP3[process_text_import]
+        IMP4[_map_columns]
+        IMP5[_extract_with_gemini]
+    end
+
     subgraph "ReconciliacaoAgent"
         RA1[start_campaign]
         RA2[submit_count_result]
@@ -184,16 +197,19 @@ flowchart TB
         S3C[SGAS3Client]
         HIL[HILWorkflowManager]
         NFP[NFParser]
+        FD[FileDetector]
     end
 
     Router --> EC1 & EC2 & EC3 & EC4 & EC5 & EC6 & EC7
     Router --> IA1 & IA2 & IA3
+    Router --> IMP1 & IMP2 & IMP3
     Router --> RA1 & RA2 & RA3 & RA4
     Router --> CA1
     Router --> CM1 & CM2 & CM3
 
     EC1 & EC2 & EC3 & EC4 & EC5 --> DDB & HIL
     IA1 & IA2 & IA3 --> DDB & S3C & NFP & HIL
+    IMP1 & IMP2 & IMP3 --> DDB & S3C & FD & HIL
     RA1 & RA2 & RA3 & RA4 --> DDB & HIL
     CA1 --> DDB
     CM1 & CM2 --> DDB
@@ -258,7 +274,193 @@ erDiagram
 
 ---
 
-## 6. Fluxo de Entrada via NF-e
+## 6. Smart Universal File Importer
+
+O **Smart Import** é um importador inteligente que aceita QUALQUER formato de arquivo e detecta automaticamente o tipo, roteando para o agente apropriado.
+
+### Filosofia: Observe → Think → Learn → Act
+
+```mermaid
+flowchart TB
+    subgraph "OBSERVE"
+        U((Usuário)) -->|Drop File| UZ[SmartUploadZone]
+        UZ -->|Detect| FD[FileDetector\nMagic Bytes]
+    end
+
+    subgraph "THINK"
+        FD -->|Classify| Router{File Type\nRouter}
+    end
+
+    subgraph "LEARN"
+        Router -->|XML/PDF/Image| IA[IntakeAgent\nNF-e Extraction]
+        Router -->|CSV/XLSX| IMP[ImportAgent\nColumn Mapping]
+        Router -->|TXT| TXT[ImportAgent\nGemini AI Text]
+    end
+
+    subgraph "ACT"
+        IA -->|Preview| NFP[NFPreview]
+        IMP -->|Preview| SSP[SpreadsheetPreview]
+        TXT -->|Preview| TXP[TextPreview]
+
+        NFP & SSP & TXP -->|Confidence Check| HIL{HIL\nRequired?}
+        HIL -->|≥80%| AUTO[Autonomous\nConfirmation]
+        HIL -->|<80%| REVIEW[Human\nReview]
+    end
+
+    AUTO -->|Create| MOV[(Movements)]
+    REVIEW -->|Approve| MOV
+```
+
+### Redesign de Tabs (4 → 2)
+
+```mermaid
+flowchart LR
+    subgraph "ANTES (4 Tabs)"
+        T1[NF-e\nXML/PDF]
+        T2[Foto\nJPG/PNG]
+        T3[SAP\nCSV/XLSX]
+        T4[Manual]
+    end
+
+    subgraph "DEPOIS (2 Tabs)"
+        ST[📁 Upload Inteligente\nTODOS os formatos]
+        MT[✏️ Manual\nSem arquivo]
+    end
+
+    T1 & T2 & T3 -.->|Consolidated| ST
+    T4 -.->|Unchanged| MT
+```
+
+### Detecção de Tipo por Magic Bytes
+
+```mermaid
+flowchart TB
+    subgraph "file_detector.py"
+        FB[File Bytes] --> MB{Magic Bytes\nAnalysis}
+
+        MB -->|"<?xml"| XML[XML\nNF-e]
+        MB -->|"%PDF"| PDF[PDF\nDocument]
+        MB -->|"0x89PNG"| PNG[PNG\nImage]
+        MB -->|"0xFFD8"| JPG[JPEG\nImage]
+        MB -->|"PK\x03\x04"| XLSX[XLSX\nSpreadsheet]
+        MB -->|Extension| EXT{Extension\nFallback}
+
+        EXT -->|.csv| CSV[CSV]
+        EXT -->|.txt| TXT[Text]
+        EXT -->|other| UNK[Unknown]
+    end
+
+    subgraph "Confidence Thresholds"
+        CT1["XML: 90%"]
+        CT2["PDF: 85%"]
+        CT3["Image: 70%"]
+        CT4["CSV/XLSX: 80%"]
+        CT5["TXT: 60% (Always HIL)"]
+    end
+```
+
+### Smart Import Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as Usuário
+    participant FE as SmartUploadZone
+    participant H as useSmartImporter
+    participant S3 as S3 Bucket
+    participant AC as AgentCore
+    participant FD as FileDetector
+    participant AG as Agent Router
+    participant DDB as DynamoDB
+
+    U->>FE: Drop any file
+    FE->>H: uploadAndProcess(file)
+
+    Note over H: OBSERVE - Detect Type
+    H->>H: detectFileTypeFromFile()
+    H-->>FE: Show detected type
+
+    Note over H: THINK - Get URL
+    H->>AC: getNFUploadUrl()
+    AC->>S3: Generate presigned URL
+    S3-->>H: Presigned URL
+
+    Note over H: LEARN - Upload
+    H->>S3: PUT file
+
+    Note over H: ACT - Process
+    H->>AC: smart_import_upload()
+    AC->>FD: detect_file_type()
+    FD-->>AC: FileType
+
+    alt XML/PDF/Image
+        AC->>AG: IntakeAgent.process_nf_upload()
+        AG-->>AC: NFExtraction
+    else CSV/XLSX
+        AC->>AG: ImportAgent.preview_import()
+        AG-->>AC: SpreadsheetPreview
+    else TXT
+        AC->>AG: ImportAgent.process_text_import()
+        Note over AG: Gemini AI Text Extraction
+        AG-->>AC: TextImportResult
+    end
+
+    AC-->>H: SmartImportPreview
+    H-->>FE: Show appropriate preview
+
+    U->>FE: Confirm
+    FE->>AC: confirmEntry()
+    AC->>DDB: Create movements
+    AC-->>FE: Success
+```
+
+### Arquitetura Frontend Smart Import
+
+```mermaid
+flowchart TB
+    subgraph "entrada/page.tsx"
+        Tabs[Tabs Component]
+        Tabs -->|smart| SC[Smart Content]
+        Tabs -->|manual| MC[Manual Content]
+    end
+
+    subgraph "Smart Import Flow"
+        SC -->|no preview| SUZ[SmartUploadZone]
+        SC -->|has preview| SP[SmartPreview]
+
+        SUZ -->|onFileSelect| USI[useSmartImporter]
+        USI -->|uploadAndProcess| SVC[sgaAgentcore.ts\ninvokeSmartImport]
+
+        SP -->|route by type| Router{source_type}
+        Router -->|nf_*| NFP[NFPreview]
+        Router -->|spreadsheet| SSP[SpreadsheetPreview]
+        Router -->|text| TXP[TextPreview]
+    end
+
+    subgraph "Types (smartImportTypes.ts)"
+        DU[Discriminated Union]
+        DU --> NFR[NFImportResult]
+        DU --> SIR[SpreadsheetImportResult]
+        DU --> TIR[TextImportResult]
+    end
+
+    Router -.->|Type Guards| DU
+```
+
+### Formatos Suportados
+
+| Formato | Magic Bytes | Agent | Confiança Base | Auto-Confirm |
+|---------|------------|-------|----------------|--------------|
+| **XML** | `<?xml` | IntakeAgent | 95% | ✅ Sim |
+| **PDF** | `%PDF` | IntakeAgent | 85% | ✅ Sim |
+| **JPG** | `0xFFD8` | IntakeAgent (Vision) | 70% | ⚠️ Se >80% |
+| **PNG** | `0x89PNG` | IntakeAgent (Vision) | 70% | ⚠️ Se >80% |
+| **CSV** | Extension | ImportAgent | 90% | ✅ Se match >80% |
+| **XLSX** | `PK\x03\x04` | ImportAgent | 90% | ✅ Se match >80% |
+| **TXT** | Extension | ImportAgent + Gemini | 60% | ❌ **Sempre HIL** |
+
+---
+
+## 7. Fluxo de Entrada via NF-e (Legacy)
 
 ```mermaid
 sequenceDiagram
@@ -597,6 +799,17 @@ flowchart LR
 - **Main**: `server/agentcore-inventory/main.py`
 - **Agents**: `server/agentcore-inventory/agents/`
 - **Tools**: `server/agentcore-inventory/tools/`
+  - `file_detector.py` - Magic bytes file type detection
+
+### Smart Import (NEW)
+- **Types**: `client/lib/ativos/smartImportTypes.ts`
+- **Hook**: `client/hooks/ativos/useSmartImporter.ts`
+- **Components**:
+  - `SmartUploadZone.tsx` - Universal drag-and-drop
+  - `SmartPreview.tsx` - Preview router
+  - `previews/NFPreview.tsx` - NF-e preview
+  - `previews/SpreadsheetPreview.tsx` - CSV/XLSX preview
+  - `previews/TextPreview.tsx` - AI text preview
 
 ### Infrastructure
 - **DynamoDB**: `terraform/main/dynamodb_sga_*.tf`
@@ -606,5 +819,5 @@ flowchart LR
 
 ---
 
-*Documento gerado em: 2026-01-04*
-*Versão: 1.0*
+*Documento gerado em: 2026-01-05*
+*Versão: 1.1 - Adicionado Smart Universal File Importer*
