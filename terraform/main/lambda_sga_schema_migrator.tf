@@ -154,7 +154,7 @@ resource "aws_lambda_function" "sga_schema_migrator" {
   # MANDATORY: All Lambdas use arm64 + Python 3.13
   runtime       = "python3.13"
   architectures = ["arm64"]
-  timeout       = 300  # 5 minutes for schema migrations
+  timeout       = 600  # 10 minutes for large schema migrations
   memory_size   = 512
 
   # Placeholder - actual code deployed via CI/CD
@@ -172,6 +172,7 @@ resource "aws_lambda_function" "sga_schema_migrator" {
       RDS_PROXY_ENDPOINT = aws_db_proxy.sga.endpoint
       RDS_DATABASE_NAME  = "sga_inventory"
       RDS_PORT           = "5432"
+      RDS_SECRET_ARN     = aws_secretsmanager_secret.sga_rds_master.arn
       AWS_REGION_NAME    = var.aws_region
       S3_BUCKET          = aws_s3_bucket.sga_documents.bucket
       LOG_LEVEL          = var.environment == "prod" ? "INFO" : "DEBUG"

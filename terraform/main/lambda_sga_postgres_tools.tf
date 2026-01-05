@@ -153,6 +153,7 @@ resource "aws_lambda_function" "sga_postgres_tools" {
       RDS_PROXY_ENDPOINT = aws_db_proxy.sga.endpoint
       RDS_DATABASE_NAME  = "sga_inventory"
       RDS_PORT           = "5432"
+      RDS_SECRET_ARN     = aws_secretsmanager_secret.sga_rds_master.arn
       AWS_REGION_NAME    = var.aws_region
       LOG_LEVEL          = var.environment == "prod" ? "INFO" : "DEBUG"
     }

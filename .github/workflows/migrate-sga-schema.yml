@@ -125,9 +125,12 @@ jobs:
 
           def get_schema_from_s3(filename: str) -> str:
               """Download schema file from S3."""
+              print(f"  Downloading from S3: s3://{S3_BUCKET}/schema/{filename}")
               s3 = boto3.client("s3", region_name=AWS_REGION)
               response = s3.get_object(Bucket=S3_BUCKET, Key=f"schema/{filename}")
-              return response["Body"].read().decode("utf-8")
+              content = response["Body"].read().decode("utf-8")
+              print(f"  Downloaded {len(content)} bytes")
+              return content
 
 
           def split_sql_statements(sql: str) -> list:
@@ -168,6 +171,7 @@ jobs:
 
           def execute_sql(conn, sql: str, filename: str) -> dict:
               """Execute SQL statements one by one to avoid timeout."""
+              print(f"  Splitting SQL ({len(sql)} chars)...")
               statements = split_sql_statements(sql)
               executed = 0
               skipped = 0
@@ -381,11 +385,11 @@ jobs:
           echo "Payload: $PAYLOAD"
           echo "$PAYLOAD" > /tmp/payload.json
 
-          # Invoke Lambda with 5-minute timeout (schema migration is slow)
+          # Invoke Lambda with 10-minute timeout (schema migration is slow)
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --cli-binary-format raw-in-base64-out \
-            --cli-read-timeout 300 \
+            --cli-read-timeout 600 \
             --payload file:///tmp/payload.json \
             --log-type Tail \
             /tmp/response.json
