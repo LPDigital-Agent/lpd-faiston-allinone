@@ -74,6 +74,8 @@ class ShippingQuote:
     dimensions_limit: str
     available: bool
     reason: str = ""
+    is_simulated: bool = True  # Flag indicating this is simulated data
+    simulation_note: str = "Cotacao estimada. Valores reais podem variar."
 
 
 @dataclass
@@ -288,38 +290,36 @@ class CarrierAgent(BaseInventoryAgent):
         """
         Track a shipment.
 
-        NOTE: Currently returns mock data. Real implementation
-        requires API integrations.
+        NOTE: Currently returns simulated data with is_simulated flag.
+        Real implementation requires API integrations with:
+        - Correios VIP API
+        - Loggi API
+        - Gollog API
 
         Args:
             tracking_code: Tracking code
             carrier: Optional carrier name for faster lookup
 
         Returns:
-            Tracking information
+            Tracking information with is_simulated flag
         """
         log_agent_action(self.name, "track_shipment", {
             "tracking_code": tracking_code,
         })
 
-        # Mock tracking - replace with real API calls
+        # Simulated tracking - real API integrations pending
         return {
             "success": True,
+            "is_simulated": True,
             "tracking": {
                 "tracking_code": tracking_code,
                 "carrier": carrier or "CORREIOS",
-                "status": "IN_TRANSIT",
+                "status": "UNAVAILABLE",
                 "last_update": now_iso(),
-                "events": [
-                    {
-                        "date": now_iso(),
-                        "status": "Objeto em transito",
-                        "location": "CDD Sao Paulo",
-                    },
-                ],
-                "estimated_delivery": "2026-01-07",
+                "events": [],
+                "estimated_delivery": None,
             },
-            "note": "Rastreamento simulado. Integracao com APIs pendente.",
+            "note": "Rastreamento indisponivel. Integracao com APIs de transportadoras pendente.",
         }
 
     # =========================================================================
@@ -426,7 +426,7 @@ class CarrierAgent(BaseInventoryAgent):
         }
 
     def _quote_to_dict(self, quote: ShippingQuote) -> Dict[str, Any]:
-        """Convert quote to dict."""
+        """Convert quote to dict with simulation flag."""
         return {
             "carrier": quote.carrier,
             "carrier_type": quote.carrier_type,
@@ -438,6 +438,8 @@ class CarrierAgent(BaseInventoryAgent):
             "dimensions_limit": quote.dimensions_limit,
             "available": quote.available,
             "reason": quote.reason,
+            "is_simulated": quote.is_simulated,
+            "simulation_note": quote.simulation_note,
         }
 
 

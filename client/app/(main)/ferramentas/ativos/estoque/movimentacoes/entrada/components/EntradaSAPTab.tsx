@@ -34,28 +34,11 @@ import {
   Hash,
 } from 'lucide-react';
 import type { SGAProject, SGALocation } from '@/lib/ativos/types';
+import type { SAPImportPreview } from '@/hooks/ativos';
 
 // Type aliases for cleaner code
 type Project = SGAProject;
 type Location = SGALocation;
-
-// =============================================================================
-// Types
-// =============================================================================
-
-interface SAPImportPreview {
-  filename: string;
-  total_rows: number;
-  matched_rows: number;
-  unmatched_rows: number;
-  match_rate: number;
-  is_sap_format: boolean;
-  columns_detected: string[];
-  sample_data: Record<string, string>[];
-  projects_detected: string[];
-  locations_detected: string[];
-  assets_to_create: number;
-}
 
 interface EntradaSAPTabProps {
   // Upload state

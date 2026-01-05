@@ -27,7 +27,13 @@ import {
   RefreshCw,
   Briefcase,
 } from 'lucide-react';
-import { useNFReader, useAssetManagement } from '@/hooks/ativos';
+import {
+  useNFReader,
+  useAssetManagement,
+  useSAPImport,
+  useManualEntry,
+  type ManualEntryRequest,
+} from '@/hooks/ativos';
 
 // Tab Components
 import {
@@ -81,15 +87,23 @@ export default function EntradaPage() {
   const [projectModalProject, setProjectModalProject] = useState('');
   const [isAssigningProject, setIsAssigningProject] = useState(false);
 
-  // SAP Import state (placeholder - will be replaced by useSAPImport hook)
-  const [sapProcessing, setSapProcessing] = useState(false);
-  const [sapProgress, setSapProgress] = useState(0);
-  const [sapError, setSapError] = useState<string | null>(null);
-  const [sapPreview, setSapPreview] = useState<any>(null);
+  // SAP Import Hook (real implementation - no more mock data!)
+  const {
+    isProcessing: sapProcessing,
+    progress: sapProgress,
+    error: sapError,
+    preview: sapPreview,
+    uploadAndPreview,
+    executeImport,
+    clearPreview: clearSapPreview,
+  } = useSAPImport();
 
-  // Manual Entry state (placeholder - will be replaced by useManualEntry hook)
-  const [manualProcessing, setManualProcessing] = useState(false);
-  const [manualError, setManualError] = useState<string | null>(null);
+  // Manual Entry Hook (real implementation)
+  const {
+    isProcessing: manualProcessing,
+    error: manualError,
+    submitEntry,
+  } = useManualEntry();
 
   // Handle opening project assignment modal
   const openProjectModal = (entryId: string) => {
@@ -133,88 +147,19 @@ export default function EntradaPage() {
     await uploadNF(file, projectId, locationId);
   };
 
-  // Handle SAP preview (placeholder)
+  // Handle SAP preview (real implementation using useSAPImport hook)
   const handleSAPPreview = async (file: File, projectId?: string, locationId?: string) => {
-    setSapProcessing(true);
-    setSapProgress(0);
-    setSapError(null);
-
-    try {
-      // Simulate progress
-      for (let i = 0; i <= 100; i += 20) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        setSapProgress(i);
-      }
-
-      // TODO: Replace with actual useSAPImport hook
-      // For now, create a mock preview
-      setSapPreview({
-        filename: file.name,
-        total_rows: 100,
-        matched_rows: 85,
-        unmatched_rows: 15,
-        match_rate: 85,
-        is_sap_format: true,
-        columns_detected: [
-          'source_system', 'sap_material_code', 'part_number', 'asset_type',
-          'manufacturer', 'serial_number', 'rfid', 'quantity', 'project_id',
-          'project_name', 'status', 'sap_depot_code', 'technician_name',
-        ],
-        sample_data: [
-          {
-            part_number: 'SW-CISCO-9200',
-            serial_number: '0IFD0TVBDIVU',
-            quantity: '1',
-            project_name: 'Stock Faiston',
-            status: 'EM_ESTOQUE',
-            technician_name: '',
-          },
-          {
-            part_number: 'AP-CISCO-R640',
-            serial_number: '8MDD4V30T9NT',
-            quantity: '1',
-            project_name: 'Evotech',
-            status: 'DESCARTE',
-            technician_name: '',
-          },
-        ],
-        projects_detected: ['FAISTON', 'EVOTEC', 'TRAGUE', 'NTT', 'ARCDOU'],
-        locations_detected: ['Barueri - Recebimento', 'Barueri - Descarte', 'Base Tecnica - Rio'],
-        assets_to_create: 100,
-      });
-    } catch (err) {
-      setSapError(err instanceof Error ? err.message : 'Erro ao processar arquivo');
-    } finally {
-      setSapProcessing(false);
-    }
+    await uploadAndPreview(file, projectId, locationId);
   };
 
-  // Handle SAP execute (placeholder)
+  // Handle SAP execute (real implementation using useSAPImport hook)
   const handleSAPExecute = async () => {
-    setSapProcessing(true);
-    try {
-      // TODO: Implement actual import
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      setSapPreview(null);
-    } catch (err) {
-      setSapError(err instanceof Error ? err.message : 'Erro na importacao');
-    } finally {
-      setSapProcessing(false);
-    }
+    await executeImport();
   };
 
-  // Handle Manual submit (placeholder)
-  const handleManualSubmit = async (params: any) => {
-    setManualProcessing(true);
-    setManualError(null);
-    try {
-      // TODO: Implement actual manual entry
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    } catch (err) {
-      setManualError(err instanceof Error ? err.message : 'Erro ao registrar entrada');
-    } finally {
-      setManualProcessing(false);
-    }
+  // Handle Manual submit (real implementation using useManualEntry hook)
+  const handleManualSubmit = async (params: Omit<ManualEntryRequest, 'items'>) => {
+    await submitEntry(params);
   };
 
   return (
@@ -325,7 +270,7 @@ export default function EntradaPage() {
             locations={locations}
             onPreview={handleSAPPreview}
             onExecute={handleSAPExecute}
-            onClear={() => setSapPreview(null)}
+            onClear={clearSapPreview}
           />
         </TabsContent>
 
@@ -338,7 +283,7 @@ export default function EntradaPage() {
             locations={locations}
             partNumbers={partNumbers}
             onSubmit={handleManualSubmit}
-            onClear={() => setManualError(null)}
+            onClear={() => {}}
           />
         </TabsContent>
       </Tabs>
