@@ -447,6 +447,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ Wiki User Guide: 14 sections documenting all SGA features
 - ✅ UI Refinement: QuickActions redesigned to compact full-width layout
 - ✅ Unified Entry: Multi-source material entry (NF-e, Image OCR, SAP Export, Manual)
+- ✅ **Smart Import (January 2026)**: Universal file importer with auto-detect (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
 - ⏳ Phase 4: SAP API Integration (requires SAP credentials)
 
 ### SGA Backend Agents (10)
@@ -471,7 +472,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `TaskInboxContext` - HIL approval tasks
 - `OfflineSyncContext` - PWA offline queue
 
-### SGA Hooks (17)
+### SGA Hooks (16)
 `client/hooks/ativos/`:
 - `useAssets`, `useAssetDetail` - Asset queries
 - `useMovements`, `useMovementMutations`, `useMovementValidation` - Movement operations
@@ -481,6 +482,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `useSAPImport` - SAP CSV/XLSX import with full asset creation
 - `useManualEntry` - Manual entry without source document
 - `useBulkImport` - Bulk CSV/Excel import processing
+- `useSmartImporter` - **NEW** Universal auto-detect importer (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
 
 ### SGA Frontend Pages (25+)
 `client/app/(main)/ferramentas/ativos/estoque/`:
@@ -499,7 +501,8 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 ### SGA Components
 **NEXO AI (4):** `NexoCopilot`, `NexoSearchBar`, `UnifiedSearch`, index
 **Mobile/PWA (3):** `MobileScanner`, `MobileChecklist`, `ConfirmationButton`
-**Entrada Tabs (6):** `EntradaNFTab`, `EntradaImagemTab`, `EntradaSAPTab`, `EntradaManualTab`, `PendingEntriesList`, index
+**Smart Import (7):** `SmartUploadZone`, `SmartPreview`, `NFPreview`, `SpreadsheetPreview`, `TextPreview`, `PendingEntriesList`, index
+**Legacy Tabs (4):** `EntradaNFTab`, `EntradaImagemTab`, `EntradaSAPTab`, `EntradaManualTab` (deprecated, kept for reference)
 
 ### SGA Terraform Resources
 `terraform/main/`:
@@ -596,3 +599,17 @@ name = "faiston-one-url-rewriter"  # NOT ${local.name_prefix}-url-rewriter
 "active:scale-[0.98] active:brightness-95 active:duration-[34ms]",
 "motion-reduce:transition-none"
 ```
+
+### 6. Smart Import TypeScript Patterns (January 2026)
+**Issue**: TypeScript exhaustiveness checks on discriminated unions in preview components
+**Fix**: Use type guards and explicit casts for fallback cases
+```typescript
+// Type guards for discriminated union
+export function isNFImportResult(preview: SmartImportPreview): preview is NFImportResult {
+  return ['nf_xml', 'nf_pdf', 'nf_image'].includes(preview.source_type);
+}
+
+// Fallback for never type (unreachable but needed for exhaustiveness)
+const unknownPreview = preview as SmartImportPreview;
+```
+**Also**: Lucide icons don't accept `title` prop - use `aria-label` instead

@@ -299,6 +299,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ SGA 2.0 Phases 1-3: Expedição, Cotação, Reversa, Analytics, Reconciliação SAP
 - ✅ Wiki: 14 sections documenting all SGA features
 - ✅ Unified Entry: Multi-source tabs (NF-e, Image OCR, SAP Export, Manual)
+- ✅ **Smart Import**: Universal file importer - auto-detects XML/PDF/CSV/XLSX/JPG/PNG/TXT
 - ⏳ Phase 4: SAP API Integration (pending credentials)
 
 ### SGA Key Components
@@ -306,10 +307,10 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 |----------|------------|
 | **Backend Agents (10)** | EstoqueControl, Intake, Reconciliacao, Compliance, Comunicacao, Expedition, Carrier, Reverse, Import, Base |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
-| **Hooks (17)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport |
+| **Hooks (16)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, **useSmartImporter** |
 | **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch |
 | **Mobile/PWA** | MobileScanner, MobileChecklist, ConfirmationButton |
-| **Entrada Tabs** | EntradaNFTab, EntradaImagemTab, EntradaSAPTab, EntradaManualTab, PendingEntriesList |
+| **Smart Import** | SmartUploadZone, SmartPreview, NFPreview, SpreadsheetPreview, TextPreview, PendingEntriesList |
 
 ### SGA Pages Structure (25+ pages)
 ```
