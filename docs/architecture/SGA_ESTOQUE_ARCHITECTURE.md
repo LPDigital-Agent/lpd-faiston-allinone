@@ -17,9 +17,9 @@ flowchart TB
     end
 
     subgraph "Cliente React"
-        Pages[15+ Pages/Routes]
+        Pages[25+ Pages/Routes]
         Contexts[6 Contexts]
-        Hooks[12 Hooks]
+        Hooks[17 Hooks]
         Services[sgaAgentcore.ts]
     end
 
@@ -37,7 +37,8 @@ flowchart TB
         end
 
         subgraph "Tools"
-            FileDetect[FileDetector\nMagic Bytes]
+            FileDetect[FileDetector]
+            NFParser[NFParser]
         end
     end
 
@@ -59,12 +60,14 @@ flowchart TB
     Pages --> Contexts --> Hooks --> Services
     Services -->|JWT Auth| Runtime
     Runtime --> Memory
-    Runtime --> EstoqueCtrl & Intake & Reconciliacao & Compliance & Comunicacao
-    EstoqueCtrl & Intake & Reconciliacao --> DDBInv
-    EstoqueCtrl & Intake --> DDBHIL
-    EstoqueCtrl & Intake & Reconciliacao --> DDBAudit
-    Intake --> S3Docs
-    EstoqueCtrl & Intake --> Gemini
+    Runtime --> EstoqueCtrl & Intake & Import & Reconciliacao & Compliance & Comunicacao
+    Intake & Import --> FileDetect
+    Intake --> NFParser
+    EstoqueCtrl & Intake & Import & Reconciliacao --> DDBInv
+    EstoqueCtrl & Intake & Import --> DDBHIL
+    EstoqueCtrl & Intake & Import & Reconciliacao --> DDBAudit
+    Intake & Import --> S3Docs
+    EstoqueCtrl & Intake & Import --> Gemini
     Services -->|Token| Cognito
 ```
 
