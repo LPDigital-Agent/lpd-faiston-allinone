@@ -123,13 +123,18 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           echo "=== Deploying AgentCore Agent ==="
           # Environment variables for agents
+          # PostgreSQL MCP Gateway (Sprint 4 migration - currently disabled)
+          # Set USE_POSTGRES_MCP=true to enable PostgreSQL via Gateway
           echo "y" | agentcore deploy --agent ${{ env.AGENT_NAME }} \
             --auto-update-on-conflict \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
             --env INVENTORY_TABLE=faiston-one-sga-inventory-prod \
             --env HIL_TASKS_TABLE=faiston-one-sga-hil-tasks-prod \
             --env AUDIT_LOG_TABLE=faiston-one-sga-audit-log-prod \
-            --env DOCUMENTS_BUCKET=faiston-one-sga-documents-prod 2>&1 || {
+            --env DOCUMENTS_BUCKET=faiston-one-sga-documents-prod \
+            --env USE_POSTGRES_MCP=false \
+            --env AGENTCORE_GATEWAY_ID=faiston-one-sga-gateway-prod-qbnlm3ao63 \
+            --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp 2>&1 || {
             echo "::warning::Deploy command returned non-zero exit code. Checking status..."
           }
 
@@ -160,6 +165,13 @@ jobs:
           echo "| Model | gemini-3-pro-preview |" >> $GITHUB_STEP_SUMMARY
           echo "| Region | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| AWS Account | \`377311924364\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**PostgreSQL MCP Gateway (Sprint 4):**" >> $GITHUB_STEP_SUMMARY
+          echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gateway ID | \`faiston-one-sga-gateway-prod-qbnlm3ao63\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target Name | \`SGAPostgresTools\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| USE_POSTGRES_MCP | \`false\` (set to true to enable) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**5 AI Agents:**" >> $GITHUB_STEP_SUMMARY
           echo "- EstoqueControlAgent - Core inventory movements" >> $GITHUB_STEP_SUMMARY

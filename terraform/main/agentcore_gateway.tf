@@ -99,24 +99,36 @@ resource "aws_iam_role_policy" "sga_agentcore_gateway_lambda" {
 #   --semantic-search-configuration '{"semanticSearchEnabled": true}' \
 #   --tags Module=SGA,Feature=AgentCore
 
-# Placeholder local values for gateway configuration
+# =============================================================================
+# Gateway Configuration (Created via boto3 - January 2026)
+# =============================================================================
+# Gateway was created via boto3 API as Terraform resources are not yet available.
+# The following values document the actual deployed Gateway:
+#
+# Gateway ID: faiston-one-sga-gateway-prod-qbnlm3ao63
+# Gateway URL: https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp
+# Target ID: SKVZZNCDKE
+# Target Name: SGAPostgresTools
+# Auth Type: AWS_IAM
+# =============================================================================
+
 locals {
   sga_gateway_name = "${local.name_prefix}-sga-gateway"
 
-  # Gateway configuration (use when creating via AWS CLI)
+  # Actual deployed gateway configuration
+  sga_gateway_id  = "faiston-one-sga-gateway-prod-qbnlm3ao63"
+  sga_gateway_url = "https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp"
+  sga_target_id   = "SKVZZNCDKE"
+  sga_target_name = "SGAPostgresTools"
+
+  # Gateway configuration for reference
   sga_gateway_config = {
-    name = local.sga_gateway_name
-    authorization_configuration = {
-      authorization_type = "JWT"
-      # JWT configuration will reference Cognito when available
-      # jwt_authorization = {
-      #   allowed_audiences = [data.aws_cognito_user_pool_client.main.id]
-      #   allowed_issuers   = ["https://cognito-idp.${var.aws_region}.amazonaws.com/${data.aws_cognito_user_pool.main.id}"]
-      # }
-    }
-    semantic_search_configuration = {
-      semantic_search_enabled = true
-    }
+    gateway_id  = local.sga_gateway_id
+    gateway_url = local.sga_gateway_url
+    target_id   = local.sga_target_id
+    target_name = local.sga_target_name
+    auth_type   = "AWS_IAM"
+    region      = var.aws_region
   }
 
   # Tool schema for inline definition
@@ -291,6 +303,21 @@ resource "aws_ssm_parameter" "sga_gateway_tools" {
 output "sga_gateway_role_arn" {
   description = "IAM role ARN for AgentCore Gateway"
   value       = aws_iam_role.sga_agentcore_gateway.arn
+}
+
+output "sga_gateway_id" {
+  description = "AgentCore Gateway ID (created via boto3)"
+  value       = local.sga_gateway_id
+}
+
+output "sga_gateway_url" {
+  description = "AgentCore Gateway MCP endpoint URL"
+  value       = local.sga_gateway_url
+}
+
+output "sga_gateway_target_id" {
+  description = "Lambda target ID for SGAPostgresTools"
+  value       = local.sga_target_id
 }
 
 output "sga_gateway_config_ssm" {
