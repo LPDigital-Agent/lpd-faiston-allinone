@@ -1,10 +1,11 @@
 'use client';
 
 // =============================================================================
-// Estoque Page - SGA Inventory Module (Dashboard + Inbox)
+// Estoque Page - SGA Inventory Module (Operations Hub)
 // =============================================================================
-// Main entry point for the inventory management module.
-// Features: KPIs, Task Inbox, Quick Actions, Asset Overview
+// Operational hub for inventory management.
+// Features: Task Inbox, Quick Actions, Recent Assets, Module Navigation
+// Note: KPIs moved to Dashboard page for unified asset overview
 // =============================================================================
 
 import { useState } from 'react';
@@ -29,24 +30,18 @@ import {
   ClipboardCheck,
   AlertTriangle,
   CheckCircle2,
-  Clock,
-  TrendingUp,
-  TrendingDown,
   ArrowRight,
   RefreshCw,
   Inbox,
-  Filter,
   Truck,
   RotateCcw,
   BarChart3,
   FileSearch,
 } from 'lucide-react';
-import { useAssets, useTaskInbox, useAssetManagement } from '@/hooks/ativos';
+import { useAssets, useTaskInbox } from '@/hooks/ativos';
 import {
   SGA_STATUS_LABELS,
   SGA_STATUS_COLORS,
-  HIL_STATUS_LABELS,
-  HIL_STATUS_COLORS,
   HIL_TASK_TYPE_LABELS,
   PRIORITY_LABELS,
   PRIORITY_COLORS,
@@ -55,91 +50,6 @@ import {
 // =============================================================================
 // Dashboard Components
 // =============================================================================
-
-function DashboardKPIs() {
-  const { masterDataLoading } = useAssetManagement();
-  const { assets, isLoading } = useAssets();
-
-  // Calculate KPIs from assets data
-  const totalAssets = assets.length;
-  const disponivel = assets.filter(a => a.status === 'AVAILABLE').length;
-  const reservado = assets.filter(a => a.status === 'RESERVED').length;
-  const emCampo = assets.filter(a => a.status === 'WITH_CUSTOMER').length;
-
-  const kpis = [
-    {
-      label: 'Total de Ativos',
-      value: totalAssets,
-      icon: Package,
-      trend: null,
-      color: 'text-blue-light',
-      bgColor: 'bg-blue-mid/20',
-    },
-    {
-      label: 'Disponíveis',
-      value: disponivel,
-      icon: CheckCircle2,
-      trend: { value: 5, positive: true },
-      color: 'text-green-400',
-      bgColor: 'bg-green-500/20',
-    },
-    {
-      label: 'Reservados',
-      value: reservado,
-      icon: Clock,
-      trend: { value: 2, positive: false },
-      color: 'text-yellow-400',
-      bgColor: 'bg-yellow-500/20',
-    },
-    {
-      label: 'Em Campo',
-      value: emCampo,
-      icon: ArrowRightLeft,
-      trend: { value: 3, positive: true },
-      color: 'text-magenta-mid',
-      bgColor: 'bg-magenta-dark/20',
-    },
-  ];
-
-  const loading = masterDataLoading || isLoading;
-
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {kpis.map((kpi, index) => (
-        <motion.div
-          key={kpi.label}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: index * 0.1 }}
-        >
-          <GlassCard className="p-4">
-            <div className="flex items-start justify-between">
-              <div className={`p-2 rounded-lg ${kpi.bgColor}`}>
-                <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
-              </div>
-              {kpi.trend && (
-                <div className={`flex items-center gap-1 text-xs ${kpi.trend.positive ? 'text-green-400' : 'text-red-400'}`}>
-                  {kpi.trend.positive ? (
-                    <TrendingUp className="w-3 h-3" />
-                  ) : (
-                    <TrendingDown className="w-3 h-3" />
-                  )}
-                  {kpi.trend.value}%
-                </div>
-              )}
-            </div>
-            <div className="mt-3">
-              <p className="text-2xl font-bold text-text-primary">
-                {loading ? '...' : kpi.value.toLocaleString('pt-BR')}
-              </p>
-              <p className="text-xs text-text-muted mt-1">{kpi.label}</p>
-            </div>
-          </GlassCard>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
 
 function TaskInboxSection() {
   const {
@@ -265,13 +175,6 @@ function QuickActions() {
       bgColor: 'bg-orange-500/20',
     },
     {
-      label: 'Inventário',
-      icon: ClipboardCheck,
-      href: '/ferramentas/ativos/estoque/inventario',
-      color: 'text-yellow-400',
-      bgColor: 'bg-yellow-500/20',
-    },
-    {
       label: 'Analytics',
       icon: BarChart3,
       href: '/ferramentas/ativos/estoque/analytics',
@@ -297,7 +200,7 @@ function QuickActions() {
       </GlassCardHeader>
 
       <GlassCardContent className="py-2">
-        <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-3 lg:grid-cols-5 gap-2">
           {actions.map((action, index) => (
             <motion.div
               key={action.label}
@@ -405,7 +308,7 @@ export default function EstoquePage() {
             Estoque
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Dashboard do módulo de inventário
+            Central de operações do inventário
           </p>
         </div>
         <div className="flex gap-2">
@@ -420,9 +323,6 @@ export default function EstoquePage() {
           </div>
         </div>
       </div>
-
-      {/* KPIs */}
-      <DashboardKPIs />
 
       {/* Quick Actions - Full Width */}
       <QuickActions />
