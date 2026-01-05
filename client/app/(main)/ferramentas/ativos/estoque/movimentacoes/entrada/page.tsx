@@ -113,7 +113,8 @@ export default function EntradaPage() {
   };
 
   // Handle Smart Upload (unified for ALL file types)
-  const handleSmartUpload = async (file: File, projectId: string | null, locationId: string) => {
+  // Project and Location are optional - can be set in preview after analysis
+  const handleSmartUpload = async (file: File, projectId: string | null, locationId: string | null) => {
     await uploadAndProcess(file, projectId, locationId);
   };
 

@@ -229,7 +229,8 @@ export interface SmartImportUploadRequest {
   filename: string;
   content_type?: string;
   project_id?: string;
-  destination_location_id: string;
+  /** Optional - can be detected from file or set in preview after analysis */
+  destination_location_id?: string;
 }
 
 /**
@@ -284,13 +285,13 @@ export interface UseSmartImporterReturn {
    * Upload file and process with smart import.
    * @param file - File to upload
    * @param projectId - Optional project ID
-   * @param locationId - Destination location ID (required)
+   * @param locationId - Optional destination location ID (can be set in preview after analysis)
    * @returns Promise with preview result
    */
   uploadAndProcess: (
     file: File,
     projectId: string | null,
-    locationId: string
+    locationId: string | null
   ) => Promise<SmartImportPreview>;
 
   /** Clear preview and reset state */

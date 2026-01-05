@@ -59,8 +59,8 @@ interface SmartUploadZoneProps {
   projects: SGAProject[];
   locations: SGALocation[];
 
-  // Actions
-  onFileSelect: (file: File, projectId: string | null, locationId: string) => Promise<void>;
+  // Actions - projectId and locationId are optional (can be set in preview after analysis)
+  onFileSelect: (file: File, projectId: string | null, locationId: string | null) => Promise<void>;
 }
 
 // =============================================================================
@@ -171,12 +171,13 @@ export function SmartUploadZone({
     }
   };
 
-  // Handle upload
+  // Handle upload - Project and Location are optional
+  // They can be detected from file or set in preview
   const handleUpload = async () => {
-    if (!selectedFile || !selectedLocation) return;
+    if (!selectedFile) return;
 
     try {
-      await onFileSelect(selectedFile, selectedProject || null, selectedLocation);
+      await onFileSelect(selectedFile, selectedProject || null, selectedLocation || null);
     } catch {
       // Error handled by hook
     }
@@ -234,7 +235,7 @@ export function SmartUploadZone({
             <div>
               <label className="text-sm font-medium text-text-primary mb-2 block">
                 <MapPin className="w-4 h-4 inline mr-2" />
-                Local de Destino <span className="text-red-400">*</span>
+                Local de Destino <span className="text-text-muted font-normal">(opcional)</span>
               </label>
               <select
                 className="w-full px-3 py-2 bg-white/5 border border-border rounded-md text-sm text-text-primary"
@@ -242,13 +243,19 @@ export function SmartUploadZone({
                 onChange={(e) => setSelectedLocation(e.target.value)}
                 disabled={isProcessing}
               >
-                <option value="">Selecione o local...</option>
+                <option value="">Detectar do arquivo ou definir depois...</option>
                 {locations.filter(l => l.is_active && l.type === 'WAREHOUSE').map((location) => (
                   <option key={location.id} value={location.id}>
                     {location.code} - {location.name}
                   </option>
                 ))}
               </select>
+              {!selectedLocation && (
+                <p className="text-xs text-blue-400 mt-1">
+                  <Brain className="w-3 h-3 inline mr-1" />
+                  Sistema tentara detectar do arquivo ou perguntar apos analise
+                </p>
+              )}
             </div>
           </div>
 
@@ -372,7 +379,7 @@ export function SmartUploadZone({
           <div className="space-y-2">
             <Button
               className="w-full bg-gradient-to-r from-blue-mid to-magenta-mid hover:from-blue-mid/80 hover:to-magenta-mid/80 text-white"
-              disabled={!selectedFile || !selectedLocation || isProcessing}
+              disabled={!selectedFile || isProcessing}
               onClick={handleUpload}
             >
               {isProcessing ? (
@@ -388,15 +395,11 @@ export function SmartUploadZone({
               )}
             </Button>
 
-            {/* Validation feedback - show what's missing */}
-            {!isProcessing && (!selectedFile || !selectedLocation) && (
+            {/* Validation feedback - only file is required */}
+            {!isProcessing && !selectedFile && (
               <p className="text-xs text-center text-amber-400">
                 <AlertTriangle className="w-3 h-3 inline mr-1" />
-                {!selectedFile && !selectedLocation
-                  ? 'Selecione um arquivo e o local de destino'
-                  : !selectedFile
-                    ? 'Selecione um arquivo para processar'
-                    : 'Selecione o local de destino (obrigatório)'}
+                Selecione um arquivo para processar
               </p>
             )}
           </div>

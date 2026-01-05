@@ -90,11 +90,12 @@ export function useSmartImporter(): UseSmartImporterReturn {
   /**
    * Upload file and process with smart import.
    * Auto-detects file type and routes to appropriate agent.
+   * projectId and locationId are optional - can be set in preview after analysis.
    */
   const uploadAndProcess = useCallback(async (
     file: File,
     projectId: string | null,
-    locationId: string
+    locationId: string | null
   ): Promise<SmartImportPreview> => {
     setIsProcessing(true);
     setError(null);
@@ -161,7 +162,7 @@ export function useSmartImporter(): UseSmartImporterReturn {
         filename: file.name,
         content_type: contentType,
         project_id: projectId || undefined,
-        destination_location_id: locationId,
+        destination_location_id: locationId || undefined,
       });
 
       // =======================================================================
