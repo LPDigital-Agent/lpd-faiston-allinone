@@ -230,7 +230,7 @@ lpd-faiston-allinone/
 │   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
 │   │   ├── academy/      # 12 Academy-specific hooks
-│   │   └── ativos/       # 15 SGA-specific hooks
+│   │   └── ativos/       # 17 SGA-specific hooks
 │   ├── lib/               # Utilities
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
@@ -306,7 +306,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 |----------|------------|
 | **Backend Agents (10)** | EstoqueControl, Intake, Reconciliacao, Compliance, Comunicacao, Expedition, Carrier, Reverse, Import, Base |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
-| **Hooks (15)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry |
+| **Hooks (17)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport |
 | **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch |
 | **Mobile/PWA** | MobileScanner, MobileChecklist, ConfirmationButton |
 | **Entrada Tabs** | EntradaNFTab, EntradaImagemTab, EntradaSAPTab, EntradaManualTab, PendingEntriesList |

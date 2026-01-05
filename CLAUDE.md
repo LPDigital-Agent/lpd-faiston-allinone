@@ -129,7 +129,7 @@ lpd-faiston-allinone/
 │   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
 │   │   ├── academy/      # 12 Academy-specific hooks
-│   │   └── ativos/       # 15 SGA-specific hooks
+│   │   └── ativos/       # 17 SGA-specific hooks
 │   ├── lib/               # Utilities
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
@@ -471,7 +471,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `TaskInboxContext` - HIL approval tasks
 - `OfflineSyncContext` - PWA offline queue
 
-### SGA Hooks (15)
+### SGA Hooks (17)
 `client/hooks/ativos/`:
 - `useAssets`, `useAssetDetail` - Asset queries
 - `useMovements`, `useMovementMutations`, `useMovementValidation` - Movement operations
@@ -480,6 +480,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `useImageOCR` - Image OCR for scanned NF photos via Gemini Vision
 - `useSAPImport` - SAP CSV/XLSX import with full asset creation
 - `useManualEntry` - Manual entry without source document
+- `useBulkImport` - Bulk CSV/Excel import processing
 
 ### SGA Frontend Pages (25+)
 `client/app/(main)/ferramentas/ativos/estoque/`:
@@ -580,3 +581,18 @@ name = "faiston-one-url-rewriter"  # NOT ${local.name_prefix}-url-rewriter
 ### 4. AgentCore Memory Mode
 **Issue**: `mode=read_write` fails with "STM is read only"
 **Fix**: Use `memory_manager(mode=MemoryMode.READ_ONLY)` for now (write pending AWS fix)
+
+### 5. Button UX Global Fix (January 2026)
+**Issue**: All buttons lacked cursor feedback, hover states, and click effects
+**Fix**: Updated `button.tsx` CVA and `globals.css` with:
+- `cursor: pointer` global for all clickable elements
+- Hover: `brightness(1.1)` + `translateY(-0.5)`
+- Active/Press: `scale(0.98)` with 34ms duration (2 frames at 60fps)
+- `motion-reduce:` variants for accessibility
+```tsx
+// button.tsx now includes these classes
+"cursor-pointer",
+"hover:-translate-y-0.5 hover:brightness-110",
+"active:scale-[0.98] active:brightness-95 active:duration-[34ms]",
+"motion-reduce:transition-none"
+```
