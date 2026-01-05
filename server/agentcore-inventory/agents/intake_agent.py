@@ -31,6 +31,8 @@ from .utils import (
     MovementType,
     HILTaskType,
     HILTaskStatus,
+    HILAssignedRole,
+    EntryStatus,
     RiskLevel,
     generate_id,
     now_iso,
@@ -274,14 +276,25 @@ class IntakeAgent(BaseInventoryAgent):
                 total_count=len(extraction.get("items", [])),
             )
 
-            # 6. Check if HIL required
+            # 6. Check if project is missing (Project Gate workflow)
+            requires_project = not project_id or project_id.strip() == ""
+
+            # 7. Check if HIL required (for PN matching issues)
             requires_hil = self._check_requires_hil(
                 confidence=confidence,
                 extraction=extraction,
                 unmatched_items=unmatched_items,
             )
 
-            # 7. Create pending entry record
+            # Determine entry status based on project and HIL requirements
+            if requires_project:
+                entry_status = EntryStatus.PENDING_PROJECT
+            elif requires_hil:
+                entry_status = EntryStatus.PENDING_APPROVAL
+            else:
+                entry_status = EntryStatus.PENDING_CONFIRMATION
+
+            # 8. Create pending entry record
             entry_id = generate_id("ENT")
             now = now_iso()
 
@@ -299,9 +312,9 @@ class IntakeAgent(BaseInventoryAgent):
                 "destinatario_cnpj": extraction.get("destinatario", {}).get("cnpj"),
                 "data_emissao": extraction.get("data_emissao"),
                 "valor_total": extraction.get("valor_total"),
-                "project_id": project_id,
+                "project_id": project_id if project_id else None,
                 "destination_location_id": destination_location_id,
-                "status": "PENDING_APPROVAL" if requires_hil else "PENDING_CONFIRMATION",
+                "status": entry_status,
                 "matched_items": matched_items,
                 "unmatched_items": unmatched_items,
                 "confidence_score": confidence.overall,
@@ -309,8 +322,9 @@ class IntakeAgent(BaseInventoryAgent):
                 "s3_pdf_key": s3_key if file_type == "pdf" else None,
                 "uploaded_by": uploaded_by,
                 "created_at": now,
+                "requires_project": requires_project,
                 # GSIs
-                "GSI4_PK": f"STATUS#{'PENDING_APPROVAL' if requires_hil else 'PENDING_CONFIRMATION'}",
+                "GSI4_PK": f"STATUS#{entry_status}",
                 "GSI4_SK": now,
                 "GSI5_PK": f"DATE#{now_yyyymm()}",
                 "GSI5_SK": f"ENTRY#{now}",
@@ -318,12 +332,38 @@ class IntakeAgent(BaseInventoryAgent):
 
             self.db.put_item(entry_item)
 
-            # 8. Create HIL task if required
+            # 9. Create HIL tasks as needed
             hil_task_id = None
-            if requires_hil:
-                from tools.hil_workflow import HILWorkflowManager
-                hil_manager = HILWorkflowManager()
+            project_request_task_id = None
+            from tools.hil_workflow import HILWorkflowManager
+            hil_manager = HILWorkflowManager()
 
+            # Create Project Request HIL if no project_id
+            if requires_project:
+                project_task = await hil_manager.create_task(
+                    task_type=HILTaskType.NEW_PROJECT_REQUEST,
+                    title=f"Atribuir projeto para NF-e: {extraction.get('numero', 'N/A')}",
+                    description=self._format_project_request_message(
+                        extraction=extraction,
+                        entry_id=entry_id,
+                    ),
+                    entity_type="NF_ENTRY",
+                    entity_id=entry_id,
+                    requested_by=uploaded_by,
+                    payload={
+                        "entry_id": entry_id,
+                        "nf_numero": extraction.get("numero"),
+                        "emitente_nome": extraction.get("emitente", {}).get("nome"),
+                        "valor_total": extraction.get("valor_total"),
+                        "items_count": len(extraction.get("items", [])),
+                    },
+                    priority="HIGH",
+                    assigned_role=HILAssignedRole.FINANCE_OPERATOR,
+                )
+                project_request_task_id = project_task.get("task_id")
+
+            # Create Entry Review HIL if there are unmatched items (and not pending project)
+            if requires_hil and not requires_project:
                 hil_task = await hil_manager.create_task(
                     task_type=HILTaskType.APPROVAL_ENTRY if unmatched_items else HILTaskType.REVIEW_ENTRY,
                     title=f"Revisar entrada NF-e: {extraction.get('numero', 'N/A')}",
@@ -348,24 +388,36 @@ class IntakeAgent(BaseInventoryAgent):
                 status="completed",
             )
 
-            return EntryResult(
+            # Build status message
+            if requires_project:
+                status_message = "NF-e processada, aguardando atribuicao de projeto"
+            elif requires_hil:
+                status_message = "NF-e processada, aguardando revisao"
+            else:
+                status_message = "NF-e processada, pronta para confirmacao"
+
+            result = EntryResult(
                 success=True,
                 nf_id=nf_id,
-                message="NF-e processada" + (
-                    ", aguardando revisao" if requires_hil else ", pronta para confirmacao"
-                ),
-                requires_hil=requires_hil,
-                hil_task_id=hil_task_id,
+                message=status_message,
+                requires_hil=requires_hil or requires_project,
+                hil_task_id=hil_task_id or project_request_task_id,
                 confidence=confidence,
                 extraction={
+                    "entry_id": entry_id,
                     "nf_numero": extraction.get("numero"),
                     "emitente": extraction.get("emitente", {}).get("nome"),
                     "valor_total": extraction.get("valor_total"),
                     "total_items": len(extraction.get("items", [])),
+                    "status": entry_status,
+                    "requires_project": requires_project,
+                    "project_request_task_id": project_request_task_id,
                 },
                 items_processed=len(matched_items),
                 items_pending=len(unmatched_items),
             )
+
+            return result
 
         except Exception as e:
             log_agent_action(
@@ -382,27 +434,33 @@ class IntakeAgent(BaseInventoryAgent):
         """
         Process NF-e PDF using AI extraction.
 
+        For PDFs with embedded text, extracts text and uses AI.
+        For scanned PDFs (images), delegates to _process_scanned_nf().
+
         Args:
             pdf_data: PDF file bytes
 
         Returns:
             Extraction dict
         """
-        # Generate prompt for AI extraction
-        prompt = self.nf_parser.get_pdf_extraction_prompt()
-
-        # For PDF, we would use a vision model or OCR first
-        # This is a simplified version - in production, use Gemini vision
-        # or a dedicated OCR service
-
         log_agent_action(
             self.name, "_process_nf_pdf",
             status="started",
         )
 
+        # Detect if PDF is scanned (image-based) or has embedded text
+        # A simple heuristic: check if PDF starts with standard header
+        # and try to detect if it's mostly images
+        is_scanned = self._detect_scanned_pdf(pdf_data)
+
+        if is_scanned:
+            # Use Vision AI for scanned documents
+            return await self._process_scanned_nf(pdf_data)
+
+        # For text-based PDFs, use standard text extraction
         try:
-            # Call the agent for PDF interpretation
-            # Note: In production, this would send the PDF to a vision model
+            prompt = self.nf_parser.get_pdf_extraction_prompt("")
+
             response = await self.invoke(
                 prompt=f"""
                 Extraia os dados da NF-e do seguinte texto/imagem.
@@ -415,9 +473,7 @@ class IntakeAgent(BaseInventoryAgent):
             )
 
             extraction = parse_json_safe(response)
-
-            # Add source info
-            extraction["source"] = "pdf_ai_extraction"
+            extraction["source"] = "pdf_text_extraction"
             extraction["confidence"] = extraction.get("confidence", 0.6)
 
             return extraction
@@ -430,8 +486,198 @@ class IntakeAgent(BaseInventoryAgent):
             return {
                 "error": str(e),
                 "confidence": 0.0,
-                "source": "pdf_ai_extraction_failed",
+                "source": "pdf_extraction_failed",
             }
+
+    def _detect_scanned_pdf(self, pdf_data: bytes) -> bool:
+        """
+        Detect if PDF is a scanned document (image-based).
+
+        Uses simple heuristics to determine if the PDF is primarily
+        image-based (scanned) or has embedded text.
+
+        Args:
+            pdf_data: PDF file bytes
+
+        Returns:
+            True if PDF appears to be scanned/image-based
+        """
+        # Simple heuristic: check for common image markers in PDF
+        # Scanned PDFs typically have large image streams
+        try:
+            pdf_str = pdf_data[:50000].decode('latin-1', errors='ignore')
+
+            # Check for image indicators
+            has_image_xobject = '/XObject' in pdf_str and '/Image' in pdf_str
+            has_dct_decode = '/DCTDecode' in pdf_str  # JPEG compression
+            has_flate_image = '/FlateDecode' in pdf_str and '/Image' in pdf_str
+
+            # Check for minimal text content
+            # Scanned PDFs have few /Font references relative to size
+            font_count = pdf_str.count('/Font')
+
+            # Heuristic: scanned if has images and few fonts
+            if (has_image_xobject or has_dct_decode or has_flate_image) and font_count < 5:
+                return True
+
+            return False
+        except Exception:
+            # If detection fails, default to treating as scanned (safer)
+            return True
+
+    async def _process_scanned_nf(self, pdf_data: bytes) -> Dict[str, Any]:
+        """
+        Process scanned NF-e document using Gemini Vision.
+
+        Uses Gemini 3.0 Pro Vision to extract data from scanned
+        paper documents (DANFE images, photographed invoices).
+
+        Args:
+            pdf_data: PDF or image file bytes
+
+        Returns:
+            Extraction dict with confidence based on scan quality
+        """
+        log_agent_action(
+            self.name, "_process_scanned_nf",
+            status="started",
+        )
+
+        try:
+            # Import Gemini client (lazy import for cold start optimization)
+            from google import genai
+            from google.genai import types
+
+            # Initialize Gemini client
+            client = genai.Client()
+
+            # Get the Vision extraction prompt
+            prompt = self.nf_parser.get_scanned_nf_prompt()
+
+            # Determine MIME type
+            # PDF files start with %PDF, images have different signatures
+            mime_type = "application/pdf"
+            if pdf_data[:4] == b'\x89PNG':
+                mime_type = "image/png"
+            elif pdf_data[:2] == b'\xff\xd8':
+                mime_type = "image/jpeg"
+            elif pdf_data[:4] == b'GIF8':
+                mime_type = "image/gif"
+
+            # Call Gemini Vision with the document
+            # Using gemini-3-pro as per CLAUDE.md requirements
+            response = client.models.generate_content(
+                model="gemini-3-pro",
+                contents=[
+                    types.Part.from_bytes(data=pdf_data, mime_type=mime_type),
+                    types.Part.from_text(prompt),
+                ],
+                config=types.GenerateContentConfig(
+                    temperature=0.1,  # Low temperature for accurate extraction
+                    max_output_tokens=8192,  # Allow for large NF-e responses
+                ),
+            )
+
+            # Parse the response
+            response_text = response.text
+            extraction = parse_json_safe(response_text)
+
+            if not extraction or "error" in extraction:
+                # Try to extract JSON from response
+                extraction = extract_json(response_text)
+
+            if not extraction:
+                log_agent_action(
+                    self.name, "_process_scanned_nf",
+                    status="parse_failed",
+                )
+                return {
+                    "error": "Failed to parse Vision response",
+                    "raw_response": response_text[:500],
+                    "confidence": 0.0,
+                    "source": "vision_extraction_failed",
+                }
+
+            # Map Vision response to standard extraction format
+            mapped_extraction = self._map_vision_extraction(extraction)
+
+            # Adjust confidence based on scan quality
+            base_confidence = extraction.get("extraction_confidence", 0.7)
+            quality_issues = extraction.get("quality_issues", [])
+
+            # Penalize for quality issues
+            confidence_penalty = len(quality_issues) * 0.05
+            final_confidence = max(0.3, base_confidence - confidence_penalty)
+
+            mapped_extraction["confidence"] = final_confidence
+            mapped_extraction["source"] = "vision_scanned_extraction"
+            mapped_extraction["quality_issues"] = quality_issues
+
+            log_agent_action(
+                self.name, "_process_scanned_nf",
+                status="completed",
+                entity_id=mapped_extraction.get("nf_key", ""),
+            )
+
+            return mapped_extraction
+
+        except Exception as e:
+            log_agent_action(
+                self.name, "_process_scanned_nf",
+                status="failed",
+            )
+            return {
+                "error": str(e),
+                "confidence": 0.0,
+                "source": "vision_extraction_error",
+            }
+
+    def _map_vision_extraction(self, vision_response: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Map Vision AI response to standard extraction format.
+
+        Converts the Vision response to the format expected by
+        the rest of the intake processing pipeline.
+
+        Args:
+            vision_response: Raw response from Gemini Vision
+
+        Returns:
+            Standardized extraction dict
+        """
+        # Map items to standard format
+        items = []
+        for item in vision_response.get("items", []):
+            items.append({
+                "codigo": item.get("part_number", ""),
+                "descricao": item.get("description", ""),
+                "ncm": item.get("ncm", ""),
+                "cfop": item.get("cfop", ""),
+                "quantidade": item.get("quantity", 0),
+                "unidade": item.get("unit", "UN"),
+                "valor_unitario": item.get("unit_price", 0),
+                "valor_total": item.get("total_price", 0),
+                "seriais": item.get("serial_numbers", []),
+            })
+
+        return {
+            "numero": vision_response.get("nf_number", ""),
+            "serie": vision_response.get("nf_series", ""),
+            "chave_acesso": vision_response.get("nf_key", ""),
+            "data_emissao": vision_response.get("nf_date", ""),
+            "natureza_operacao": vision_response.get("nature_operation", ""),
+            "emitente": {
+                "cnpj": vision_response.get("supplier_cnpj", ""),
+                "nome": vision_response.get("supplier_name", ""),
+                "ie": vision_response.get("supplier_ie", ""),
+            },
+            "destinatario": {
+                "cnpj": vision_response.get("recipient_cnpj", ""),
+                "nome": vision_response.get("recipient_name", ""),
+            },
+            "valor_total": vision_response.get("total_value", 0),
+            "items": items,
+        }
 
     async def _match_items_to_pn(
         self,
@@ -525,37 +771,278 @@ class IntakeAgent(BaseInventoryAgent):
         self,
         supplier_code: str,
     ) -> Optional[Dict[str, Any]]:
-        """Query part number by supplier code."""
-        # In production, this would query the database
-        # For now, return None (no match)
-        # The actual implementation would be:
-        # return self.db.query_gsi(
-        #     index_name="GSI1",  # Supplier code index
-        #     pk=f"SUPPLIER_CODE#{supplier_code}",
-        # )
-        return None
+        """
+        Query part number by supplier code.
+
+        Supplier codes are unique identifiers that vendors use for their products.
+        This provides the highest confidence match (95%) when found.
+
+        Args:
+            supplier_code: Supplier's internal product code (cProd from NF-e)
+
+        Returns:
+            Part number item if found, None otherwise
+        """
+        if not supplier_code or not supplier_code.strip():
+            return None
+
+        log_agent_action(
+            self.name, "_query_pn_by_supplier_code",
+            entity_type="PN",
+            entity_id=supplier_code,
+            status="started",
+        )
+
+        pn = self.db.query_pn_by_supplier_code(supplier_code.strip())
+
+        if pn:
+            log_agent_action(
+                self.name, "_query_pn_by_supplier_code",
+                entity_type="PN",
+                entity_id=pn.get("part_number", ""),
+                status="matched",
+            )
+
+        return pn
 
     async def _query_pn_by_description(
         self,
         description: str,
     ) -> Optional[Dict[str, Any]]:
         """
-        Query part number by description using AI matching.
+        Query part number by description using AI-powered matching.
 
-        Uses the agent to find best match from catalog.
+        Uses keyword extraction and Gemini AI to rank candidate matches.
+        Returns confidence score based on match quality.
+
+        Args:
+            description: Product description (xProd from NF-e)
+
+        Returns:
+            Dict with part_number and match_score, or None if no match
         """
-        # In production, this would:
-        # 1. Query part numbers with similar keywords
-        # 2. Use AI to rank matches
-        # For now, return None
-        return None
+        if not description or len(description.strip()) < 5:
+            return None
+
+        log_agent_action(
+            self.name, "_query_pn_by_description",
+            status="started",
+        )
+
+        # Extract keywords from description
+        keywords = self._extract_keywords(description)
+        if not keywords:
+            return None
+
+        # Search for candidates in database
+        candidates = self.db.search_pn_by_keywords(keywords, limit=10)
+
+        if not candidates:
+            log_agent_action(
+                self.name, "_query_pn_by_description",
+                status="no_candidates",
+            )
+            return None
+
+        # Use AI to rank candidates and find best match
+        best_match = await self._rank_candidates_with_ai(description, candidates)
+
+        if best_match:
+            log_agent_action(
+                self.name, "_query_pn_by_description",
+                entity_type="PN",
+                entity_id=best_match.get("part_number", ""),
+                status="matched",
+                details={"confidence": best_match.get("match_score", 0)},
+            )
+
+        return best_match
+
+    def _extract_keywords(self, description: str) -> List[str]:
+        """
+        Extract meaningful keywords from product description.
+
+        Filters out common words and normalizes terms.
+
+        Args:
+            description: Product description text
+
+        Returns:
+            List of keywords for searching
+        """
+        # Common words to exclude (Portuguese and English)
+        stopwords = {
+            "de", "da", "do", "das", "dos", "em", "para", "com", "sem", "por",
+            "uma", "uns", "the", "a", "an", "and", "or", "for", "with", "without",
+            "unidade", "peca", "item", "kit", "caixa", "pacote", "lote",
+        }
+
+        # Split and clean
+        words = description.upper().replace(",", " ").replace("-", " ").split()
+
+        # Filter and normalize
+        keywords = []
+        for word in words:
+            # Remove non-alphanumeric
+            clean = "".join(c for c in word if c.isalnum())
+            # Skip short words and stopwords
+            if len(clean) >= 3 and clean.lower() not in stopwords:
+                keywords.append(clean)
+
+        # Return unique keywords, max 5
+        seen = set()
+        unique_keywords = []
+        for kw in keywords:
+            if kw not in seen:
+                seen.add(kw)
+                unique_keywords.append(kw)
+                if len(unique_keywords) >= 5:
+                    break
+
+        return unique_keywords
+
+    async def _rank_candidates_with_ai(
+        self,
+        target_description: str,
+        candidates: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Use Gemini AI to rank candidate part numbers against target description.
+
+        Args:
+            target_description: Description to match (from NF-e)
+            candidates: List of candidate part number items
+
+        Returns:
+            Best matching PN with match_score, or None
+        """
+        if not candidates:
+            return None
+
+        # If only one candidate with good description overlap, use it
+        if len(candidates) == 1:
+            pn = candidates[0]
+            return {
+                "part_number": pn.get("part_number", pn.get("PK", "").replace("PN#", "")),
+                "description": pn.get("description", ""),
+                "match_score": 0.75,  # Single candidate = medium confidence
+            }
+
+        try:
+            # Lazy import for cold start optimization
+            from google import genai
+            from google.genai import types
+
+            # Build candidate list for AI
+            candidate_list = []
+            for i, pn in enumerate(candidates[:5]):  # Limit to 5 for efficiency
+                pn_code = pn.get("part_number", pn.get("PK", "").replace("PN#", ""))
+                pn_desc = pn.get("description", "")
+                candidate_list.append(f"{i+1}. {pn_code}: {pn_desc}")
+
+            prompt = f"""Analise a descricao do produto e identifique qual Part Number do catalogo melhor corresponde.
+
+## Descricao do Produto (da NF-e)
+{target_description}
+
+## Catalogo de Part Numbers Disponiveis
+{chr(10).join(candidate_list)}
+
+## Instrucoes
+1. Compare a descricao com cada opcao do catalogo
+2. Considere: marca, modelo, especificacoes tecnicas, tipo de equipamento
+3. Se nenhum corresponder bem, responda "NONE"
+
+## Resposta
+Responda APENAS com JSON no formato:
+{{"match_index": <numero 1-5 ou 0 se NONE>, "confidence": <0.0-1.0>, "reason": "<breve explicacao>"}}
+"""
+
+            client = genai.Client()
+            response = client.models.generate_content(
+                model="gemini-3-pro-preview",
+                contents=[types.Part.from_text(prompt)],
+                config=types.GenerateContentConfig(
+                    temperature=0.1,
+                    max_output_tokens=256,
+                ),
+            )
+
+            # Parse response
+            result = parse_json_safe(response.text)
+
+            if result and "match_index" in result:
+                idx = result.get("match_index", 0)
+                confidence = result.get("confidence", 0.7)
+
+                if idx > 0 and idx <= len(candidates):
+                    matched_pn = candidates[idx - 1]
+                    return {
+                        "part_number": matched_pn.get("part_number", matched_pn.get("PK", "").replace("PN#", "")),
+                        "description": matched_pn.get("description", ""),
+                        "match_score": min(0.85, max(0.5, confidence)),  # Cap between 0.5-0.85
+                        "ai_reason": result.get("reason", ""),
+                    }
+
+            return None
+
+        except Exception as e:
+            log_agent_action(
+                self.name, "_rank_candidates_with_ai",
+                status="error",
+                details={"error": str(e)[:100]},
+            )
+            # Fallback: return first candidate with low confidence
+            if candidates:
+                pn = candidates[0]
+                return {
+                    "part_number": pn.get("part_number", pn.get("PK", "").replace("PN#", "")),
+                    "description": pn.get("description", ""),
+                    "match_score": 0.6,  # Low confidence fallback
+                }
+            return None
 
     def _query_pn_by_ncm(
         self,
         ncm: str,
     ) -> Optional[Dict[str, Any]]:
-        """Query part number by NCM code."""
-        # In production, this would query by NCM
+        """
+        Query part number by NCM (Nomenclatura Comum do Mercosul) code.
+
+        NCM is a fiscal classification code. Items with same NCM are
+        in the same category, so this provides lower confidence (60%).
+
+        Args:
+            ncm: NCM code (8 digits, e.g., "8517.62.59")
+
+        Returns:
+            First matching part number, or None
+        """
+        if not ncm or len(ncm.replace(".", "")) < 4:
+            return None
+
+        log_agent_action(
+            self.name, "_query_pn_by_ncm",
+            entity_type="NCM",
+            entity_id=ncm,
+            status="started",
+        )
+
+        # Query by NCM prefix (first 6 digits)
+        matches = self.db.query_pn_by_ncm(ncm, limit=5)
+
+        if matches:
+            # Return first match with low confidence
+            # NCM matching is category-based, not exact
+            pn = matches[0]
+            log_agent_action(
+                self.name, "_query_pn_by_ncm",
+                entity_type="PN",
+                entity_id=pn.get("part_number", ""),
+                status="matched",
+            )
+            return pn
+
         return None
 
     def _suggest_part_number(self, item: Dict[str, Any]) -> str:
@@ -714,6 +1201,63 @@ class IntakeAgent(BaseInventoryAgent):
 - **Aprovar**: Confirmar entrada dos itens identificados
 - **Rejeitar**: Cancelar esta entrada
 - **Modificar**: Ajustar mapeamento de part numbers
+"""
+        return message
+
+    def _format_project_request_message(
+        self,
+        extraction: Dict[str, Any],
+        entry_id: str,
+    ) -> str:
+        """
+        Format message for HIL project assignment request.
+
+        Sent to Finance team when NF-e arrives without a project ID.
+        Finance needs to create the project in SAP and assign it here.
+        """
+        items = extraction.get("items", [])
+        items_summary = []
+        for item in items[:5]:
+            items_summary.append(f"- {item.get('descricao', 'N/A')[:60]}")
+        if len(items) > 5:
+            items_summary.append(f"- ... e mais {len(items) - 5} itens")
+
+        message = f"""
+## Solicitacao de Atribuicao de Projeto
+
+### Contexto
+Uma NF-e foi recebida, mas **NAO possui ID de projeto atribuido**.
+Por favor, identifique o projeto correspondente no SAP e atribua a esta entrada.
+
+### Dados da NF-e
+- **Entry ID**: `{entry_id}`
+- **Numero**: {extraction.get('numero', 'N/A')} / Serie: {extraction.get('serie', 'N/A')}
+- **Chave de Acesso**: {extraction.get('chave_acesso', 'N/A')}
+- **Data Emissao**: {extraction.get('data_emissao', 'N/A')}
+
+### Fornecedor
+- **Nome**: {extraction.get('emitente', {}).get('nome', 'N/A')}
+- **CNPJ**: {extraction.get('emitente', {}).get('cnpj', 'N/A')}
+
+### Valor e Itens
+- **Valor Total**: R$ {extraction.get('valor_total', 0):,.2f}
+- **Quantidade de Itens**: {len(items)}
+
+### Itens (Primeiros 5)
+{chr(10).join(items_summary)}
+
+### Acoes Necessarias
+1. **Identificar Projeto**: Verifique no SAP qual projeto corresponde a esta NF-e
+2. **Se nao existir**: Crie o projeto no SAP Business One
+3. **Atribuir**: Selecione o projeto nesta tarefa e aprove
+
+### Acoes Disponiveis
+- **Atribuir Projeto**: Selecionar projeto existente ou recem-criado
+- **Rejeitar**: Se NF-e foi enviada por erro
+- **Escalar**: Se houver duvidas sobre o projeto
+
+---
+⚠️ **IMPORTANTE**: A entrada permanecera pendente ate que um projeto seja atribuido.
 """
         return message
 

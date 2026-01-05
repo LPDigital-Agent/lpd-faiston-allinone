@@ -84,6 +84,30 @@ class HILTaskType:
     APPROVAL_TRANSFER = "APPROVAL_TRANSFER"
     REVIEW_ENTRY = "REVIEW_ENTRY"
     ESCALATION = "ESCALATION"
+    # Project Gate - For entries without project_id
+    NEW_PROJECT_REQUEST = "NEW_PROJECT_REQUEST"
+
+
+class EntryStatus:
+    """NF Entry processing status values."""
+    PENDING_UPLOAD = "PENDING_UPLOAD"         # Awaiting file upload
+    PROCESSING = "PROCESSING"                 # Being extracted
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"  # Awaiting user confirmation
+    PENDING_APPROVAL = "PENDING_APPROVAL"     # Awaiting HIL approval (unmatched items)
+    PENDING_PROJECT = "PENDING_PROJECT"       # Awaiting project assignment (no project_id)
+    CONFIRMED = "CONFIRMED"                   # User confirmed, ready for movement
+    COMPLETED = "COMPLETED"                   # Movements created
+    FAILED = "FAILED"                         # Processing failed
+    CANCELLED = "CANCELLED"                   # Entry cancelled
+
+
+class HILAssignedRole:
+    """Roles for HIL task assignment routing."""
+    OPERATOR = "OPERATOR"           # Warehouse operators
+    SUPERVISOR = "SUPERVISOR"       # Floor supervisors
+    MANAGER = "MANAGER"             # Area managers
+    FINANCE_OPERATOR = "FINANCE_OPERATOR"   # Finance team for project creation
+    DIRECTOR = "DIRECTOR"           # Directors for high-value approvals
 
 
 class HILTaskStatus:

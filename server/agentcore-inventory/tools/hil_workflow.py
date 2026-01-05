@@ -48,6 +48,8 @@ class HILTaskType:
     APPROVAL_TRANSFER = "APPROVAL_TRANSFER"
     REVIEW_ENTRY = "REVIEW_ENTRY"
     ESCALATION = "ESCALATION"
+    # Project Gate - For entries without project_id
+    NEW_PROJECT_REQUEST = "NEW_PROJECT_REQUEST"
 
 
 class HILTaskStatus:

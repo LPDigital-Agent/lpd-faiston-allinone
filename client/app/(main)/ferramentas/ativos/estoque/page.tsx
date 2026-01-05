@@ -36,6 +36,10 @@ import {
   RefreshCw,
   Inbox,
   Filter,
+  Truck,
+  RotateCcw,
+  BarChart3,
+  FileSearch,
 } from 'lucide-react';
 import { useAssets, useTaskInbox, useAssetManagement } from '@/hooks/ativos';
 import {
@@ -249,19 +253,19 @@ function QuickActions() {
     },
     {
       label: 'Expedição',
-      description: 'Enviar itens para campo',
-      icon: ArrowRightLeft,
-      href: '/ferramentas/ativos/estoque/movimentacoes/saida',
+      description: 'Enviar com cotação AI',
+      icon: Truck,
+      href: '/ferramentas/ativos/estoque/expedicao',
       color: 'text-blue-light',
       bgColor: 'bg-blue-mid/20',
     },
     {
-      label: 'Transferência',
-      description: 'Mover entre locais',
-      icon: RefreshCw,
-      href: '/ferramentas/ativos/estoque/movimentacoes/transferencia',
-      color: 'text-magenta-mid',
-      bgColor: 'bg-magenta-dark/20',
+      label: 'Reversa',
+      description: 'Devolução de equipamentos',
+      icon: RotateCcw,
+      href: '/ferramentas/ativos/estoque/reversa',
+      color: 'text-orange-400',
+      bgColor: 'bg-orange-500/20',
     },
     {
       label: 'Inventário',
@@ -270,6 +274,22 @@ function QuickActions() {
       href: '/ferramentas/ativos/estoque/inventario',
       color: 'text-yellow-400',
       bgColor: 'bg-yellow-500/20',
+    },
+    {
+      label: 'Analytics',
+      description: 'Dashboard de acurácia',
+      icon: BarChart3,
+      href: '/ferramentas/ativos/estoque/analytics',
+      color: 'text-purple-400',
+      bgColor: 'bg-purple-500/20',
+    },
+    {
+      label: 'Reconciliação SAP',
+      description: 'Comparar com SAP',
+      icon: FileSearch,
+      href: '/ferramentas/ativos/estoque/reconciliacao/sap',
+      color: 'text-cyan-400',
+      bgColor: 'bg-cyan-500/20',
     },
   ];
 

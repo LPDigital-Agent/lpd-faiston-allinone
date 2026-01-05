@@ -64,6 +64,16 @@ import type {
   SGAProject,
   InventoryCampaign,
   PendingNFEntry,
+  ImportColumnMapping,
+  SGAImportPreviewResponse,
+  SGAImportExecuteResponse,
+  SGAPNMappingValidationResponse,
+  SGAGetAccuracyMetricsRequest,
+  SGAGetAccuracyMetricsResponse,
+  SGAReconcileSAPRequest,
+  SGAReconcileSAPResponse,
+  SGAApplyReconciliationActionRequest,
+  SGAApplyReconciliationActionResponse,
 } from '@/lib/ativos/types';
 
 // =============================================================================
@@ -361,6 +371,21 @@ export async function getNFUploadUrl(
 export async function getPendingNFEntries(): Promise<AgentCoreResponse<{ entries: PendingNFEntry[] }>> {
   return invokeSGAAgentCore<{ entries: PendingNFEntry[] }>({
     action: 'get_pending_nf_entries',
+  });
+}
+
+/**
+ * Assign a project to an entry that is in PENDING_PROJECT status.
+ * This resolves the project gate workflow.
+ */
+export async function assignProjectToEntry(
+  entryId: string,
+  projectId: string
+): Promise<AgentCoreResponse<{ success: boolean; entry_id: string; new_status: string }>> {
+  return invokeSGAAgentCore<{ success: boolean; entry_id: string; new_status: string }>({
+    action: 'assign_project_to_entry',
+    entry_id: entryId,
+    project_id: projectId,
   });
 }
 
@@ -692,4 +717,262 @@ export function getSGAAgentCoreConfig() {
     arn: AGENTCORE_ARN,
     configured: Boolean(AGENTCORE_ARN && !AGENTCORE_ARN.includes('PENDING')),
   };
+}
+
+// =============================================================================
+// Bulk Import
+// =============================================================================
+
+/**
+ * Preview an import file before processing.
+ * Parses CSV/Excel, auto-detects columns, and attempts PN matching.
+ */
+export async function previewImport(params: {
+  file_content_base64: string;
+  filename: string;
+  project_id?: string;
+  destination_location_id?: string;
+}): Promise<AgentCoreResponse<SGAImportPreviewResponse>> {
+  return invokeSGAAgentCore<SGAImportPreviewResponse>({
+    action: 'preview_import',
+    ...params,
+  });
+}
+
+/**
+ * Execute the import after preview/confirmation.
+ * Creates entry movements for all valid rows.
+ */
+export async function executeImport(params: {
+  import_id: string;
+  file_content_base64: string;
+  filename: string;
+  column_mappings: Array<{ file_column: string; target_field: string }>;
+  pn_overrides?: Record<number, string>;
+  project_id?: string;
+  destination_location_id?: string;
+}): Promise<AgentCoreResponse<SGAImportExecuteResponse>> {
+  return invokeSGAAgentCore<SGAImportExecuteResponse>({
+    action: 'execute_import',
+    ...params,
+  });
+}
+
+/**
+ * Validate a part number mapping suggestion.
+ * Used by operator to confirm or override AI suggestions.
+ */
+export async function validatePNMapping(params: {
+  description: string;
+  suggested_pn_id?: string;
+}): Promise<AgentCoreResponse<SGAPNMappingValidationResponse>> {
+  return invokeSGAAgentCore<SGAPNMappingValidationResponse>({
+    action: 'validate_pn_mapping',
+    ...params,
+  });
+}
+
+// =============================================================================
+// Expedition (ExpeditionAgent - SAP-Ready)
+// =============================================================================
+
+import type {
+  SGAExpeditionRequestPayload,
+  SGAExpeditionResponse,
+  SGAVerifyStockResponse,
+  SGAConfirmSeparationPayload,
+  SGAConfirmSeparationResponse,
+  SGACompleteExpeditionPayload,
+  SGACompleteExpeditionResponse,
+  SGAGetQuotesRequest,
+  SGAGetQuotesResponse,
+  SGARecommendCarrierRequest,
+  SGARecommendCarrierResponse,
+  SGATrackShipmentRequest,
+  SGATrackShipmentResponse,
+  SGAProcessReturnRequestNew,
+  SGAProcessReturnResponseNew,
+  SGAValidateOriginRequest,
+  SGAValidateOriginResponse,
+  SGAEvaluateConditionRequest,
+  SGAEvaluateConditionResponse,
+} from '@/lib/ativos/types';
+
+/**
+ * Process a new expedition request with SAP-ready data.
+ */
+export async function processExpeditionRequest(
+  params: SGAExpeditionRequestPayload
+): Promise<AgentCoreResponse<SGAExpeditionResponse>> {
+  return invokeSGAAgentCore<SGAExpeditionResponse>({
+    action: 'process_expedition_request',
+    ...params,
+  });
+}
+
+/**
+ * Verify stock availability for an item.
+ */
+export async function verifyExpeditionStock(params: {
+  pn_id: string;
+  serial?: string;
+  quantity: number;
+}): Promise<AgentCoreResponse<SGAVerifyStockResponse>> {
+  return invokeSGAAgentCore<SGAVerifyStockResponse>({
+    action: 'verify_expedition_stock',
+    ...params,
+  });
+}
+
+/**
+ * Confirm physical separation and packaging.
+ */
+export async function confirmSeparation(
+  params: SGAConfirmSeparationPayload
+): Promise<AgentCoreResponse<SGAConfirmSeparationResponse>> {
+  return invokeSGAAgentCore<SGAConfirmSeparationResponse>({
+    action: 'confirm_separation',
+    ...params,
+  });
+}
+
+/**
+ * Complete expedition after NF-e emission.
+ */
+export async function completeExpedition(
+  params: SGACompleteExpeditionPayload
+): Promise<AgentCoreResponse<SGACompleteExpeditionResponse>> {
+  return invokeSGAAgentCore<SGACompleteExpeditionResponse>({
+    action: 'complete_expedition',
+    ...params,
+  });
+}
+
+// =============================================================================
+// Carrier Quotes (CarrierAgent)
+// =============================================================================
+
+/**
+ * Get shipping quotes from multiple carriers.
+ */
+export async function getShippingQuotes(
+  params: SGAGetQuotesRequest
+): Promise<AgentCoreResponse<SGAGetQuotesResponse>> {
+  return invokeSGAAgentCore<SGAGetQuotesResponse>({
+    action: 'get_shipping_quotes',
+    ...params,
+  });
+}
+
+/**
+ * Get AI recommendation for best carrier.
+ */
+export async function recommendCarrier(
+  params: SGARecommendCarrierRequest
+): Promise<AgentCoreResponse<SGARecommendCarrierResponse>> {
+  return invokeSGAAgentCore<SGARecommendCarrierResponse>({
+    action: 'recommend_carrier',
+    ...params,
+  });
+}
+
+/**
+ * Track a shipment by tracking code.
+ */
+export async function trackShipment(
+  params: SGATrackShipmentRequest
+): Promise<AgentCoreResponse<SGATrackShipmentResponse>> {
+  return invokeSGAAgentCore<SGATrackShipmentResponse>({
+    action: 'track_shipment',
+    ...params,
+  });
+}
+
+// =============================================================================
+// Reverse Logistics (ReverseAgent)
+// =============================================================================
+
+/**
+ * Process an equipment return (reversa).
+ */
+export async function processReturnNew(
+  params: SGAProcessReturnRequestNew
+): Promise<AgentCoreResponse<SGAProcessReturnResponseNew>> {
+  return invokeSGAAgentCore<SGAProcessReturnResponseNew>({
+    action: 'process_return',
+    ...params,
+  });
+}
+
+/**
+ * Validate the origin of a return shipment.
+ */
+export async function validateReturnOrigin(
+  params: SGAValidateOriginRequest
+): Promise<AgentCoreResponse<SGAValidateOriginResponse>> {
+  return invokeSGAAgentCore<SGAValidateOriginResponse>({
+    action: 'validate_return_origin',
+    ...params,
+  });
+}
+
+/**
+ * Evaluate equipment condition and determine destination depot.
+ */
+export async function evaluateReturnCondition(
+  params: SGAEvaluateConditionRequest
+): Promise<AgentCoreResponse<SGAEvaluateConditionResponse>> {
+  return invokeSGAAgentCore<SGAEvaluateConditionResponse>({
+    action: 'evaluate_return_condition',
+    ...params,
+  });
+}
+
+// =============================================================================
+// Accuracy Metrics (Dashboard Analytics)
+// =============================================================================
+
+/**
+ * Get accuracy metrics for the dashboard.
+ * Returns extraction accuracy, entry success rate, HIL time, divergence rate.
+ */
+export async function getAccuracyMetrics(
+  params: SGAGetAccuracyMetricsRequest = {}
+): Promise<AgentCoreResponse<SGAGetAccuracyMetricsResponse>> {
+  return invokeSGAAgentCore<SGAGetAccuracyMetricsResponse>({
+    action: 'get_accuracy_metrics',
+    ...params,
+  });
+}
+
+// =============================================================================
+// SAP Reconciliation
+// =============================================================================
+
+/**
+ * Reconcile SAP export data with SGA inventory.
+ * Compares quantities and identifies deltas (FALTA_SGA, SOBRA_SGA).
+ */
+export async function reconcileSAPExport(
+  params: SGAReconcileSAPRequest
+): Promise<AgentCoreResponse<SGAReconcileSAPResponse>> {
+  return invokeSGAAgentCore<SGAReconcileSAPResponse>({
+    action: 'reconcile_sap_export',
+    ...params,
+  });
+}
+
+/**
+ * Apply an action to a reconciliation delta.
+ * Actions: CREATE_ADJUSTMENT, IGNORE, INVESTIGATE.
+ */
+export async function applyReconciliationAction(
+  params: SGAApplyReconciliationActionRequest
+): Promise<AgentCoreResponse<SGAApplyReconciliationActionResponse>> {
+  return invokeSGAAgentCore<SGAApplyReconciliationActionResponse>({
+    action: 'apply_reconciliation_action',
+    delta_id: params.delta_id,
+    reconciliation_action: params.action,
+    reason: params.reason,
+  });
 }

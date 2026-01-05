@@ -36,6 +36,16 @@ export type { SGAProject } from './useProjects';
 export { useNFReader } from './useNFReader';
 export type { NFExtraction, NFItemMapping, PendingNFEntry, ConfidenceScore } from './useNFReader';
 
+// Bulk Import hook
+export { useBulkImport } from './useBulkImport';
+export type {
+  ImportColumnMapping,
+  ImportPreviewRow,
+  SGAImportPreviewResponse,
+  SGAImportExecuteResponse,
+  SGAPNMappingValidationResponse,
+} from './useBulkImport';
+
 // Scanner hook
 export { useSerialScanner } from './useSerialScanner';
 export type { ScanMode, ScanResult } from './useSerialScanner';

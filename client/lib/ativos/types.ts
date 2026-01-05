@@ -486,7 +486,19 @@ export type NotificationChannel = 'SYSTEM' | 'EMAIL' | 'WHATSAPP';
 /**
  * NF-e entry status.
  */
-export type NFEntryStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'PARTIAL';
+export type NFEntryStatus =
+  | 'PENDING_UPLOAD'        // Awaiting file upload
+  | 'PROCESSING'            // Being extracted
+  | 'PENDING_CONFIRMATION'  // Awaiting user confirmation
+  | 'PENDING_APPROVAL'      // Awaiting HIL approval (unmatched items)
+  | 'PENDING_PROJECT'       // Awaiting project assignment (no project_id)
+  | 'PENDING'               // Legacy: pending confirmation
+  | 'CONFIRMED'             // User confirmed, ready for movement
+  | 'COMPLETED'             // Movements created
+  | 'REJECTED'              // Entry rejected
+  | 'PARTIAL'               // Partially confirmed
+  | 'FAILED'                // Processing failed
+  | 'CANCELLED';            // Entry cancelled
 
 /**
  * Inventory campaign status.
@@ -1227,4 +1239,718 @@ export interface SGADashboardSummary {
   movements_this_week: number;
   active_campaigns: number;
   open_divergences: number;
+}
+
+// =============================================================================
+// Bulk Import Types
+// =============================================================================
+
+/**
+ * Column mapping from import file to system fields.
+ */
+export interface ImportColumnMapping {
+  file_column: string;
+  target_field: string;
+  confidence: number;
+  sample_values: string[];
+}
+
+/**
+ * Single row from import preview.
+ */
+export interface ImportPreviewRow {
+  row_number: number;
+  mapped_data: Record<string, string>;
+  validation_errors: string[];
+  pn_match: SGAPartNumber | null;
+  match_confidence: number;
+  match_method: 'supplier_code' | 'description_ai' | 'ncm' | 'none';
+}
+
+/**
+ * Import preview response.
+ */
+export interface SGAImportPreviewResponse {
+  success: boolean;
+  import_id: string;
+  filename: string;
+  file_type: 'csv' | 'xlsx';
+  total_rows: number;
+  column_mappings: ImportColumnMapping[];
+  unmapped_columns: string[];
+  matched_rows: ImportPreviewRow[];
+  unmatched_rows: ImportPreviewRow[];
+  stats: {
+    preview_rows_shown: number;
+    matched_count: number;
+    unmatched_count: number;
+    match_rate: number;
+    total_quantity: number;
+  };
+  confidence_score: ConfidenceScore;
+  requires_review: boolean;
+  project_id?: string;
+  destination_location_id?: string;
+  error?: string;
+}
+
+/**
+ * Created movement from import.
+ */
+export interface ImportCreatedMovement {
+  row_number: number;
+  movement_id: string;
+  pn_id: string;
+  pn_number: string;
+  quantity: number;
+}
+
+/**
+ * Failed or skipped row from import.
+ */
+export interface ImportFailedRow {
+  row_number: number;
+  reason: string;
+  data: Record<string, string>;
+}
+
+/**
+ * Import execution response.
+ */
+export interface SGAImportExecuteResponse {
+  success: boolean;
+  import_id: string;
+  total_rows: number;
+  created_count: number;
+  failed_count: number;
+  skipped_count: number;
+  success_rate: number;
+  created_movements: ImportCreatedMovement[];
+  failed_rows: ImportFailedRow[];
+  skipped_rows: ImportFailedRow[];
+  message: string;
+  error?: string;
+}
+
+/**
+ * PN mapping validation response.
+ */
+export interface SGAPNMappingValidationResponse {
+  success: boolean;
+  description: string;
+  suggested_pn: SGAPartNumber | null;
+  ai_match: SGAPartNumber | null;
+  ai_confidence: number;
+  alternatives: SGAPartNumber[];
+  error?: string;
+}
+
+// =============================================================================
+// Expedition Agent Types (SAP-Ready)
+// =============================================================================
+
+/**
+ * Item for expedition request.
+ */
+export interface SGAExpeditionItem {
+  pn_id: string;
+  serial?: string;
+  quantity: number;
+}
+
+/**
+ * Urgency level for expedition.
+ */
+export type SGAExpeditionUrgency = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+/**
+ * Natureza da operação for NF-e.
+ */
+export type SGAExpeditionNature =
+  | 'USO_CONSUMO'      // REMESSA PARA USO E CONSUMO
+  | 'CONSERTO'         // REMESSA PARA CONSERTO
+  | 'DEMONSTRACAO'     // REMESSA PARA DEMONSTRAÇÃO
+  | 'DEVOLUCAO'        // DEVOLUÇÃO
+  | 'GARANTIA';        // REMESSA EM GARANTIA
+
+/**
+ * Expedition request payload.
+ */
+export interface SGAExpeditionRequestPayload {
+  chamado_id: string;
+  project_id: string;
+  items: SGAExpeditionItem[];
+  destination_client: string;
+  destination_address: string;
+  urgency: SGAExpeditionUrgency;
+  nature: SGAExpeditionNature;
+  notes?: string;
+}
+
+/**
+ * SAP-ready data for NF-e copy/paste.
+ */
+export interface SGASAPFormatData {
+  cliente: string;
+  item_numero: string;
+  quantidade: number;
+  deposito: string;
+  utilizacao: string;
+  incoterms: string;
+  transportadora: string;
+  natureza_operacao: string;
+  observacao: string;
+  peso_liquido?: string;
+  peso_bruto?: string;
+  embalagem?: string;
+}
+
+/**
+ * Expedition status.
+ */
+export type SGAExpeditionStatus =
+  | 'PENDING'
+  | 'STOCK_VERIFIED'
+  | 'SEPARATED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+/**
+ * Expedition item result.
+ */
+export interface SGAExpeditionItemResult {
+  pn_id: string;
+  pn_number: string;
+  serial: string | null;
+  quantity: number;
+  available: boolean;
+  reserved_id?: string;
+  sap_data: SGASAPFormatData;
+}
+
+/**
+ * Expedition response.
+ */
+export interface SGAExpeditionResponse {
+  success: boolean;
+  expedition_id: string;
+  status: SGAExpeditionStatus;
+  chamado_id: string;
+  project_id: string;
+  items: SGAExpeditionItemResult[];
+  sap_ready_data: SGASAPFormatData[];
+  all_items_available: boolean;
+  requires_carrier_quote: boolean;
+  message: string;
+  created_at: string;
+  error?: string;
+}
+
+/**
+ * Stock verification response.
+ */
+export interface SGAVerifyStockResponse {
+  success: boolean;
+  pn_id: string;
+  serial?: string;
+  quantity_requested: number;
+  quantity_available: number;
+  available: boolean;
+  location_id: string;
+  location_name: string;
+  reserved_assets?: SGAAsset[];
+  error?: string;
+}
+
+/**
+ * Separation confirmation payload.
+ */
+export interface SGAConfirmSeparationPayload {
+  expedition_id: string;
+  items_confirmed: Array<{
+    pn_id: string;
+    serial: string;
+    quantity: number;
+  }>;
+  package_info: {
+    packages: number;
+    net_weight_kg: number;
+    gross_weight_kg: number;
+    dimensions?: string;
+  };
+}
+
+/**
+ * Separation confirmation response.
+ */
+export interface SGAConfirmSeparationResponse {
+  success: boolean;
+  expedition_id: string;
+  status: SGAExpeditionStatus;
+  items_confirmed: number;
+  package_info: {
+    packages: number;
+    net_weight_kg: number;
+    gross_weight_kg: number;
+  };
+  ready_for_nf: boolean;
+  error?: string;
+}
+
+/**
+ * Complete expedition payload.
+ */
+export interface SGACompleteExpeditionPayload {
+  expedition_id: string;
+  nf_number: string;
+  nf_key: string;
+  carrier: string;
+  tracking_code?: string;
+}
+
+/**
+ * Complete expedition response.
+ */
+export interface SGACompleteExpeditionResponse {
+  success: boolean;
+  expedition_id: string;
+  movements_created: SGAMovement[];
+  nf_number: string;
+  carrier: string;
+  tracking_code?: string;
+  message: string;
+  error?: string;
+}
+
+// =============================================================================
+// Carrier Quote Types
+// =============================================================================
+
+/**
+ * Carrier types.
+ */
+export type SGACarrierType =
+  | 'CORREIOS'
+  | 'LOGGI'
+  | 'GOLLOG'
+  | 'TRANSPORTADORA'
+  | 'DEDICADO';
+
+/**
+ * Shipping modal.
+ */
+export type SGAShippingModal =
+  | 'GROUND'
+  | 'EXPRESS'
+  | 'AIR'
+  | 'SAME_DAY'
+  | 'PAC'
+  | 'SEDEX'
+  | 'AEREO';
+
+/**
+ * Shipping quote from a carrier.
+ */
+export interface SGAShippingQuote {
+  carrier: string;
+  carrier_type: SGACarrierType;
+  modal: SGAShippingModal;
+  price: number;
+  delivery_days: number;
+  delivery_date: string;
+  weight_limit: number;
+  dimensions_limit: string;
+  available: boolean;
+  reason?: string;
+}
+
+/**
+ * Get quotes request.
+ */
+export interface SGAGetQuotesRequest {
+  origin_cep: string;
+  destination_cep: string;
+  weight_kg: number;
+  dimensions: {
+    length: number;
+    width: number;
+    height: number;
+  };
+  value: number;
+  urgency: SGAExpeditionUrgency;
+}
+
+/**
+ * Carrier recommendation.
+ */
+export interface SGACarrierRecommendation {
+  carrier: string;
+  modal: SGAShippingModal;
+  price?: number;
+  delivery_days?: number;
+  reason: string;
+  confidence: number;
+}
+
+/**
+ * Get quotes response.
+ */
+export interface SGAGetQuotesResponse {
+  success: boolean;
+  quotes: SGAShippingQuote[];
+  recommendation: SGACarrierRecommendation;
+  note?: string;
+  error?: string;
+}
+
+/**
+ * Recommend carrier request.
+ */
+export interface SGARecommendCarrierRequest {
+  urgency: SGAExpeditionUrgency;
+  weight_kg: number;
+  value: number;
+  destination_state: string;
+  same_city: boolean;
+}
+
+/**
+ * Recommend carrier response.
+ */
+export interface SGARecommendCarrierResponse {
+  success: boolean;
+  recommendation: SGACarrierRecommendation;
+  alternatives: Array<{ carrier: string; modal: SGAShippingModal }>;
+  error?: string;
+}
+
+/**
+ * Tracking event.
+ */
+export interface SGATrackingEvent {
+  date: string;
+  status: string;
+  location: string;
+}
+
+/**
+ * Track shipment request.
+ */
+export interface SGATrackShipmentRequest {
+  tracking_code: string;
+  carrier?: string;
+}
+
+/**
+ * Track shipment response.
+ */
+export interface SGATrackShipmentResponse {
+  success: boolean;
+  tracking: {
+    tracking_code: string;
+    carrier: string;
+    status: string;
+    last_update: string;
+    events: SGATrackingEvent[];
+    estimated_delivery: string;
+  };
+  note?: string;
+  error?: string;
+}
+
+// =============================================================================
+// Reverse Logistics Types
+// =============================================================================
+
+/**
+ * Origin type for reverse.
+ */
+export type SGAReverseOriginType =
+  | 'CUSTOMER'
+  | 'FIELD_TECH'
+  | 'BRANCH'
+  | 'THIRD_PARTY';
+
+/**
+ * Equipment owner.
+ */
+export type SGAEquipmentOwner = 'FAISTON' | 'NTT' | 'TERCEIROS';
+
+/**
+ * Equipment condition.
+ */
+export type SGAEquipmentCondition = 'FUNCIONAL' | 'DEFEITUOSO' | 'INSERVIVEL';
+
+/**
+ * Return reason.
+ */
+export type SGAReturnReason =
+  | 'CONSERTO_CONCLUIDO'
+  | 'DEVOLUCAO_CLIENTE'
+  | 'FIM_CONTRATO'
+  | 'UPGRADE'
+  | 'TROCA_GARANTIA'
+  | 'EQUIPAMENTO_DEFEITUOSO'
+  | 'OUTRO';
+
+/**
+ * SAP depot codes.
+ */
+export interface SGADepotMapping {
+  '01': 'Recebimento';
+  '03': 'BAD';
+  '03.01': 'BAD_NTT';
+  '04': 'Descarte';
+  '05': 'Itens de terceiros';
+  '06': 'Depósito de terceiros';
+}
+
+/**
+ * Process return request.
+ */
+export interface SGAProcessReturnRequestNew {
+  serial: string;
+  origin_type: SGAReverseOriginType;
+  origin_address: string;
+  owner: SGAEquipmentOwner;
+  condition: SGAEquipmentCondition;
+  return_reason: SGAReturnReason;
+  chamado_id?: string;
+  project_id?: string;
+  notes?: string;
+}
+
+/**
+ * Process return response.
+ */
+export interface SGAProcessReturnResponseNew {
+  success: boolean;
+  return_id: string;
+  serial: string;
+  owner: SGAEquipmentOwner;
+  condition: SGAEquipmentCondition;
+  destination_depot: string;
+  destination_depot_name: string;
+  movement_created: boolean;
+  movement_id?: string;
+  requires_analysis: boolean;
+  analysis_task_id?: string;
+  message: string;
+  error?: string;
+}
+
+/**
+ * Validate origin request.
+ */
+export interface SGAValidateOriginRequest {
+  serial: string;
+  claimed_origin: string;
+}
+
+/**
+ * Validate origin response.
+ */
+export interface SGAValidateOriginResponse {
+  success: boolean;
+  serial: string;
+  found: boolean;
+  asset?: SGAAsset;
+  last_known_location?: string;
+  last_movement_date?: string;
+  origin_matches: boolean;
+  confidence: number;
+  error?: string;
+}
+
+/**
+ * Evaluate condition request.
+ */
+export interface SGAEvaluateConditionRequest {
+  serial: string;
+  owner: SGAEquipmentOwner;
+  condition_description: string;
+  photos_s3_keys?: string[];
+}
+
+/**
+ * Evaluate condition response.
+ */
+export interface SGAEvaluateConditionResponse {
+  success: boolean;
+  serial: string;
+  detected_condition: SGAEquipmentCondition;
+  recommended_depot: string;
+  recommended_depot_name: string;
+  confidence: number;
+  reasoning: string;
+  requires_manual_inspection: boolean;
+  defects_detected?: string[];
+  error?: string;
+}
+
+// =============================================================================
+// Accuracy Metrics Types (Phase 3.4)
+// =============================================================================
+
+/**
+ * Period filter for metrics queries.
+ */
+export type SGAMetricsPeriod = '7d' | '30d' | '90d' | 'ytd';
+
+/**
+ * Single metric with trend information.
+ */
+export interface SGAMetricValue {
+  value: number;
+  unit: string;
+  trend: 'up' | 'down' | 'stable';
+  change: number;
+}
+
+/**
+ * PN matching breakdown by method.
+ */
+export interface SGAPNMatchByMethod {
+  supplier_code: number;
+  description_ai: number;
+  ncm: number;
+  manual: number;
+}
+
+/**
+ * Movements summary by type.
+ */
+export interface SGAMovementsSummary {
+  entrada: number;
+  saida: number;
+  transferencia: number;
+  ajuste: number;
+  reserva: number;
+}
+
+/**
+ * Pending items summary.
+ */
+export interface SGAPendingItems {
+  pending_project: number;
+  pending_hil: number;
+  pending_reconciliation: number;
+}
+
+/**
+ * Accuracy metrics response from AgentCore.
+ */
+export interface SGAAccuracyMetrics {
+  extraction_accuracy: SGAMetricValue;
+  entry_success_rate: SGAMetricValue;
+  avg_hil_time: SGAMetricValue;
+  divergence_rate: SGAMetricValue;
+  pn_match_by_method: SGAPNMatchByMethod;
+  movements_summary: SGAMovementsSummary;
+  pending_items: SGAPendingItems;
+}
+
+/**
+ * Get accuracy metrics request.
+ */
+export interface SGAGetAccuracyMetricsRequest {
+  period?: SGAMetricsPeriod;
+}
+
+/**
+ * Get accuracy metrics response.
+ */
+export interface SGAGetAccuracyMetricsResponse {
+  success: boolean;
+  period: SGAMetricsPeriod;
+  metrics: SGAAccuracyMetrics;
+  generated_at: string;
+  error?: string;
+}
+
+// =============================================================================
+// SAP Reconciliation Types (Phase 3.5)
+// =============================================================================
+
+/**
+ * SAP export item for reconciliation.
+ */
+export interface SGASAPExportItem {
+  part_number: string;
+  location: string;
+  quantity: number;
+  serial?: string;
+  description?: string;
+}
+
+/**
+ * Delta type for reconciliation.
+ */
+export type SGADeltaType = 'FALTA_SGA' | 'SOBRA_SGA';
+
+/**
+ * Reconciliation delta item.
+ */
+export interface SGAReconciliationDelta {
+  id: string;
+  part_number: string;
+  location: string;
+  sap_quantity: number;
+  sga_quantity: number;
+  delta: number;
+  delta_type: SGADeltaType;
+}
+
+/**
+ * Reconciliation summary.
+ */
+export interface SGAReconciliationSummary {
+  falta_sga: number;
+  sobra_sga: number;
+}
+
+/**
+ * Reconcile SAP export request.
+ */
+export interface SGAReconcileSAPRequest {
+  sap_data: SGASAPExportItem[];
+}
+
+/**
+ * Reconcile SAP export response.
+ */
+export interface SGAReconcileSAPResponse {
+  success: boolean;
+  reconciliation_id: string;
+  total_sap_items: number;
+  match_rate: number;
+  deltas: SGAReconciliationDelta[];
+  summary: SGAReconciliationSummary;
+  error?: string;
+}
+
+/**
+ * Action types for reconciliation deltas.
+ */
+export type SGAReconciliationAction = 'CREATE_ADJUSTMENT' | 'IGNORE' | 'INVESTIGATE';
+
+/**
+ * Apply reconciliation action request.
+ */
+export interface SGAApplyReconciliationActionRequest {
+  delta_id: string;
+  action: SGAReconciliationAction;
+  reason?: string;
+}
+
+/**
+ * Apply reconciliation action response.
+ */
+export interface SGAApplyReconciliationActionResponse {
+  success: boolean;
+  delta_id: string;
+  action_taken: SGAReconciliationAction;
+  adjustment_id?: string;
+  message: string;
+  error?: string;
 }

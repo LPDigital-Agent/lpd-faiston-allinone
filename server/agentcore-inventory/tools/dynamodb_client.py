@@ -779,6 +779,177 @@ class SGADynamoDBClient:
 
         return hil_client.put_item(item)
 
+    # =========================================================================
+    # Part Number Lookup Operations (PN Matching)
+    # =========================================================================
+
+    def query_pn_by_supplier_code(
+        self,
+        supplier_code: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find part number by supplier code.
+
+        Uses table Scan with filter on supplier_code attribute.
+        For production scale, consider adding a dedicated GSI.
+
+        Args:
+            supplier_code: Supplier's internal part code
+
+        Returns:
+            Part number item if found, None otherwise
+        """
+        try:
+            # Scan with filter for supplier_code attribute
+            # Part numbers have PK starting with "PN#"
+            response = self.table.scan(
+                FilterExpression="begins_with(PK, :pk_prefix) AND supplier_code = :code",
+                ExpressionAttributeValues={
+                    ":pk_prefix": "PN#",
+                    ":code": supplier_code,
+                },
+                Limit=1,
+            )
+            items = response.get("Items", [])
+            return items[0] if items else None
+        except Exception as e:
+            print(f"[DynamoDB] query_pn_by_supplier_code error: {e}")
+            return None
+
+    def search_pn_by_keywords(
+        self,
+        keywords: List[str],
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search part numbers by description keywords.
+
+        Returns candidate PNs whose description contains any of the keywords.
+        Results are then ranked by an AI model for best match.
+
+        Args:
+            keywords: List of keywords to search for
+            limit: Maximum candidates to return
+
+        Returns:
+            List of candidate part numbers
+        """
+        if not keywords:
+            return []
+
+        try:
+            # Build filter expression for keyword matching
+            # Using CONTAINS for each keyword with OR logic
+            filter_parts = []
+            expr_names = {"#desc": "description"}
+            expr_values = {":pk_prefix": "PN#"}
+
+            for i, keyword in enumerate(keywords[:5]):  # Limit to 5 keywords
+                kw = keyword.upper().strip()
+                if len(kw) >= 3:  # Only use meaningful keywords
+                    filter_parts.append(f"contains(#desc, :kw{i})")
+                    expr_values[f":kw{i}"] = kw
+
+            if not filter_parts:
+                return []
+
+            # Scan for part numbers matching any keyword
+            filter_expr = (
+                "begins_with(PK, :pk_prefix) AND (" +
+                " OR ".join(filter_parts) + ")"
+            )
+
+            response = self.table.scan(
+                FilterExpression=filter_expr,
+                ExpressionAttributeNames=expr_names,
+                ExpressionAttributeValues=expr_values,
+                Limit=limit,
+            )
+
+            return response.get("Items", [])
+        except Exception as e:
+            print(f"[DynamoDB] search_pn_by_keywords error: {e}")
+            return []
+
+    def query_pn_by_ncm(
+        self,
+        ncm_code: str,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Find part numbers by NCM (Nomenclatura Comum do Mercosul) code.
+
+        NCM is an 8-digit fiscal classification code. We match by prefix
+        to find items in the same category:
+        - 4 digits: Same chapter/heading
+        - 6 digits: Same subheading
+        - 8 digits: Exact match
+
+        Args:
+            ncm_code: NCM code (4-8 digits)
+            limit: Maximum items to return
+
+        Returns:
+            List of matching part numbers
+        """
+        if not ncm_code or len(ncm_code) < 4:
+            return []
+
+        try:
+            # Use first 4-6 digits for category matching
+            ncm_prefix = ncm_code[:6].replace(".", "")
+
+            response = self.table.scan(
+                FilterExpression="begins_with(PK, :pk_prefix) AND begins_with(ncm, :ncm_prefix)",
+                ExpressionAttributeValues={
+                    ":pk_prefix": "PN#",
+                    ":ncm_prefix": ncm_prefix,
+                },
+                Limit=limit,
+            )
+
+            return response.get("Items", [])
+        except Exception as e:
+            print(f"[DynamoDB] query_pn_by_ncm error: {e}")
+            return []
+
+    def get_all_part_numbers(
+        self,
+        limit: int = 100,
+        last_key: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """
+        Get all part numbers with pagination.
+
+        Useful for building search indexes or bulk operations.
+
+        Args:
+            limit: Maximum items per page
+            last_key: Last evaluated key for pagination
+
+        Returns:
+            Tuple of (items, next_last_key)
+        """
+        try:
+            params = {
+                "FilterExpression": "begins_with(PK, :pk_prefix)",
+                "ExpressionAttributeValues": {":pk_prefix": "PN#"},
+                "Limit": limit,
+            }
+
+            if last_key:
+                params["ExclusiveStartKey"] = last_key
+
+            response = self.table.scan(**params)
+
+            items = response.get("Items", [])
+            next_key = response.get("LastEvaluatedKey")
+
+            return items, next_key
+        except Exception as e:
+            print(f"[DynamoDB] get_all_part_numbers error: {e}")
+            return [], None
+
 
 # =============================================================================
 # Audit Logger

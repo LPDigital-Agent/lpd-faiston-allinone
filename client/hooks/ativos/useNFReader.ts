@@ -14,6 +14,7 @@ import {
   processNFUpload,
   confirmNFEntry,
   getPendingNFEntries,
+  assignProjectToEntry,
 } from '@/services/sgaAgentcore';
 import type {
   NFExtraction,
@@ -40,6 +41,7 @@ interface UseNFReaderReturn {
   confidenceScore: ConfidenceScore | null;
   entryId: string | null;
   requiresReview: boolean;
+  requiresProject: boolean;
 
   // Pending entries
   pendingEntries: PendingNFEntry[];
@@ -47,8 +49,9 @@ interface UseNFReaderReturn {
   refreshPendingEntries: () => void;
 
   // Actions
-  uploadNF: (file: File, projectId: string, destinationLocationId: string) => Promise<SGAProcessNFUploadResponse>;
+  uploadNF: (file: File, projectId: string | null, destinationLocationId: string) => Promise<SGAProcessNFUploadResponse>;
   confirmEntry: (entryId: string, itemMappings: NFItemMapping[], notes?: string) => Promise<SGAConfirmNFEntryResponse>;
+  assignProject: (entryId: string, projectId: string) => Promise<void>;
   clearExtraction: () => void;
 
   // Item mapping helpers
@@ -81,6 +84,7 @@ export function useNFReader(): UseNFReaderReturn {
   const [confidenceScore, setConfidenceScore] = useState<ConfidenceScore | null>(null);
   const [entryId, setEntryId] = useState<string | null>(null);
   const [requiresReview, setRequiresReview] = useState(false);
+  const [requiresProject, setRequiresProject] = useState(false);
 
   // Fetch pending entries
   const {
@@ -96,15 +100,16 @@ export function useNFReader(): UseNFReaderReturn {
     staleTime: 60000, // 1 minute
   });
 
-  // Upload NF file
+  // Upload NF file (projectId is optional - entries without project go to PENDING_PROJECT)
   const uploadNF = useCallback(async (
     file: File,
-    projectId: string,
+    projectId: string | null,
     destinationLocationId: string
   ): Promise<SGAProcessNFUploadResponse> => {
     setIsUploading(true);
     setUploadProgress(0);
     setUploadError(null);
+    setRequiresProject(false);
 
     try {
       // 1. Get presigned URL
@@ -129,12 +134,12 @@ export function useNFReader(): UseNFReaderReturn {
         throw new Error('Falha no upload do arquivo');
       }
 
-      // 3. Process NF
+      // 3. Process NF (projectId can be empty string or null)
       setUploadProgress(60);
       const processResult = await processNFUpload({
         s3_key: urlResult.data.s3_key,
         file_type: fileType,
-        project_id: projectId,
+        project_id: projectId || '', // Empty string means no project assigned
         destination_location_id: destinationLocationId,
       });
 
@@ -147,6 +152,11 @@ export function useNFReader(): UseNFReaderReturn {
       setConfidenceScore(processResult.data.confidence_score);
       setEntryId(processResult.data.entry_id);
       setRequiresReview(processResult.data.requires_review);
+
+      // Check if entry requires project assignment
+      // The backend returns requires_project: true when status is PENDING_PROJECT
+      const needsProject = (processResult.data as unknown as { requires_project?: boolean }).requires_project ?? false;
+      setRequiresProject(needsProject);
 
       // Refresh pending entries
       refreshPendingEntries();
@@ -208,9 +218,27 @@ export function useNFReader(): UseNFReaderReturn {
     setConfidenceScore(null);
     setEntryId(null);
     setRequiresReview(false);
+    setRequiresProject(false);
     setUploadError(null);
     setUploadProgress(0);
   }, []);
+
+  // Assign project to an entry in PENDING_PROJECT status
+  const assignProject = useCallback(async (entryId: string, projectId: string): Promise<void> => {
+    try {
+      await assignProjectToEntry(entryId, projectId);
+      // Clear the requires project flag if it was for the current entry
+      setRequiresProject(false);
+      // Refresh pending entries to update status
+      refreshPendingEntries();
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: ['sga-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['sga-movements'] });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao atribuir projeto';
+      throw new Error(message);
+    }
+  }, [queryClient, refreshPendingEntries]);
 
   // Update mapping
   const updateMapping = useCallback((index: number, mapping: Partial<NFItemMapping>) => {
@@ -228,11 +256,13 @@ export function useNFReader(): UseNFReaderReturn {
     confidenceScore,
     entryId,
     requiresReview,
+    requiresProject,
     pendingEntries: pendingEntriesData ?? [],
     pendingEntriesLoading,
     refreshPendingEntries,
     uploadNF,
     confirmEntry,
+    assignProject,
     clearExtraction,
     updateMapping,
     mappings,

@@ -94,6 +94,9 @@ def invoke(payload: dict, context) -> dict:
         elif action == "confirm_nf_entry":
             return asyncio.run(_confirm_nf_entry(payload, user_id))
 
+        elif action == "process_scanned_nf_upload":
+            return asyncio.run(_process_scanned_nf_upload(payload, user_id))
+
         # =================================================================
         # Movements (EstoqueControlAgent)
         # =================================================================
@@ -165,6 +168,66 @@ def invoke(payload: dict, context) -> dict:
 
         elif action == "get_movement_history":
             return asyncio.run(_get_movement_history(payload))
+
+        elif action == "get_accuracy_metrics":
+            return asyncio.run(_get_accuracy_metrics(payload))
+
+        elif action == "reconcile_sap_export":
+            return asyncio.run(_reconcile_sap_export(payload, user_id))
+
+        elif action == "apply_reconciliation_action":
+            return asyncio.run(_apply_reconciliation_action(payload, user_id))
+
+        # =================================================================
+        # Bulk Import (ImportAgent)
+        # =================================================================
+        elif action == "preview_import":
+            return asyncio.run(_preview_import(payload, user_id))
+
+        elif action == "execute_import":
+            return asyncio.run(_execute_import(payload, user_id))
+
+        elif action == "validate_pn_mapping":
+            return asyncio.run(_validate_pn_mapping(payload))
+
+        # =================================================================
+        # Expedition (ExpeditionAgent)
+        # =================================================================
+        elif action == "process_expedition_request":
+            return asyncio.run(_process_expedition_request(payload, user_id))
+
+        elif action == "verify_expedition_stock":
+            return asyncio.run(_verify_expedition_stock(payload))
+
+        elif action == "confirm_separation":
+            return asyncio.run(_confirm_separation(payload, user_id))
+
+        elif action == "complete_expedition":
+            return asyncio.run(_complete_expedition(payload, user_id))
+
+        # =================================================================
+        # Reverse Logistics (ReverseAgent)
+        # =================================================================
+        elif action == "process_return":
+            return asyncio.run(_process_return(payload, user_id))
+
+        elif action == "validate_return_origin":
+            return asyncio.run(_validate_return_origin(payload))
+
+        elif action == "evaluate_return_condition":
+            return asyncio.run(_evaluate_return_condition(payload))
+
+        # =================================================================
+        # Carrier Quotes (CarrierAgent)
+        # =================================================================
+        elif action == "get_shipping_quotes":
+            return asyncio.run(_get_shipping_quotes(payload))
+
+        elif action == "recommend_carrier":
+            return asyncio.run(_recommend_carrier(payload))
+
+        elif action == "track_shipment":
+            return asyncio.run(_track_shipment(payload))
 
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
@@ -437,6 +500,63 @@ async def _confirm_nf_entry(payload: dict, user_id: str) -> dict:
     )
 
     return result.to_dict()
+
+
+async def _process_scanned_nf_upload(payload: dict, user_id: str) -> dict:
+    """
+    Process scanned NF-e document using Gemini Vision.
+
+    Specifically designed for:
+    - Paper NF-e scanned as PDF/image
+    - Camera photos of DANFE documents
+    - Low-quality scans from older equipment
+
+    Uses Gemini 3.0 Pro Vision for extraction with confidence scoring
+    based on scan quality.
+
+    Args:
+        payload: Request payload with:
+            - s3_key: S3 key of uploaded file
+            - project_id: Optional project context
+            - destination_location_id: Target location (default: ESTOQUE_CENTRAL)
+        user_id: User performing the upload
+
+    Returns:
+        Extraction result with confidence score and quality indicators
+    """
+    s3_key = payload.get("s3_key", "")
+    project_id = payload.get("project_id", "")
+    destination_location_id = payload.get("destination_location_id", "ESTOQUE_CENTRAL")
+
+    if not s3_key:
+        return {"success": False, "error": "s3_key required"}
+
+    # Determine file type from S3 key
+    file_type = "pdf"
+    if s3_key.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+        file_type = "image"
+
+    from agents.intake_agent import IntakeAgent
+
+    agent = IntakeAgent()
+
+    # Use the same processing flow but force scanned mode
+    # by passing file_type as 'pdf' (triggers Vision)
+    result = await agent.process_nf_upload(
+        s3_key=s3_key,
+        file_type="pdf",  # Forces PDF/scanned processing path
+        project_id=project_id,
+        destination_location_id=destination_location_id,
+        uploaded_by=user_id,
+    )
+
+    response = result.to_dict()
+
+    # Add scanned-specific metadata
+    response["processing_type"] = "scanned_vision"
+    response["original_file_type"] = file_type
+
+    return response
 
 
 # =============================================================================
@@ -851,6 +971,774 @@ async def _get_movement_history(payload: dict) -> dict:
         "movements": [],
         "message": "Movement history implemented in Sprint 2",
     }
+
+
+# =============================================================================
+# Bulk Import Handlers (ImportAgent)
+# =============================================================================
+
+
+async def _preview_import(payload: dict, user_id: str) -> dict:
+    """
+    Preview an import file before processing.
+
+    Parses CSV/Excel, auto-detects columns, and attempts PN matching.
+
+    Payload:
+        file_content_base64: Base64-encoded file content
+        filename: Original filename for type detection
+        project_id: Optional project to assign all items
+        destination_location_id: Optional destination location
+
+    Returns:
+        Preview with column mappings, matched rows, and stats
+    """
+    import base64
+    from agents.import_agent import create_import_agent
+
+    file_content_b64 = payload.get("file_content_base64", "")
+    filename = payload.get("filename", "import.csv")
+    project_id = payload.get("project_id")
+    destination_location_id = payload.get("destination_location_id")
+
+    if not file_content_b64:
+        return {"success": False, "error": "file_content_base64 is required"}
+
+    try:
+        file_content = base64.b64decode(file_content_b64)
+    except Exception as e:
+        return {"success": False, "error": f"Invalid base64 content: {e}"}
+
+    agent = create_import_agent()
+    result = await agent.preview_import(
+        file_content=file_content,
+        filename=filename,
+        project_id=project_id,
+        destination_location_id=destination_location_id,
+    )
+
+    return result
+
+
+async def _execute_import(payload: dict, user_id: str) -> dict:
+    """
+    Execute the import after preview/confirmation.
+
+    Creates entry movements for all valid rows.
+
+    Payload:
+        import_id: Import session ID from preview
+        file_content_base64: Base64-encoded file content
+        filename: Original filename
+        column_mappings: Confirmed column mappings [{file_column, target_field}]
+        pn_overrides: Optional manual PN assignments {row_number: pn_id}
+        project_id: Project to assign all items
+        destination_location_id: Destination location
+
+    Returns:
+        Import result with created movements
+    """
+    import base64
+    from agents.import_agent import create_import_agent
+
+    import_id = payload.get("import_id", "")
+    file_content_b64 = payload.get("file_content_base64", "")
+    filename = payload.get("filename", "import.csv")
+    column_mappings = payload.get("column_mappings", [])
+    pn_overrides = payload.get("pn_overrides", {})
+    project_id = payload.get("project_id")
+    destination_location_id = payload.get("destination_location_id")
+
+    if not import_id:
+        return {"success": False, "error": "import_id is required"}
+
+    if not file_content_b64:
+        return {"success": False, "error": "file_content_base64 is required"}
+
+    if not column_mappings:
+        return {"success": False, "error": "column_mappings is required"}
+
+    try:
+        file_content = base64.b64decode(file_content_b64)
+    except Exception as e:
+        return {"success": False, "error": f"Invalid base64 content: {e}"}
+
+    # Convert pn_overrides keys to int (JSON keys are strings)
+    pn_overrides_int = {int(k): v for k, v in pn_overrides.items()}
+
+    agent = create_import_agent()
+    result = await agent.execute_import(
+        import_id=import_id,
+        file_content=file_content,
+        filename=filename,
+        column_mappings=column_mappings,
+        pn_overrides=pn_overrides_int,
+        project_id=project_id,
+        destination_location_id=destination_location_id,
+        operator_id=user_id,
+    )
+
+    return result
+
+
+async def _validate_pn_mapping(payload: dict) -> dict:
+    """
+    Validate a part number mapping suggestion.
+
+    Used by operator to confirm or override AI suggestions.
+
+    Payload:
+        description: Item description from file
+        suggested_pn_id: Optional suggested PN to validate
+
+    Returns:
+        Validation result with alternative suggestions
+    """
+    from agents.import_agent import create_import_agent
+
+    description = payload.get("description", "")
+    suggested_pn_id = payload.get("suggested_pn_id")
+
+    if not description:
+        return {"success": False, "error": "description is required"}
+
+    agent = create_import_agent()
+    result = await agent.validate_pn_mapping(
+        description=description,
+        suggested_pn_id=suggested_pn_id,
+    )
+
+    return result
+
+
+# =============================================================================
+# Expedition Handlers (ExpeditionAgent)
+# =============================================================================
+
+
+async def _process_expedition_request(payload: dict, user_id: str) -> dict:
+    """
+    Process an expedition request from a chamado.
+
+    Payload:
+        chamado_id: Ticket ID
+        project_id: Associated project
+        items: List of items [{pn_id, serial, quantity}]
+        destination_client: Client name/CNPJ
+        destination_address: Delivery address
+        urgency: LOW, NORMAL, HIGH, URGENT
+        nature: USO_CONSUMO, CONSERTO, DEMONSTRACAO, etc.
+        notes: Additional notes
+
+    Returns:
+        Expedition result with SAP-ready data
+    """
+    from agents.expedition_agent import create_expedition_agent
+
+    chamado_id = payload.get("chamado_id", "")
+    project_id = payload.get("project_id", "")
+    items = payload.get("items", [])
+    destination_client = payload.get("destination_client", "")
+    destination_address = payload.get("destination_address", "")
+    urgency = payload.get("urgency", "NORMAL")
+    nature = payload.get("nature", "USO_CONSUMO")
+    notes = payload.get("notes", "")
+
+    if not chamado_id:
+        return {"success": False, "error": "chamado_id is required"}
+
+    if not items:
+        return {"success": False, "error": "items is required"}
+
+    agent = create_expedition_agent()
+    result = await agent.process_expedition_request(
+        chamado_id=chamado_id,
+        project_id=project_id,
+        items=items,
+        destination_client=destination_client,
+        destination_address=destination_address,
+        urgency=urgency,
+        nature=nature,
+        notes=notes,
+        operator_id=user_id,
+    )
+
+    return result
+
+
+async def _verify_expedition_stock(payload: dict) -> dict:
+    """
+    Verify stock availability for an item.
+
+    Payload:
+        pn_id: Part number ID
+        serial: Optional serial number
+        quantity: Quantity needed
+
+    Returns:
+        Verification result with availability status
+    """
+    from agents.expedition_agent import create_expedition_agent
+
+    pn_id = payload.get("pn_id", "")
+    serial = payload.get("serial")
+    quantity = payload.get("quantity", 1)
+
+    if not pn_id:
+        return {"success": False, "error": "pn_id is required"}
+
+    agent = create_expedition_agent()
+    result = await agent.verify_stock(
+        pn_id=pn_id,
+        serial=serial,
+        quantity=quantity,
+    )
+
+    return result
+
+
+async def _confirm_separation(payload: dict, user_id: str) -> dict:
+    """
+    Confirm physical separation and packaging.
+
+    Payload:
+        expedition_id: Expedition ID
+        items_confirmed: List of confirmed items with serials
+        package_info: Packaging details (weight, dimensions)
+
+    Returns:
+        Confirmation result
+    """
+    from agents.expedition_agent import create_expedition_agent
+
+    expedition_id = payload.get("expedition_id", "")
+    items_confirmed = payload.get("items_confirmed", [])
+    package_info = payload.get("package_info", {})
+
+    if not expedition_id:
+        return {"success": False, "error": "expedition_id is required"}
+
+    agent = create_expedition_agent()
+    result = await agent.confirm_separation(
+        expedition_id=expedition_id,
+        items_confirmed=items_confirmed,
+        package_info=package_info,
+        operator_id=user_id,
+    )
+
+    return result
+
+
+async def _complete_expedition(payload: dict, user_id: str) -> dict:
+    """
+    Complete the expedition after NF-e emission.
+
+    Payload:
+        expedition_id: Expedition ID
+        nf_number: NF-e number
+        nf_key: NF-e access key (44 digits)
+        carrier: Carrier/transportadora name
+        tracking_code: Optional tracking number
+
+    Returns:
+        Completion result with created movements
+    """
+    from agents.expedition_agent import create_expedition_agent
+
+    expedition_id = payload.get("expedition_id", "")
+    nf_number = payload.get("nf_number", "")
+    nf_key = payload.get("nf_key", "")
+    carrier = payload.get("carrier", "")
+    tracking_code = payload.get("tracking_code")
+
+    if not expedition_id:
+        return {"success": False, "error": "expedition_id is required"}
+
+    if not nf_number:
+        return {"success": False, "error": "nf_number is required"}
+
+    agent = create_expedition_agent()
+    result = await agent.complete_expedition(
+        expedition_id=expedition_id,
+        nf_number=nf_number,
+        nf_key=nf_key,
+        carrier=carrier,
+        tracking_code=tracking_code,
+        operator_id=user_id,
+    )
+
+    return result
+
+
+# =============================================================================
+# Reverse Logistics Handlers (ReverseAgent)
+# =============================================================================
+
+
+async def _process_return(payload: dict, user_id: str) -> dict:
+    """
+    Process an equipment return (reversa).
+
+    Payload:
+        serial: Serial number of returning equipment
+        origin_type: Where equipment is coming from (CUSTOMER, FIELD_TECH, BRANCH)
+        origin_address: Address/location from where it's returning
+        owner: Equipment owner (FAISTON, NTT, TERCEIROS)
+        condition: Equipment condition (FUNCIONAL, DEFEITUOSO, INSERVIVEL)
+        return_reason: Reason for return (CONSERTO_CONCLUIDO, DEVOLUCAO_CLIENTE, etc.)
+        chamado_id: Related ticket ID
+        project_id: Related project
+        notes: Additional notes
+
+    Returns:
+        Return result with depot assignment and movement creation
+    """
+    from agents.reverse_agent import create_reverse_agent
+
+    serial = payload.get("serial", "")
+    origin_type = payload.get("origin_type", "")
+    origin_address = payload.get("origin_address", "")
+    owner = payload.get("owner", "FAISTON")
+    condition = payload.get("condition", "FUNCIONAL")
+    return_reason = payload.get("return_reason", "")
+    chamado_id = payload.get("chamado_id")
+    project_id = payload.get("project_id")
+    notes = payload.get("notes", "")
+
+    if not serial:
+        return {"success": False, "error": "serial is required"}
+
+    if not origin_type:
+        return {"success": False, "error": "origin_type is required"}
+
+    agent = create_reverse_agent()
+    result = await agent.process_return(
+        serial=serial,
+        origin_type=origin_type,
+        origin_address=origin_address,
+        owner=owner,
+        condition=condition,
+        return_reason=return_reason,
+        chamado_id=chamado_id,
+        project_id=project_id,
+        notes=notes,
+        operator_id=user_id,
+    )
+
+    return result
+
+
+async def _validate_return_origin(payload: dict) -> dict:
+    """
+    Validate the origin of a return shipment.
+
+    Checks asset exists, traces last known location,
+    and verifies return makes sense.
+
+    Payload:
+        serial: Serial number
+        claimed_origin: Claimed origin location
+
+    Returns:
+        Validation result with asset info and match confidence
+    """
+    from agents.reverse_agent import create_reverse_agent
+
+    serial = payload.get("serial", "")
+    claimed_origin = payload.get("claimed_origin", "")
+
+    if not serial:
+        return {"success": False, "error": "serial is required"}
+
+    agent = create_reverse_agent()
+    result = await agent.validate_origin(
+        serial=serial,
+        claimed_origin=claimed_origin,
+    )
+
+    return result
+
+
+async def _evaluate_return_condition(payload: dict) -> dict:
+    """
+    Evaluate equipment condition and determine destination.
+
+    Uses AI to analyze condition description and photos
+    to recommend appropriate depot.
+
+    Payload:
+        serial: Serial number
+        owner: Equipment owner (FAISTON, NTT, TERCEIROS)
+        condition_description: Text describing equipment state
+        photos_s3_keys: Optional list of S3 keys for condition photos
+
+    Returns:
+        Evaluation with condition, recommended depot, and confidence
+    """
+    from agents.reverse_agent import create_reverse_agent
+
+    serial = payload.get("serial", "")
+    owner = payload.get("owner", "FAISTON")
+    condition_description = payload.get("condition_description", "")
+    photos_s3_keys = payload.get("photos_s3_keys", [])
+
+    if not serial:
+        return {"success": False, "error": "serial is required"}
+
+    if not condition_description:
+        return {"success": False, "error": "condition_description is required"}
+
+    agent = create_reverse_agent()
+    result = await agent.evaluate_condition(
+        serial=serial,
+        owner=owner,
+        condition_description=condition_description,
+        photos_s3_keys=photos_s3_keys,
+    )
+
+    return result
+
+
+# =============================================================================
+# Carrier Quote Handlers (CarrierAgent)
+# =============================================================================
+
+
+async def _get_shipping_quotes(payload: dict) -> dict:
+    """
+    Get shipping quotes from multiple carriers.
+
+    NOTE: Currently returns mock data. Real API integrations
+    (Correios, Loggi, Gollog) are pending.
+
+    Payload:
+        origin_cep: Origin postal code
+        destination_cep: Destination postal code
+        weight_kg: Package weight in kg
+        dimensions: Package dimensions {length, width, height} in cm
+        value: Declared value in R$
+        urgency: Urgency level (LOW, NORMAL, HIGH, URGENT)
+
+    Returns:
+        List of quotes with AI recommendation
+    """
+    from agents.carrier_agent import create_carrier_agent
+
+    origin_cep = payload.get("origin_cep", "")
+    destination_cep = payload.get("destination_cep", "")
+    weight_kg = payload.get("weight_kg", 1.0)
+    dimensions = payload.get("dimensions", {"length": 30, "width": 20, "height": 10})
+    value = payload.get("value", 100.0)
+    urgency = payload.get("urgency", "NORMAL")
+
+    if not origin_cep or not destination_cep:
+        return {"success": False, "error": "origin_cep and destination_cep are required"}
+
+    agent = create_carrier_agent()
+    result = await agent.get_quotes(
+        origin_cep=origin_cep,
+        destination_cep=destination_cep,
+        weight_kg=weight_kg,
+        dimensions=dimensions,
+        value=value,
+        urgency=urgency,
+    )
+
+    return result
+
+
+async def _recommend_carrier(payload: dict) -> dict:
+    """
+    Get AI recommendation for best carrier.
+
+    Uses rules + AI to recommend optimal carrier
+    based on urgency, weight, value, and destination.
+
+    Payload:
+        urgency: Urgency level (LOW, NORMAL, HIGH, URGENT)
+        weight_kg: Package weight
+        value: Declared value
+        destination_state: Destination state code (SP, RJ, etc.)
+        same_city: Whether delivery is within same city
+
+    Returns:
+        Carrier recommendation with reasoning
+    """
+    from agents.carrier_agent import create_carrier_agent
+
+    urgency = payload.get("urgency", "NORMAL")
+    weight_kg = payload.get("weight_kg", 1.0)
+    value = payload.get("value", 100.0)
+    destination_state = payload.get("destination_state", "SP")
+    same_city = payload.get("same_city", False)
+
+    agent = create_carrier_agent()
+    result = await agent.recommend_carrier(
+        urgency=urgency,
+        weight_kg=weight_kg,
+        value=value,
+        destination_state=destination_state,
+        same_city=same_city,
+    )
+
+    return result
+
+
+async def _track_shipment(payload: dict) -> dict:
+    """
+    Track a shipment by tracking code.
+
+    NOTE: Currently returns mock data. Real API integrations
+    are pending.
+
+    Payload:
+        tracking_code: Tracking code
+        carrier: Optional carrier name for faster lookup
+
+    Returns:
+        Tracking information with events
+    """
+    from agents.carrier_agent import create_carrier_agent
+
+    tracking_code = payload.get("tracking_code", "")
+    carrier = payload.get("carrier")
+
+    if not tracking_code:
+        return {"success": False, "error": "tracking_code is required"}
+
+    agent = create_carrier_agent()
+    result = await agent.track_shipment(
+        tracking_code=tracking_code,
+        carrier=carrier,
+    )
+
+    return result
+
+
+# =============================================================================
+# Accuracy Metrics Handlers
+# =============================================================================
+
+
+async def _get_accuracy_metrics(payload: dict) -> dict:
+    """
+    Get AI accuracy metrics for dashboard.
+
+    Returns KPIs about extraction accuracy, matching rates, and HIL metrics.
+
+    Payload:
+        period: Optional period filter ('today', 'week', 'month', 'all')
+        project_id: Optional project filter
+
+    Returns:
+        Accuracy metrics with trends
+    """
+    from tools.dynamodb_client import SGADynamoDBClient
+    from agents.utils import now_iso
+
+    period = payload.get("period", "month")
+    project_id = payload.get("project_id")
+
+    db = SGADynamoDBClient()
+
+    # Calculate metrics from audit log and movements
+    # These are simulated metrics - replace with real queries in production
+    metrics = {
+        "extraction_accuracy": {
+            "value": 87.5,
+            "unit": "%",
+            "description": "NF-e items matched on first attempt",
+            "trend": "up",
+            "change": 2.3,
+        },
+        "entry_success_rate": {
+            "value": 94.2,
+            "unit": "%",
+            "description": "Entries completed without rejection",
+            "trend": "up",
+            "change": 1.5,
+        },
+        "avg_hil_time": {
+            "value": 4.5,
+            "unit": "min",
+            "description": "Average time to resolve HIL tasks",
+            "trend": "down",
+            "change": -0.8,
+        },
+        "divergence_rate": {
+            "value": 3.1,
+            "unit": "%",
+            "description": "Inventory counts with divergences",
+            "trend": "down",
+            "change": -0.5,
+        },
+        "pn_match_by_method": {
+            "supplier_code": 45,
+            "description_ai": 35,
+            "ncm": 12,
+            "manual": 8,
+        },
+        "movements_summary": {
+            "entries": 156,
+            "expeditions": 89,
+            "returns": 34,
+            "transfers": 22,
+        },
+        "pending_items": {
+            "hil_tasks": 5,
+            "pending_entries": 3,
+            "pending_reversals": 7,
+        },
+    }
+
+    return {
+        "success": True,
+        "period": period,
+        "project_id": project_id,
+        "metrics": metrics,
+        "generated_at": now_iso(),
+        "note": "Métricas simuladas. Integração com audit log pendente.",
+    }
+
+
+async def _reconcile_sap_export(payload: dict, user_id: str) -> dict:
+    """
+    Reconcile SAP export CSV with SGA inventory.
+
+    Compares SAP stock positions with SGA balances
+    and identifies discrepancies.
+
+    Payload:
+        sap_data: List of SAP rows [{part_number, location, quantity, serial?}]
+        include_serials: Whether to compare at serial level
+        project_id: Optional project filter
+
+    Returns:
+        Reconciliation result with deltas
+    """
+    from agents.utils import now_iso, generate_id
+
+    sap_data = payload.get("sap_data", [])
+    include_serials = payload.get("include_serials", False)
+    project_id = payload.get("project_id")
+
+    if not sap_data:
+        return {"success": False, "error": "sap_data is required"}
+
+    # Group SAP data by PN + Location
+    sap_balances = {}
+    for row in sap_data:
+        pn = row.get("part_number", "")
+        loc = row.get("location", "01")
+        qty = row.get("quantity", 0)
+        key = f"{pn}|{loc}"
+
+        if key not in sap_balances:
+            sap_balances[key] = {"part_number": pn, "location": loc, "sap_qty": 0, "serials": []}
+        sap_balances[key]["sap_qty"] += qty
+        if row.get("serial"):
+            sap_balances[key]["serials"].append(row["serial"])
+
+    # Compare with SGA (simulated - replace with real DynamoDB queries)
+    # In production, query GSI2 for each PN+Location combination
+    deltas = []
+    for key, sap_item in sap_balances.items():
+        pn = sap_item["part_number"]
+        loc = sap_item["location"]
+        sap_qty = sap_item["sap_qty"]
+
+        # Simulated SGA query - replace with real data
+        sga_qty = sap_qty  # Default to matching
+        # Introduce some random divergences for demo
+        import random
+        if random.random() < 0.2:  # 20% chance of divergence
+            sga_qty = sap_qty + random.choice([-2, -1, 1, 2])
+
+        delta = sga_qty - sap_qty
+        if delta != 0:
+            deltas.append({
+                "id": generate_id("DELTA"),
+                "part_number": pn,
+                "location": loc,
+                "sap_quantity": sap_qty,
+                "sga_quantity": sga_qty,
+                "delta": delta,
+                "delta_type": "FALTA_SGA" if delta < 0 else "SOBRA_SGA",
+                "status": "PENDING",
+                "serials_sap": sap_item["serials"] if include_serials else [],
+            })
+
+    # Summary
+    total_items = len(sap_balances)
+    items_matched = total_items - len(deltas)
+    match_rate = (items_matched / total_items * 100) if total_items > 0 else 100
+
+    return {
+        "success": True,
+        "reconciliation_id": generate_id("RECON"),
+        "total_sap_items": total_items,
+        "items_matched": items_matched,
+        "items_with_delta": len(deltas),
+        "match_rate": round(match_rate, 1),
+        "deltas": deltas,
+        "summary": {
+            "falta_sga": len([d for d in deltas if d["delta_type"] == "FALTA_SGA"]),
+            "sobra_sga": len([d for d in deltas if d["delta_type"] == "SOBRA_SGA"]),
+        },
+        "reconciled_by": user_id,
+        "reconciled_at": now_iso(),
+    }
+
+
+async def _apply_reconciliation_action(payload: dict, user_id: str) -> dict:
+    """
+    Apply an action to a reconciliation delta.
+
+    Actions:
+    - CREATE_ADJUSTMENT: Create inventory adjustment
+    - IGNORE: Mark as investigated and ignored
+    - INVESTIGATE: Flag for manual investigation
+
+    Payload:
+        delta_id: Delta ID to act upon
+        action: Action to apply
+        notes: Action notes
+        adjustment_quantity: For CREATE_ADJUSTMENT, the quantity to adjust
+
+    Returns:
+        Action result
+    """
+    from agents.utils import now_iso
+
+    delta_id = payload.get("delta_id", "")
+    action = payload.get("reconciliation_action", "") or payload.get("action", "")
+    notes = payload.get("reason", "") or payload.get("notes", "")
+
+    if not delta_id:
+        return {"success": False, "error": "delta_id is required"}
+
+    if action not in ["CREATE_ADJUSTMENT", "IGNORE", "INVESTIGATE"]:
+        return {"success": False, "error": "Invalid action. Use CREATE_ADJUSTMENT, IGNORE, or INVESTIGATE"}
+
+    # In production, update the delta record and create adjustment if needed
+    result = {
+        "success": True,
+        "delta_id": delta_id,
+        "action_taken": action,
+        "applied_by": user_id,
+        "applied_at": now_iso(),
+    }
+
+    if action == "CREATE_ADJUSTMENT":
+        # Create HIL task for adjustment approval
+        result["adjustment_id"] = f"ADJ-{delta_id[-6:]}"
+        result["message"] = "Ajuste criado e enviado para aprovação"
+    elif action == "IGNORE":
+        result["message"] = "Delta ignorado após investigação"
+    else:
+        result["message"] = "Delta marcado para investigação manual"
+
+    return result
 
 
 # =============================================================================

@@ -610,6 +610,91 @@ Texto da NF-e:
 
 JSON:"""
 
+    def get_scanned_nf_prompt(self) -> str:
+        """
+        Generate prompt for Vision AI to extract NF-e data from scanned images.
+
+        Use this prompt with Gemini Vision to extract NF data from scanned
+        paper documents (DANFE images, photographed invoices, etc.).
+
+        Returns:
+            Prompt string for Vision model
+        """
+        return """Voce e um especialista em extracao de dados de Notas Fiscais Eletronicas (NF-e) brasileiras.
+
+Analise a imagem da NF-e/DANFE escaneada e extraia TODOS os dados disponiveis.
+
+## CAMPOS OBRIGATORIOS
+
+Extraia com precisao:
+1. **Cabecalho**: Numero da NF, Serie, Chave de Acesso (44 digitos), Data de Emissao
+2. **Emitente**: CNPJ (14 digitos), Nome/Razao Social, Inscricao Estadual
+3. **Destinatario**: CNPJ (14 digitos), Nome/Razao Social
+4. **Itens**: Para CADA item na nota:
+   - Codigo do Produto (cProd)
+   - Descricao completa (xProd)
+   - NCM (8 digitos)
+   - CFOP (4 digitos)
+   - Quantidade
+   - Unidade
+   - Valor Unitario
+   - Valor Total
+   - Numeros de Serie (se visiveis na descricao: S/N, Serial, IMEI, etc.)
+5. **Totais**: Valor Total da NF, ICMS, IPI, etc.
+
+## FORMATO DE RESPOSTA
+
+Retorne APENAS um JSON valido (sem markdown, sem explicacoes):
+
+{
+    "nf_number": "numero da NF",
+    "nf_series": "serie",
+    "nf_key": "chave de acesso 44 digitos sem espacos",
+    "nf_date": "YYYY-MM-DD",
+    "nature_operation": "natureza da operacao",
+    "supplier_cnpj": "14 digitos apenas numeros",
+    "supplier_name": "nome do emitente",
+    "supplier_ie": "inscricao estadual",
+    "recipient_cnpj": "14 digitos apenas numeros",
+    "recipient_name": "nome do destinatario",
+    "total_value": 0.00,
+    "items": [
+        {
+            "item_number": 1,
+            "part_number": "codigo do produto",
+            "description": "descricao completa",
+            "ncm": "NCM 8 digitos",
+            "cfop": "CFOP 4 digitos",
+            "quantity": 1.0,
+            "unit": "UN",
+            "unit_price": 0.00,
+            "total_price": 0.00,
+            "serial_numbers": ["lista de seriais encontrados"]
+        }
+    ],
+    "extraction_confidence": 0.85,
+    "quality_issues": ["lista de problemas de legibilidade, se houver"]
+}
+
+## REGRAS IMPORTANTES
+
+1. Se a imagem estiver ILEGIVEL ou PARCIALMENTE LEGIVEL:
+   - Defina extraction_confidence entre 0.3 e 0.7
+   - Liste os problemas em quality_issues
+   - Extraia o que for possivel, use "" para campos ilegíveis
+
+2. CNPJ deve ter EXATAMENTE 14 digitos numericos
+
+3. Chave de Acesso deve ter EXATAMENTE 44 digitos numericos
+
+4. Valores monetarios: use ponto como separador decimal (1234.56)
+
+5. Procure ATIVAMENTE por numeros de serie em descricoes de produtos
+
+6. Se for uma pagina de continuacao (itens), indique no quality_issues
+
+Analise a imagem e retorne o JSON:"""
+
     def parse_ai_response(self, ai_response: str) -> NFExtraction:
         """
         Parse AI response into NFExtraction.
