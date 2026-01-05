@@ -418,12 +418,6 @@ export default function EstoquePage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button asChild>
-            <Link href="/ferramentas/ativos/estoque/movimentacoes/entrada">
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Entrada
-            </Link>
-          </Button>
         </div>
       </div>
 
