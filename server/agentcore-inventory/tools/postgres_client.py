@@ -45,9 +45,10 @@ class SGAPostgresClient:
 
         # Configuration from environment
         self._proxy_endpoint = os.environ.get("RDS_PROXY_ENDPOINT")
+        # Note: Secret ARN includes random suffix - use full ARN from IAM policy
         self._secret_arn = os.environ.get(
             "RDS_SECRET_ARN",
-            "arn:aws:secretsmanager:us-east-2:377311924364:secret:faiston-one-prod-sga-rds-master"
+            "arn:aws:secretsmanager:us-east-2:377311924364:secret:faiston-one-prod-sga-rds-master-8UYiVQ"
         )
         self._database = os.environ.get("RDS_DATABASE_NAME", "sga_inventory")
         self._port = int(os.environ.get("RDS_PORT", "5432"))
