@@ -1,14 +1,16 @@
 """
 PostgreSQL Client for SGA Inventory.
 
-This client connects to Aurora PostgreSQL via RDS Proxy using IAM authentication.
-Designed for use within AWS Lambda functions.
+This client connects to Aurora PostgreSQL via RDS Proxy.
+Supports two authentication modes:
+1. Password auth via Secrets Manager (default, most reliable)
+2. IAM auth (optional, set USE_IAM_AUTH=true)
 
 Architecture:
-    Lambda -> RDS Proxy (IAM auth) -> Aurora PostgreSQL Serverless v2
+    Lambda -> RDS Proxy -> Aurora PostgreSQL Serverless v2
 
 Security:
-    - IAM authentication (no password in code)
+    - Credentials from Secrets Manager (encrypted)
     - TLS encryption required
     - Connection pooling via RDS Proxy
 
@@ -16,6 +18,7 @@ Author: Faiston NEXO Team
 Date: January 2026
 """
 
+import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -30,24 +33,55 @@ class SGAPostgresClient:
     """
     PostgreSQL client for SGA inventory operations.
 
-    Uses IAM authentication via RDS Proxy for secure, password-less connections.
+    Connects via RDS Proxy with credentials from Secrets Manager.
+    Optionally supports IAM auth when USE_IAM_AUTH=true.
     """
 
     def __init__(self):
         """Initialize the PostgreSQL client."""
         self._connection = None
+        self._secrets_client = boto3.client("secretsmanager")
         self._rds_client = boto3.client("rds")
 
         # Configuration from environment
         self._proxy_endpoint = os.environ.get("RDS_PROXY_ENDPOINT")
+        self._secret_arn = os.environ.get(
+            "RDS_SECRET_ARN",
+            "arn:aws:secretsmanager:us-east-2:377311924364:secret:faiston-one-prod-sga-rds-master"
+        )
         self._database = os.environ.get("RDS_DATABASE_NAME", "sga_inventory")
         self._port = int(os.environ.get("RDS_PORT", "5432"))
         self._region = os.environ.get("AWS_REGION_NAME", "us-east-2")
-        self._user = "sgaadmin"  # IAM auth uses username, no password
+        self._use_iam_auth = os.environ.get("USE_IAM_AUTH", "false").lower() == "true"
+
+        # Cache for credentials
+        self._credentials = None
+
+    def _get_credentials(self) -> Dict[str, str]:
+        """
+        Get database credentials from Secrets Manager.
+
+        Returns:
+            Dictionary with host, username, password, dbname, port
+        """
+        if self._credentials:
+            return self._credentials
+
+        try:
+            response = self._secrets_client.get_secret_value(SecretId=self._secret_arn)
+            self._credentials = json.loads(response["SecretString"])
+            logger.info("Retrieved credentials from Secrets Manager")
+            return self._credentials
+        except Exception as e:
+            logger.error(f"Failed to get credentials: {e}")
+            raise
 
     def _get_connection(self):
         """
-        Get or create a database connection using IAM authentication.
+        Get or create a database connection.
+
+        Uses password auth from Secrets Manager by default.
+        Uses IAM auth if USE_IAM_AUTH=true.
 
         Returns:
             psycopg connection object
@@ -59,26 +93,46 @@ class SGAPostgresClient:
             import psycopg
             from psycopg.rows import dict_row
 
-            # Generate IAM auth token
-            token = self._rds_client.generate_db_auth_token(
-                DBHostname=self._proxy_endpoint,
-                Port=self._port,
-                DBUsername=self._user,
-                Region=self._region
-            )
+            if self._use_iam_auth:
+                # IAM authentication mode
+                creds = self._get_credentials()
+                user = creds.get("username", "sgaadmin")
+                host = self._proxy_endpoint or creds.get("host")
 
-            # Connect to RDS Proxy
-            self._connection = psycopg.connect(
-                host=self._proxy_endpoint,
-                port=self._port,
-                user=self._user,
-                password=token,
-                dbname=self._database,
-                sslmode="require",
-                row_factory=dict_row
-            )
+                # Generate IAM auth token
+                token = self._rds_client.generate_db_auth_token(
+                    DBHostname=host,
+                    Port=self._port,
+                    DBUsername=user,
+                    Region=self._region
+                )
 
-            logger.info("Connected to PostgreSQL via RDS Proxy")
+                self._connection = psycopg.connect(
+                    host=host,
+                    port=self._port,
+                    user=user,
+                    password=token,
+                    dbname=self._database,
+                    sslmode="require",
+                    row_factory=dict_row
+                )
+                logger.info("Connected to PostgreSQL via IAM auth")
+            else:
+                # Password authentication mode (from Secrets Manager)
+                creds = self._get_credentials()
+                host = self._proxy_endpoint or creds.get("host")
+
+                self._connection = psycopg.connect(
+                    host=host,
+                    port=creds.get("port", self._port),
+                    user=creds.get("username"),
+                    password=creds.get("password"),
+                    dbname=creds.get("dbname", self._database),
+                    sslmode="require",
+                    row_factory=dict_row
+                )
+                logger.info("Connected to PostgreSQL via password auth")
+
             return self._connection
 
         except Exception as e:
