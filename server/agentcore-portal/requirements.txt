@@ -1,0 +1,21 @@
+# =============================================================================
+# AWS Bedrock AgentCore Runtime Dependencies - Faiston Portal
+# =============================================================================
+# MINIMAL DEPENDENCIES - Cold start must complete in <30 seconds!
+#
+# Framework: Google ADK with native Gemini 3.0 Pro
+#
+# Note: Many common packages (boto3, httpx, tenacity, etc.) are pre-installed
+# on AgentCore Runtime. Only add dependencies that are NOT pre-installed.
+# =============================================================================
+
+# Core framework - REQUIRED
+google-adk
+google-genai>=1.0.0
+bedrock-agentcore
+
+# RSS parsing (lightweight, stdlib-like)
+feedparser>=6.0.0
+
+# HTTP client for A2A and Graph API (may be pre-installed, but ensure latest)
+httpx>=0.27.0

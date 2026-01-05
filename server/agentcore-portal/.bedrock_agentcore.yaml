@@ -1,0 +1,37 @@
+# =============================================================================
+# AWS Bedrock AgentCore Configuration - Faiston Portal
+# =============================================================================
+# Configuration for AgentCore deployment.
+#
+# Framework: Google ADK with native Gemini 3.0 Pro
+# AWS Account: 377311924364 (Faiston One)
+# Region: us-east-2
+#
+# Purpose: Central AI orchestrator for Faiston NEXO portal
+# - News aggregation (RSS feeds)
+# - A2A delegation to Academy and SGA agents
+# - Daily summary generation
+# =============================================================================
+
+default_agent: faiston_portal_agents
+
+agents:
+  faiston_portal_agents:
+    name: faiston_portal_agents
+    entrypoint: main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    source_path: .
+    aws:
+      account: '377311924364'
+      region: us-east-2
+      execution_role_auto_create: true
+      network_configuration:
+        network_mode: PUBLIC
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+    memory:
+      mode: STM_ONLY
