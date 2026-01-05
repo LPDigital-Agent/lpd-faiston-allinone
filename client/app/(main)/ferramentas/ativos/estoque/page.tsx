@@ -245,7 +245,6 @@ function QuickActions() {
   const actions = [
     {
       label: 'Nova Entrada',
-      description: 'Internalizar itens via NF-e',
       icon: FileUp,
       href: '/ferramentas/ativos/estoque/movimentacoes/entrada',
       color: 'text-green-400',
@@ -253,7 +252,6 @@ function QuickActions() {
     },
     {
       label: 'Expedição',
-      description: 'Enviar com cotação AI',
       icon: Truck,
       href: '/ferramentas/ativos/estoque/expedicao',
       color: 'text-blue-light',
@@ -261,7 +259,6 @@ function QuickActions() {
     },
     {
       label: 'Reversa',
-      description: 'Devolução de equipamentos',
       icon: RotateCcw,
       href: '/ferramentas/ativos/estoque/reversa',
       color: 'text-orange-400',
@@ -269,7 +266,6 @@ function QuickActions() {
     },
     {
       label: 'Inventário',
-      description: 'Iniciar contagem',
       icon: ClipboardCheck,
       href: '/ferramentas/ativos/estoque/inventario',
       color: 'text-yellow-400',
@@ -277,7 +273,6 @@ function QuickActions() {
     },
     {
       label: 'Analytics',
-      description: 'Dashboard de acurácia',
       icon: BarChart3,
       href: '/ferramentas/ativos/estoque/analytics',
       color: 'text-purple-400',
@@ -285,7 +280,6 @@ function QuickActions() {
     },
     {
       label: 'Reconciliação SAP',
-      description: 'Comparar com SAP',
       icon: FileSearch,
       href: '/ferramentas/ativos/estoque/reconciliacao/sap',
       color: 'text-cyan-400',
@@ -295,33 +289,30 @@ function QuickActions() {
 
   return (
     <GlassCard>
-      <GlassCardHeader>
+      <GlassCardHeader className="py-2">
         <div className="flex items-center gap-2">
           <Plus className="w-4 h-4 text-blue-light" />
-          <GlassCardTitle>Ações Rápidas</GlassCardTitle>
+          <GlassCardTitle className="text-sm">Ações Rápidas</GlassCardTitle>
         </div>
       </GlassCardHeader>
 
-      <GlassCardContent>
-        <div className="grid grid-cols-2 gap-3">
+      <GlassCardContent className="py-2">
+        <div className="grid grid-cols-3 lg:grid-cols-6 gap-2">
           {actions.map((action, index) => (
             <motion.div
               key={action.label}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ delay: index * 0.05 }}
             >
               <Link href={action.href}>
-                <div className="p-4 rounded-lg bg-white/5 hover:bg-white/10 border border-transparent hover:border-border transition-all cursor-pointer group">
-                  <div className={`p-2 rounded-lg ${action.bgColor} w-fit mb-3`}>
-                    <action.icon className={`w-5 h-5 ${action.color}`} />
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-transparent hover:border-border transition-all cursor-pointer group">
+                  <div className={`p-1.5 rounded-md ${action.bgColor} shrink-0`}>
+                    <action.icon className={`w-4 h-4 ${action.color}`} />
                   </div>
-                  <p className="text-sm font-medium text-text-primary group-hover:text-blue-light transition-colors">
+                  <span className="text-xs font-medium text-text-primary group-hover:text-blue-light transition-colors truncate">
                     {action.label}
-                  </p>
-                  <p className="text-xs text-text-muted mt-1">
-                    {action.description}
-                  </p>
+                  </span>
                 </div>
               </Link>
             </motion.div>
@@ -439,12 +430,14 @@ export default function EstoquePage() {
       {/* KPIs */}
       <DashboardKPIs />
 
+      {/* Quick Actions - Full Width */}
+      <QuickActions />
+
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Task Inbox + Quick Actions */}
+        {/* Left Column - Task Inbox */}
         <div className="lg:col-span-2 space-y-6">
           <TaskInboxSection />
-          <QuickActions />
         </div>
 
         {/* Right Column - Recent Assets */}
