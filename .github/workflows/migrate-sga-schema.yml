@@ -139,13 +139,17 @@ jobs:
               current = []
               in_dollar_block = False
 
+              def has_sql_content(stmt: str) -> bool:
+                  """Check if statement has actual SQL (not just comments)."""
+                  for line in stmt.split('\n'):
+                      stripped = line.strip()
+                      if stripped and not stripped.startswith('--'):
+                          return True
+                  return False
+
               lines = sql.split('\n')
               for line in lines:
                   stripped = line.strip()
-                  # Skip empty lines and comments
-                  if not stripped or stripped.startswith('--'):
-                      current.append(line)
-                      continue
 
                   # Track $$ blocks (functions, triggers)
                   if '$$' in stripped:
@@ -156,14 +160,14 @@ jobs:
                   # If we're not in a $$ block and line ends with semicolon
                   if not in_dollar_block and stripped.endswith(';'):
                       stmt = '\n'.join(current).strip()
-                      if stmt and not stmt.startswith('--'):
+                      if has_sql_content(stmt):
                           statements.append(stmt)
                       current = []
 
               # Add any remaining content
               if current:
                   stmt = '\n'.join(current).strip()
-                  if stmt and not stmt.startswith('--'):
+                  if has_sql_content(stmt):
                       statements.append(stmt)
 
               return statements
