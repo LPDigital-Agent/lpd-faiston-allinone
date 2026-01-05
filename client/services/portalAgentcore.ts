@@ -102,11 +102,38 @@ export interface NexoChatResponse {
   error_details?: string;
 }
 
-// Daily summary types
+// Daily summary types - Discriminated unions for type safety
+export interface NewsSectionData {
+  total_articles: number;
+  categories?: string[];
+  articles?: NewsArticle[];
+}
+
+export interface CalendarSectionData {
+  events_count?: number;
+  next_event?: string;
+}
+
+export interface TeamsSectionData {
+  unread_count?: number;
+  channels?: string[];
+}
+
+export interface TipsSectionData {
+  tip: string;
+  category?: string;
+}
+
+export type DailySummarySectionData =
+  | NewsSectionData
+  | CalendarSectionData
+  | TeamsSectionData
+  | TipsSectionData;
+
 export interface DailySummarySection {
   type: 'news' | 'calendar' | 'teams' | 'tips';
   title: string;
-  data: unknown;
+  data: DailySummarySectionData;
 }
 
 export interface DailySummaryResponse {

@@ -12,7 +12,12 @@ import { getGreeting } from "@/lib/utils";
 import { nexoConversation } from "@/mocks/mock-data";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion } from "framer-motion";
-import { getDailySummary, type DailySummaryResponse } from "@/services/portalAgentcore";
+import {
+  getDailySummary,
+  type DailySummaryResponse,
+  type NewsSectionData,
+  type TipsSectionData,
+} from "@/services/portalAgentcore";
 
 // MANDATORY: All NEXO images must use the official avatar
 const NEXO_AVATAR_PATH = "/Avatars/nexo-avatar.png";
@@ -68,12 +73,14 @@ export function NEXOHero() {
 
           // Extract news count from news section if available
           const newsSection = summaryData.sections.find((s) => s.type === "news");
-          const newsCount = newsSection?.data?.total_articles || 2;
+          const newsData = newsSection?.data as NewsSectionData | undefined;
+          const newsCount = newsData?.total_articles || 2;
 
           // Extract tip if available
           const tipsSection = summaryData.sections.find((s) => s.type === "tips");
-          if (tipsSection?.data?.tip) {
-            setDailyTip(tipsSection.data.tip);
+          const tipsData = tipsSection?.data as TipsSectionData | undefined;
+          if (tipsData?.tip) {
+            setDailyTip(tipsData.tip);
           }
 
           // Update summary with real data
