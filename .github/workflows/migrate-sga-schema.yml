@@ -43,7 +43,8 @@ on:
 env:
   AWS_REGION: us-east-2
   LAMBDA_FUNCTION_NAME: faiston-one-prod-sga-schema-migrator
-  S3_BUCKET: faiston-one-prod-sga-documents
+  # Bucket naming: {project_name}-sga-documents-{environment}
+  S3_BUCKET: faiston-one-sga-documents-prod
   # MANDATORY: All Lambdas use arm64 + Python 3.13
   PYTHON_VERSION: '3.13'
 
