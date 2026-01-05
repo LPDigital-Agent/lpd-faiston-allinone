@@ -223,6 +223,24 @@ resource "aws_vpc_endpoint" "sga_sts" {
   }
 }
 
+# S3 Gateway Endpoint (for schema file downloads)
+# NOTE: S3 uses Gateway type (free), not Interface type
+# Gateway endpoints route through route table, not ENIs
+resource "aws_vpc_endpoint" "sga_s3" {
+  vpc_id            = aws_vpc.sga.id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+
+  # Associate with Lambda route table so Lambda can reach S3
+  route_table_ids = [aws_route_table.sga_lambda.id]
+
+  tags = {
+    Name        = "${local.name_prefix}-sga-s3-endpoint"
+    Module      = "SGA"
+    Description = "S3 gateway endpoint for schema file downloads"
+  }
+}
+
 # =============================================================================
 # VPC Flow Logs (Audit)
 # =============================================================================
