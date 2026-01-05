@@ -39,7 +39,9 @@ resource "aws_db_proxy" "sga" {
     auth_scheme               = "SECRETS"
     client_password_auth_type = "POSTGRES_SCRAM_SHA_256"
     description               = "SGA master credentials from Secrets Manager"
-    iam_auth                  = "REQUIRED"
+    # DISABLED allows both IAM and password auth from clients
+    # This enables password auth from Lambda using Secrets Manager credentials
+    iam_auth                  = "DISABLED"
     secret_arn                = aws_secretsmanager_secret.sga_rds_master.arn
   }
 
