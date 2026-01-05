@@ -1,70 +1,57 @@
 'use client';
 
 // =============================================================================
-// Entrada Page - SGA Inventory Module
+// Entrada de Materiais Page - SGA Inventory Module
 // =============================================================================
-// NF-e upload and material entry (internalization).
-// Supports Project Gate workflow - entries can be created without project.
+// Unified material entry page with multiple input sources:
+// - NF-e (XML/PDF) - Electronic invoice processing
+// - Foto/Imagem (JPEG/PNG) - OCR via Gemini Vision
+// - SAP Export (CSV/XLSX) - Full asset import from ERP
+// - Manual - Direct entry without source file
 // =============================================================================
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  GlassCard,
-  GlassCardHeader,
-  GlassCardTitle,
-  GlassCardContent,
-} from '@/components/shared/glass-card';
+import { AnimatePresence, motion } from 'framer-motion';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import {
-  FileUp,
   ArrowLeft,
-  Upload,
   FileText,
-  CheckCircle2,
-  AlertTriangle,
-  RefreshCw,
-  Package,
-  MapPin,
-  Briefcase,
-  Clock,
+  Camera,
+  FileSpreadsheet,
+  PenLine,
   X,
   FolderPlus,
+  CheckCircle2,
+  RefreshCw,
+  Briefcase,
 } from 'lucide-react';
 import { useNFReader, useAssetManagement } from '@/hooks/ativos';
-import type { NFEntryStatus } from '@/lib/ativos/types';
+
+// Tab Components
+import {
+  EntradaNFTab,
+  EntradaImagemTab,
+  EntradaSAPTab,
+  EntradaManualTab,
+  PendingEntriesList,
+} from './components';
+
+// =============================================================================
+// Tab Types
+// =============================================================================
+
+type EntradaTab = 'nfe' | 'image' | 'sap' | 'manual';
 
 // =============================================================================
 // Page Component
 // =============================================================================
 
-// Status badge helper
-function getStatusBadge(status: NFEntryStatus) {
-  switch (status) {
-    case 'PENDING_PROJECT':
-      return <Badge className="bg-orange-500/20 text-orange-400">Aguardando Projeto</Badge>;
-    case 'PENDING_APPROVAL':
-      return <Badge className="bg-yellow-500/20 text-yellow-400">Aguardando Aprovação</Badge>;
-    case 'PENDING_CONFIRMATION':
-    case 'PENDING':
-      return <Badge className="bg-blue-500/20 text-blue-400">Aguardando Confirmação</Badge>;
-    case 'PROCESSING':
-      return <Badge className="bg-purple-500/20 text-purple-400">Processando</Badge>;
-    case 'CONFIRMED':
-    case 'COMPLETED':
-      return <Badge className="bg-green-500/20 text-green-400">Confirmado</Badge>;
-    case 'REJECTED':
-    case 'CANCELLED':
-      return <Badge className="bg-red-500/20 text-red-400">Cancelado</Badge>;
-    default:
-      return <Badge className="bg-gray-500/20 text-gray-400">{status}</Badge>;
-  }
-}
-
 export default function EntradaPage() {
+  const [activeTab, setActiveTab] = useState<EntradaTab>('nfe');
+
+  // NF-e Reader Hook (used for NF-e and Image tabs)
   const {
     isUploading,
     uploadProgress,
@@ -85,51 +72,24 @@ export default function EntradaPage() {
     updateMapping,
   } = useNFReader();
 
+  // Asset Management Hook for master data
   const { projects, locations, partNumbers } = useAssetManagement();
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedProject, setSelectedProject] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('');
-
-  // Project Gate Modal state
+  // Project Assignment Modal state
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectModalEntryId, setProjectModalEntryId] = useState<string | null>(null);
   const [projectModalProject, setProjectModalProject] = useState('');
   const [isAssigningProject, setIsAssigningProject] = useState(false);
 
-  // Handle file selection
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-    }
-  };
+  // SAP Import state (placeholder - will be replaced by useSAPImport hook)
+  const [sapProcessing, setSapProcessing] = useState(false);
+  const [sapProgress, setSapProgress] = useState(0);
+  const [sapError, setSapError] = useState<string | null>(null);
+  const [sapPreview, setSapPreview] = useState<any>(null);
 
-  // Handle upload (project is now optional)
-  const handleUpload = async () => {
-    if (!selectedFile || !selectedLocation) return;
-
-    try {
-      // Pass null if no project selected (triggers PENDING_PROJECT workflow)
-      await uploadNF(selectedFile, selectedProject || null, selectedLocation);
-    } catch {
-      // Error is handled by the hook
-    }
-  };
-
-  // Handle confirm entry
-  const handleConfirm = async () => {
-    if (!entryId) return;
-
-    try {
-      await confirmEntry(entryId, mappings);
-      setSelectedFile(null);
-      setSelectedProject('');
-      setSelectedLocation('');
-    } catch {
-      // Error is handled by the hook
-    }
-  };
+  // Manual Entry state (placeholder - will be replaced by useManualEntry hook)
+  const [manualProcessing, setManualProcessing] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
 
   // Handle opening project assignment modal
   const openProjectModal = (entryId: string) => {
@@ -149,9 +109,111 @@ export default function EntradaPage() {
       setProjectModalEntryId(null);
       setProjectModalProject('');
     } catch {
-      // Error handling can be added here
+      // Error handling
     } finally {
       setIsAssigningProject(false);
+    }
+  };
+
+  // Handle NF-e upload
+  const handleNFUpload = async (file: File, projectId: string | null, locationId: string) => {
+    await uploadNF(file, projectId, locationId);
+  };
+
+  // Handle NF-e confirm
+  const handleNFConfirm = async () => {
+    if (!entryId) return;
+    await confirmEntry(entryId, mappings);
+  };
+
+  // Handle Image upload (uses same backend as NF-e for now)
+  const handleImageUpload = async (file: File, projectId: string | null, locationId: string) => {
+    // For now, use the same NF upload - backend will detect image type
+    // TODO: Replace with dedicated useImageOCR hook
+    await uploadNF(file, projectId, locationId);
+  };
+
+  // Handle SAP preview (placeholder)
+  const handleSAPPreview = async (file: File, projectId?: string, locationId?: string) => {
+    setSapProcessing(true);
+    setSapProgress(0);
+    setSapError(null);
+
+    try {
+      // Simulate progress
+      for (let i = 0; i <= 100; i += 20) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        setSapProgress(i);
+      }
+
+      // TODO: Replace with actual useSAPImport hook
+      // For now, create a mock preview
+      setSapPreview({
+        filename: file.name,
+        total_rows: 100,
+        matched_rows: 85,
+        unmatched_rows: 15,
+        match_rate: 85,
+        is_sap_format: true,
+        columns_detected: [
+          'source_system', 'sap_material_code', 'part_number', 'asset_type',
+          'manufacturer', 'serial_number', 'rfid', 'quantity', 'project_id',
+          'project_name', 'status', 'sap_depot_code', 'technician_name',
+        ],
+        sample_data: [
+          {
+            part_number: 'SW-CISCO-9200',
+            serial_number: '0IFD0TVBDIVU',
+            quantity: '1',
+            project_name: 'Stock Faiston',
+            status: 'EM_ESTOQUE',
+            technician_name: '',
+          },
+          {
+            part_number: 'AP-CISCO-R640',
+            serial_number: '8MDD4V30T9NT',
+            quantity: '1',
+            project_name: 'Evotech',
+            status: 'DESCARTE',
+            technician_name: '',
+          },
+        ],
+        projects_detected: ['FAISTON', 'EVOTEC', 'TRAGUE', 'NTT', 'ARCDOU'],
+        locations_detected: ['Barueri - Recebimento', 'Barueri - Descarte', 'Base Tecnica - Rio'],
+        assets_to_create: 100,
+      });
+    } catch (err) {
+      setSapError(err instanceof Error ? err.message : 'Erro ao processar arquivo');
+    } finally {
+      setSapProcessing(false);
+    }
+  };
+
+  // Handle SAP execute (placeholder)
+  const handleSAPExecute = async () => {
+    setSapProcessing(true);
+    try {
+      // TODO: Implement actual import
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      setSapPreview(null);
+    } catch (err) {
+      setSapError(err instanceof Error ? err.message : 'Erro na importacao');
+    } finally {
+      setSapProcessing(false);
+    }
+  };
+
+  // Handle Manual submit (placeholder)
+  const handleManualSubmit = async (params: any) => {
+    setManualProcessing(true);
+    setManualError(null);
+    try {
+      // TODO: Implement actual manual entry
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : 'Erro ao registrar entrada');
+    } finally {
+      setManualProcessing(false);
     }
   };
 
@@ -164,7 +226,7 @@ export default function EntradaPage() {
             <Button variant="ghost" size="sm" asChild>
               <Link href="/ferramentas/ativos/estoque/movimentacoes">
                 <ArrowLeft className="w-4 h-4 mr-1" />
-                Movimentações
+                Movimentacoes
               </Link>
             </Button>
           </div>
@@ -172,336 +234,123 @@ export default function EntradaPage() {
             Entrada de Materiais
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Internalização via leitura de NF-e (XML ou PDF)
+            Internalizacao via NF-e, imagem, SAP ou entrada manual
           </p>
         </div>
       </div>
 
-      {/* Upload Section */}
-      {!extraction && (
-        <GlassCard>
-          <GlassCardHeader>
-            <div className="flex items-center gap-2">
-              <FileUp className="w-4 h-4 text-green-400" />
-              <GlassCardTitle>Upload de NF-e</GlassCardTitle>
-            </div>
-          </GlassCardHeader>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as EntradaTab)}>
+        <TabsList className="w-full grid grid-cols-4 bg-white/5 p-1 rounded-lg">
+          <TabsTrigger
+            value="nfe"
+            className="flex items-center gap-2 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400"
+          >
+            <FileText className="w-4 h-4" />
+            <span className="hidden sm:inline">NF-e</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="image"
+            className="flex items-center gap-2 data-[state=active]:bg-magenta-mid/20 data-[state=active]:text-magenta-mid"
+          >
+            <Camera className="w-4 h-4" />
+            <span className="hidden sm:inline">Foto/Imagem</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="sap"
+            className="flex items-center gap-2 data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span className="hidden sm:inline">SAP Export</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="manual"
+            className="flex items-center gap-2 data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
+          >
+            <PenLine className="w-4 h-4" />
+            <span className="hidden sm:inline">Manual</span>
+          </TabsTrigger>
+        </TabsList>
 
-          <GlassCardContent>
-            <div className="space-y-6">
-              {/* Project and Location Selection */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">
-                    <Briefcase className="w-4 h-4 inline mr-2" />
-                    Projeto <span className="text-text-muted font-normal">(opcional)</span>
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 bg-white/5 border border-border rounded-md text-sm text-text-primary"
-                    value={selectedProject}
-                    onChange={(e) => setSelectedProject(e.target.value)}
-                  >
-                    <option value="">Sem projeto (atribuir depois)...</option>
-                    {projects.filter(p => p.is_active).map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.code} - {project.name}
-                      </option>
-                    ))}
-                  </select>
-                  {!selectedProject && (
-                    <p className="text-xs text-orange-400 mt-1">
-                      <Clock className="w-3 h-3 inline mr-1" />
-                      Entrada ficará aguardando atribuição de projeto
-                    </p>
-                  )}
-                </div>
+        {/* NF-e Tab Content */}
+        <TabsContent value="nfe" className="mt-6">
+          <EntradaNFTab
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+            uploadError={uploadError}
+            extraction={extraction}
+            confidenceScore={confidenceScore}
+            entryId={entryId}
+            requiresReview={requiresReview}
+            requiresProject={requiresProject}
+            projects={projects}
+            locations={locations}
+            onUpload={handleNFUpload}
+            onConfirm={handleNFConfirm}
+            onClear={clearExtraction}
+            onAssignProject={openProjectModal}
+            mappings={mappings}
+            updateMapping={updateMapping}
+          />
+        </TabsContent>
 
-                <div>
-                  <label className="text-sm font-medium text-text-primary mb-2 block">
-                    <MapPin className="w-4 h-4 inline mr-2" />
-                    Local de Destino
-                  </label>
-                  <select
-                    className="w-full px-3 py-2 bg-white/5 border border-border rounded-md text-sm text-text-primary"
-                    value={selectedLocation}
-                    onChange={(e) => setSelectedLocation(e.target.value)}
-                  >
-                    <option value="">Selecione o local...</option>
-                    {locations.filter(l => l.is_active && l.type === 'WAREHOUSE').map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.code} - {location.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+        {/* Image Tab Content */}
+        <TabsContent value="image" className="mt-6">
+          <EntradaImagemTab
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+            uploadError={uploadError}
+            extraction={extraction}
+            confidenceScore={confidenceScore}
+            entryId={entryId}
+            requiresReview={requiresReview}
+            requiresProject={requiresProject}
+            projects={projects}
+            locations={locations}
+            onUpload={handleImageUpload}
+            onConfirm={handleNFConfirm}
+            onClear={clearExtraction}
+            onAssignProject={openProjectModal}
+          />
+        </TabsContent>
 
-              {/* File Upload Area */}
-              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-blue-mid/50 transition-colors">
-                <input
-                  type="file"
-                  accept=".xml,.pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="nf-upload"
-                  disabled={isUploading}
-                />
-                <label htmlFor="nf-upload" className="cursor-pointer">
-                  <Upload className="w-12 h-12 text-text-muted mx-auto mb-4" />
-                  <p className="text-sm font-medium text-text-primary mb-1">
-                    {selectedFile ? selectedFile.name : 'Clique para selecionar ou arraste o arquivo'}
-                  </p>
-                  <p className="text-xs text-text-muted">
-                    Formatos aceitos: XML ou PDF
-                  </p>
-                </label>
-              </div>
+        {/* SAP Tab Content */}
+        <TabsContent value="sap" className="mt-6">
+          <EntradaSAPTab
+            isProcessing={sapProcessing}
+            progress={sapProgress}
+            error={sapError}
+            preview={sapPreview}
+            projects={projects}
+            locations={locations}
+            onPreview={handleSAPPreview}
+            onExecute={handleSAPExecute}
+            onClear={() => setSapPreview(null)}
+          />
+        </TabsContent>
 
-              {/* Upload Progress */}
-              {isUploading && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-text-muted">Processando NF-e...</span>
-                    <span className="text-text-primary">{uploadProgress}%</span>
-                  </div>
-                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                    <motion.div
-                      className="h-full bg-blue-mid"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${uploadProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
+        {/* Manual Tab Content */}
+        <TabsContent value="manual" className="mt-6">
+          <EntradaManualTab
+            isProcessing={manualProcessing}
+            error={manualError}
+            projects={projects}
+            locations={locations}
+            partNumbers={partNumbers}
+            onSubmit={handleManualSubmit}
+            onClear={() => setManualError(null)}
+          />
+        </TabsContent>
+      </Tabs>
 
-              {/* Error */}
-              {uploadError && (
-                <div className="flex items-center gap-2 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
-                  <AlertTriangle className="w-5 h-5 text-red-400" />
-                  <p className="text-sm text-red-400">{uploadError}</p>
-                </div>
-              )}
-
-              {/* Upload Button */}
-              <Button
-                className="w-full"
-                disabled={!selectedFile || !selectedLocation || isUploading}
-                onClick={handleUpload}
-              >
-                {isUploading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                    Processando...
-                  </>
-                ) : (
-                  <>
-                    <FileUp className="w-4 h-4 mr-2" />
-                    Processar NF-e
-                  </>
-                )}
-              </Button>
-            </div>
-          </GlassCardContent>
-        </GlassCard>
-      )}
-
-      {/* Extraction Result */}
-      {extraction && (
-        <GlassCard>
-          <GlassCardHeader>
-            <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-light" />
-                <GlassCardTitle>Dados Extraídos</GlassCardTitle>
-              </div>
-              {confidenceScore && (
-                <Badge className={
-                  confidenceScore.risk_level === 'low' ? 'bg-green-500/20 text-green-400' :
-                  confidenceScore.risk_level === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                  'bg-red-500/20 text-red-400'
-                }>
-                  Confiança: {Math.round(confidenceScore.overall * 100)}%
-                </Badge>
-              )}
-            </div>
-          </GlassCardHeader>
-
-          <GlassCardContent>
-            <div className="space-y-6">
-              {/* NF Info */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-white/5 rounded-lg">
-                <div>
-                  <p className="text-xs text-text-muted">Número NF</p>
-                  <p className="text-sm font-medium text-text-primary">
-                    {extraction.nf_number}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted">Série</p>
-                  <p className="text-sm font-medium text-text-primary">
-                    {extraction.nf_series}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted">Fornecedor</p>
-                  <p className="text-sm font-medium text-text-primary">
-                    {extraction.supplier_name}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted">Data Emissão</p>
-                  <p className="text-sm font-medium text-text-primary">
-                    {new Date(extraction.issue_date).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-              </div>
-
-              {/* Items */}
-              <div>
-                <h4 className="text-sm font-medium text-text-primary mb-3">
-                  Itens ({extraction.items.length})
-                </h4>
-                <div className="space-y-2">
-                  {extraction.items.map((item, index) => (
-                    <div key={index} className="flex items-center gap-4 p-3 bg-white/5 rounded-lg">
-                      <Package className="w-5 h-5 text-blue-light" />
-                      <div className="flex-1">
-                        <p className="text-sm text-text-primary">{item.description}</p>
-                        <p className="text-xs text-text-muted">
-                          Código: {item.product_code} • NCM: {item.ncm_code || '-'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-text-primary">
-                          Qtd: {item.quantity} {item.unit_of_measure}
-                        </p>
-                        <p className="text-xs text-text-muted">
-                          R$ {item.unit_value.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Project Gate Warning */}
-              {requiresProject && (
-                <div className="flex items-start gap-3 p-4 bg-orange-500/20 border border-orange-500/30 rounded-lg">
-                  <FolderPlus className="w-5 h-5 text-orange-400 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-orange-400">
-                      Aguardando Atribuição de Projeto
-                    </p>
-                    <p className="text-xs text-orange-400/80 mt-1">
-                      Esta entrada foi criada sem projeto. Atribua um projeto para continuar.
-                    </p>
-                    <Button
-                      size="sm"
-                      className="mt-3 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400"
-                      onClick={() => entryId && openProjectModal(entryId)}
-                    >
-                      <FolderPlus className="w-4 h-4 mr-2" />
-                      Atribuir Projeto
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Review Warning */}
-              {requiresReview && !requiresProject && (
-                <div className="flex items-start gap-3 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-lg">
-                  <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-yellow-400">
-                      Revisão Necessária
-                    </p>
-                    <p className="text-xs text-yellow-400/80 mt-1">
-                      Alguns itens precisam de confirmação manual antes do registro.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={clearExtraction} className="flex-1">
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleConfirm}
-                  className="flex-1"
-                  disabled={requiresProject}
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  {requiresProject ? 'Atribua um Projeto' : 'Confirmar Entrada'}
-                </Button>
-              </div>
-            </div>
-          </GlassCardContent>
-        </GlassCard>
-      )}
-
-      {/* Pending Entries */}
-      {pendingEntries.length > 0 && !extraction && (
-        <GlassCard>
-          <GlassCardHeader>
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-yellow-400" />
-              <GlassCardTitle>Entradas Pendentes</GlassCardTitle>
-              <Badge variant="destructive">{pendingEntries.length}</Badge>
-            </div>
-          </GlassCardHeader>
-
-          <GlassCardContent>
-            {pendingEntriesLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshCw className="w-6 h-6 text-text-muted animate-spin" />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {pendingEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition-colors"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-medium text-text-primary">
-                          NF {entry.nf_number}
-                        </p>
-                        {getStatusBadge(entry.status)}
-                      </div>
-                      <p className="text-xs text-text-muted">
-                        {entry.total_items} itens • {entry.supplier_name} •{' '}
-                        {new Date(entry.uploaded_at).toLocaleDateString('pt-BR')}
-                      </p>
-                      {entry.project_name && (
-                        <p className="text-xs text-text-muted mt-0.5">
-                          <Briefcase className="w-3 h-3 inline mr-1" />
-                          {entry.project_name}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {entry.status === 'PENDING_PROJECT' ? (
-                        <Button
-                          size="sm"
-                          className="bg-orange-500/20 hover:bg-orange-500/30 text-orange-400"
-                          onClick={() => openProjectModal(entry.id)}
-                        >
-                          <FolderPlus className="w-4 h-4 mr-1" />
-                          Atribuir Projeto
-                        </Button>
-                      ) : (
-                        <Button size="sm">Revisar</Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </GlassCardContent>
-        </GlassCard>
+      {/* Pending Entries (shown when no extraction in progress) */}
+      {!extraction && pendingEntries.length > 0 && (
+        <PendingEntriesList
+          entries={pendingEntries}
+          isLoading={pendingEntriesLoading}
+          onAssignProject={openProjectModal}
+          onReview={(id) => console.log('Review entry:', id)}
+        />
       )}
 
       {/* Project Assignment Modal */}

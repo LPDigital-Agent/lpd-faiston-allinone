@@ -241,13 +241,16 @@ class IntakeAgent(BaseInventoryAgent):
                     message=f"Arquivo nao encontrado: {s3_key}",
                 )
 
-            # 2. Parse NF-e
+            # 2. Parse NF-e based on file type
             if file_type.lower() == "xml":
                 extraction = self.nf_parser.parse_xml(
                     file_data.decode("utf-8")
                 )
+            elif file_type.lower() == "image":
+                # For images (JPEG, PNG), use Vision OCR directly
+                extraction = await self._process_scanned_nf(file_data)
             else:
-                # For PDF, use AI extraction
+                # For PDF, use AI extraction (may route to Vision for scanned PDFs)
                 extraction = await self._process_nf_pdf(file_data)
 
             if not extraction or extraction.get("confidence", 0) < 0.3:
@@ -320,6 +323,7 @@ class IntakeAgent(BaseInventoryAgent):
                 "confidence_score": confidence.overall,
                 "s3_xml_key": s3_key if file_type == "xml" else None,
                 "s3_pdf_key": s3_key if file_type == "pdf" else None,
+                "s3_image_key": s3_key if file_type == "image" else None,
                 "uploaded_by": uploaded_by,
                 "created_at": now,
                 "requires_project": requires_project,

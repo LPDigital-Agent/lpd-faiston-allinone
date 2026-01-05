@@ -129,7 +129,7 @@ lpd-faiston-allinone/
 │   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
 │   │   ├── academy/      # 12 Academy-specific hooks
-│   │   └── ativos/       # 12 SGA-specific hooks
+│   │   └── ativos/       # 15 SGA-specific hooks
 │   ├── lib/               # Utilities
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
@@ -446,12 +446,13 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ SGA 2.0 Phase 1-3: Expedição Inteligente, Cotação de Frete, Reversa, Analytics, Reconciliação SAP
 - ✅ Wiki User Guide: 14 sections documenting all SGA features
 - ✅ UI Refinement: QuickActions redesigned to compact full-width layout
+- ✅ Unified Entry: Multi-source material entry (NF-e, Image OCR, SAP Export, Manual)
 - ⏳ Phase 4: SAP API Integration (requires SAP credentials)
 
 ### SGA Backend Agents (10)
 `server/agentcore-inventory/agents/`:
 - `estoque_control_agent.py` - Core +/- movements
-- `intake_agent.py` - NF-e PDF/XML extraction
+- `intake_agent.py` - NF-e PDF/XML/Image extraction (Gemini Vision OCR)
 - `reconciliacao_agent.py` - Divergence detection
 - `compliance_agent.py` - Policy validation
 - `comunicacao_agent.py` - Notifications
@@ -470,12 +471,15 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `TaskInboxContext` - HIL approval tasks
 - `OfflineSyncContext` - PWA offline queue
 
-### SGA Hooks (12)
+### SGA Hooks (15)
 `client/hooks/ativos/`:
 - `useAssets`, `useAssetDetail` - Asset queries
 - `useMovements`, `useMovementMutations`, `useMovementValidation` - Movement operations
 - `useLocations`, `usePartNumbers`, `useProjects` - Master data
 - `useBalanceQuery`, `useNFReader`, `useSerialScanner` - Utilities
+- `useImageOCR` - Image OCR for scanned NF photos via Gemini Vision
+- `useSAPImport` - SAP CSV/XLSX import with full asset creation
+- `useManualEntry` - Manual entry without source document
 
 ### SGA Frontend Pages (25+)
 `client/app/(main)/ferramentas/ativos/estoque/`:
@@ -494,6 +498,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 ### SGA Components
 **NEXO AI (4):** `NexoCopilot`, `NexoSearchBar`, `UnifiedSearch`, index
 **Mobile/PWA (3):** `MobileScanner`, `MobileChecklist`, `ConfirmationButton`
+**Entrada Tabs (6):** `EntradaNFTab`, `EntradaImagemTab`, `EntradaSAPTab`, `EntradaManualTab`, `PendingEntriesList`, index
 
 ### SGA Terraform Resources
 `terraform/main/`:

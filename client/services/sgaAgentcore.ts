@@ -976,3 +976,160 @@ export async function applyReconciliationAction(
     reason: params.reason,
   });
 }
+
+// =============================================================================
+// Image OCR Processing
+// =============================================================================
+
+/**
+ * Process an image (scanned NF, mobile photo) with OCR via Gemini Vision.
+ * Returns extracted data similar to NF-e processing.
+ */
+export async function processImageOCR(params: {
+  s3_key: string;
+  project_id?: string;
+  destination_location_id: string;
+}): Promise<AgentCoreResponse<SGAProcessNFUploadResponse>> {
+  return invokeSGAAgentCore<SGAProcessNFUploadResponse>({
+    action: 'process_image_ocr',
+    s3_key: params.s3_key,
+    project_id: params.project_id,
+    destination_location_id: params.destination_location_id,
+    file_type: 'image',
+  });
+}
+
+// =============================================================================
+// SAP Import (Full Asset Creation)
+// =============================================================================
+
+export interface SAPImportPreviewRequest {
+  file_content: string;
+  filename: string;
+  project_id?: string;
+  destination_location_id?: string;
+  full_asset_creation?: boolean;
+}
+
+export interface SAPImportPreviewResponse {
+  import_id: string;
+  filename: string;
+  file_type: 'csv' | 'xlsx';
+  total_rows: number;
+  matched_rows: number;
+  unmatched_rows: number;
+  match_rate: number;
+  is_sap_format: boolean;
+  columns_detected: string[];
+  column_mappings: Array<{
+    file_column: string;
+    sap_field: string;
+    target_field: string;
+    confidence: number;
+    is_required: boolean;
+    sample_values: string[];
+  }>;
+  sample_data: Array<{
+    row_number: number;
+    part_number: string;
+    part_number_id?: string;
+    description: string;
+    serial_number?: string;
+    rfid?: string;
+    quantity: number;
+    status?: string;
+    project_id?: string;
+    project_name?: string;
+    location_code?: string;
+    technician_name?: string;
+    match_confidence: number;
+    is_matched: boolean;
+    warnings: string[];
+  }>;
+  projects_detected: string[];
+  locations_detected: string[];
+  assets_to_create: number;
+  warnings: string[];
+}
+
+export interface SAPImportExecuteRequest {
+  import_id: string;
+  pn_overrides?: Record<number, string>;
+  full_asset_creation?: boolean;
+}
+
+export interface SAPImportExecuteResponse {
+  success: boolean;
+  import_id: string;
+  assets_created: number;
+  movements_created: number;
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Preview a SAP export file (CSV/XLSX) before importing.
+ * Detects SAP format columns and maps them to SGA fields.
+ */
+export async function previewSAPImport(
+  params: SAPImportPreviewRequest
+): Promise<AgentCoreResponse<SAPImportPreviewResponse>> {
+  return invokeSGAAgentCore<SAPImportPreviewResponse>({
+    action: 'preview_sap_import',
+    ...params,
+  });
+}
+
+/**
+ * Execute SAP import with full asset creation.
+ * Creates assets with serial numbers, RFID, technician data, etc.
+ */
+export async function executeSAPImport(
+  params: SAPImportExecuteRequest
+): Promise<AgentCoreResponse<SAPImportExecuteResponse>> {
+  return invokeSGAAgentCore<SAPImportExecuteResponse>({
+    action: 'execute_sap_import',
+    ...params,
+  });
+}
+
+// =============================================================================
+// Manual Entry
+// =============================================================================
+
+export interface ManualEntryRequest {
+  items: Array<{
+    part_number_id: string;
+    quantity: number;
+    serial_numbers?: string[];
+    unit_value?: number;
+    notes?: string;
+  }>;
+  project_id?: string;
+  destination_location_id: string;
+  document_reference?: string;
+  notes?: string;
+}
+
+export interface ManualEntryResponse {
+  success: boolean;
+  entry_id: string;
+  movements_created: number;
+  assets_created: number;
+  total_quantity: number;
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * Create a manual entry without source file.
+ * Useful for donations, adjustments, or entries from other sources.
+ */
+export async function createManualEntry(
+  params: ManualEntryRequest
+): Promise<AgentCoreResponse<ManualEntryResponse>> {
+  return invokeSGAAgentCore<ManualEntryResponse>({
+    action: 'create_manual_entry',
+    ...params,
+  });
+}

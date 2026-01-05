@@ -97,6 +97,24 @@ def invoke(payload: dict, context) -> dict:
         elif action == "process_scanned_nf_upload":
             return asyncio.run(_process_scanned_nf_upload(payload, user_id))
 
+        elif action == "process_image_ocr":
+            return asyncio.run(_process_image_ocr(payload, user_id))
+
+        # =================================================================
+        # Manual Entry
+        # =================================================================
+        elif action == "create_manual_entry":
+            return asyncio.run(_create_manual_entry(payload, user_id))
+
+        # =================================================================
+        # SAP Import (Full Asset Creation)
+        # =================================================================
+        elif action == "preview_sap_import":
+            return asyncio.run(_preview_sap_import(payload, user_id))
+
+        elif action == "execute_sap_import":
+            return asyncio.run(_execute_sap_import(payload, user_id))
+
         # =================================================================
         # Movements (EstoqueControlAgent)
         # =================================================================
@@ -557,6 +575,272 @@ async def _process_scanned_nf_upload(payload: dict, user_id: str) -> dict:
     response["original_file_type"] = file_type
 
     return response
+
+
+# =============================================================================
+# Image OCR Handler
+# =============================================================================
+
+
+async def _process_image_ocr(payload: dict, user_id: str) -> dict:
+    """
+    Process an image (scanned NF, mobile photo) with OCR via Gemini Vision.
+
+    Specifically designed for:
+    - JPEG/PNG photos from mobile devices
+    - Scanned NF documents
+    - Camera captures of DANFE
+
+    Uses the same IntakeAgent but with file_type='image' to trigger
+    Vision-based extraction.
+
+    Args:
+        payload: Request payload with:
+            - s3_key: S3 key of uploaded image
+            - project_id: Optional project context
+            - destination_location_id: Target location (default: ESTOQUE_CENTRAL)
+        user_id: User performing the upload
+
+    Returns:
+        Extraction result with confidence score
+    """
+    s3_key = payload.get("s3_key", "")
+    project_id = payload.get("project_id", "")
+    destination_location_id = payload.get("destination_location_id", "ESTOQUE_CENTRAL")
+
+    if not s3_key:
+        return {"success": False, "error": "s3_key required"}
+
+    from agents.intake_agent import IntakeAgent
+
+    agent = IntakeAgent()
+
+    # Use file_type='image' to ensure Vision processing path
+    result = await agent.process_nf_upload(
+        s3_key=s3_key,
+        file_type="image",  # Forces Vision OCR processing
+        project_id=project_id,
+        destination_location_id=destination_location_id,
+        uploaded_by=user_id,
+    )
+
+    response = result.to_dict()
+    response["processing_type"] = "image_vision_ocr"
+
+    return response
+
+
+# =============================================================================
+# Manual Entry Handler
+# =============================================================================
+
+
+async def _create_manual_entry(payload: dict, user_id: str) -> dict:
+    """
+    Create a manual entry without source file.
+
+    Useful for:
+    - Donations and gifts
+    - Adjustments from physical count
+    - Entries from systems without export capability
+
+    Payload:
+        items: List of items [{part_number_id, quantity, serial_numbers?, unit_value?, notes?}]
+        project_id: Optional project
+        destination_location_id: Required destination
+        document_reference: Optional reference (e.g., "Doacao 2025-01")
+        notes: General notes
+
+    Returns:
+        Entry result with created movements
+    """
+    from agents.utils import generate_id, now_iso
+    from tools.dynamodb_client import SGADynamoDBClient
+
+    items = payload.get("items", [])
+    project_id = payload.get("project_id")
+    destination_location_id = payload.get("destination_location_id", "")
+    document_reference = payload.get("document_reference", "")
+    notes = payload.get("notes", "")
+
+    if not items:
+        return {"success": False, "error": "items is required"}
+
+    if not destination_location_id:
+        return {"success": False, "error": "destination_location_id is required"}
+
+    db = SGADynamoDBClient()
+    entry_id = generate_id("MANUAL")
+    movements_created = 0
+    assets_created = 0
+    total_quantity = 0
+    errors = []
+    warnings = []
+
+    for item in items:
+        pn_id = item.get("part_number_id", "")
+        quantity = item.get("quantity", 1)
+        serial_numbers = item.get("serial_numbers", [])
+        unit_value = item.get("unit_value", 0)
+        item_notes = item.get("notes", "")
+
+        if not pn_id:
+            warnings.append(f"Item sem part_number_id ignorado")
+            continue
+
+        if quantity <= 0:
+            warnings.append(f"Item {pn_id} com quantidade <= 0 ignorado")
+            continue
+
+        try:
+            # Create movement for this item
+            movement_id = generate_id("MOV")
+            movement_data = {
+                "PK": f"MOVEMENT#{movement_id}",
+                "SK": f"MOVEMENT#{movement_id}",
+                "movement_id": movement_id,
+                "entry_id": entry_id,
+                "movement_type": "ENTRY",
+                "part_number_id": pn_id,
+                "quantity": quantity,
+                "serial_numbers": serial_numbers,
+                "unit_value": unit_value,
+                "destination_location_id": destination_location_id,
+                "project_id": project_id,
+                "document_reference": document_reference,
+                "notes": item_notes,
+                "source": "MANUAL_ENTRY",
+                "created_by": user_id,
+                "created_at": now_iso(),
+                "status": "COMPLETED",
+            }
+
+            db.put_item(movement_data)
+            movements_created += 1
+            total_quantity += quantity
+
+            # Create assets for serialized items
+            if serial_numbers:
+                for serial in serial_numbers:
+                    asset_id = generate_id("ASSET")
+                    asset_data = {
+                        "PK": f"ASSET#{asset_id}",
+                        "SK": f"ASSET#{asset_id}",
+                        "asset_id": asset_id,
+                        "part_number_id": pn_id,
+                        "serial_number": serial,
+                        "location_id": destination_location_id,
+                        "project_id": project_id,
+                        "status": "IN_STOCK",
+                        "created_by": user_id,
+                        "created_at": now_iso(),
+                        "entry_movement_id": movement_id,
+                    }
+                    db.put_item(asset_data)
+                    assets_created += 1
+
+        except Exception as e:
+            errors.append(f"Erro ao criar movimento para {pn_id}: {str(e)}")
+
+    return {
+        "success": len(errors) == 0,
+        "entry_id": entry_id,
+        "movements_created": movements_created,
+        "assets_created": assets_created,
+        "total_quantity": total_quantity,
+        "errors": errors,
+        "warnings": warnings,
+    }
+
+
+# =============================================================================
+# SAP Import Handlers
+# =============================================================================
+
+
+async def _preview_sap_import(payload: dict, user_id: str) -> dict:
+    """
+    Preview a SAP export file (CSV/XLSX) before importing.
+
+    Detects SAP format columns (30+ fields) and maps them to SGA fields.
+    Supports full asset creation with serial, RFID, technician data.
+
+    Payload:
+        file_content: Base64-encoded file content
+        filename: Original filename for type detection
+        project_id: Optional project filter
+        destination_location_id: Optional destination
+        full_asset_creation: Whether to create full assets (default: True)
+
+    Returns:
+        Preview with column mappings, matched rows, and stats
+    """
+    import base64
+    from agents.import_agent import create_import_agent
+
+    file_content_b64 = payload.get("file_content", "")
+    filename = payload.get("filename", "sap_export.csv")
+    project_id = payload.get("project_id")
+    destination_location_id = payload.get("destination_location_id")
+    full_asset_creation = payload.get("full_asset_creation", True)
+
+    if not file_content_b64:
+        return {"success": False, "error": "file_content is required"}
+
+    try:
+        file_content = base64.b64decode(file_content_b64)
+    except Exception as e:
+        return {"success": False, "error": f"Invalid base64 content: {e}"}
+
+    agent = create_import_agent()
+    result = await agent.preview_import(
+        file_content=file_content,
+        filename=filename,
+        project_id=project_id,
+        destination_location_id=destination_location_id,
+        sap_format=True,  # Enable SAP-specific column detection
+        full_asset_creation=full_asset_creation,
+    )
+
+    return result
+
+
+async def _execute_sap_import(payload: dict, user_id: str) -> dict:
+    """
+    Execute SAP import with full asset creation.
+
+    Creates assets with serial numbers, RFID, technician data,
+    and all SAP-specific metadata.
+
+    Payload:
+        import_id: Import session ID from preview
+        pn_overrides: Manual PN assignments {row_number: pn_id}
+        full_asset_creation: Whether to create full assets (default: True)
+
+    Returns:
+        Import result with created assets and movements
+    """
+    from agents.import_agent import create_import_agent
+
+    import_id = payload.get("import_id", "")
+    pn_overrides = payload.get("pn_overrides", {})
+    full_asset_creation = payload.get("full_asset_creation", True)
+
+    if not import_id:
+        return {"success": False, "error": "import_id is required"}
+
+    # Convert pn_overrides keys to int (JSON keys are strings)
+    pn_overrides_int = {int(k): v for k, v in pn_overrides.items()}
+
+    agent = create_import_agent()
+    result = await agent.execute_sap_import(
+        import_id=import_id,
+        pn_overrides=pn_overrides_int,
+        full_asset_creation=full_asset_creation,
+        operator_id=user_id,
+    )
+
+    return result
 
 
 # =============================================================================

@@ -50,6 +50,29 @@ export type {
 export { useSerialScanner } from './useSerialScanner';
 export type { ScanMode, ScanResult } from './useSerialScanner';
 
+// Image OCR hook
+export { useImageOCR } from './useImageOCR';
+export type { UseImageOCRReturn } from './useImageOCR';
+
+// SAP Import hook
+export { useSAPImport, SAP_EXPECTED_COLUMNS, SAP_COLUMN_LABELS } from './useSAPImport';
+export type {
+  SAPColumnMapping,
+  SAPImportPreviewRow,
+  SAPImportPreview,
+  SAPImportResult,
+  UseSAPImportReturn,
+} from './useSAPImport';
+
+// Manual Entry hook
+export { useManualEntry } from './useManualEntry';
+export type {
+  ManualEntryItem,
+  ManualEntryRequest,
+  ManualEntryResult,
+  UseManualEntryReturn,
+} from './useManualEntry';
+
 // Context-based hooks (re-exported from contexts for convenience)
 export {
   useAssetManagement,
