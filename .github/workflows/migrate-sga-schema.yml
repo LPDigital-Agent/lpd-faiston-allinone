@@ -1,0 +1,344 @@
+# =============================================================================
+# SGA PostgreSQL Schema Migration
+# =============================================================================
+# Applies PostgreSQL schema to Aurora database via Lambda (VPC bridge).
+#
+# Why Lambda bridge: GitHub Actions runs on public infrastructure and cannot
+# directly connect to RDS Proxy in a private VPC. We use Lambda as a bridge.
+#
+# Schema Files (applied in order):
+#   - 001_initial_schema.sql: Tables, enums, comments
+#   - 002_indexes.sql: B-tree, GIN, and partial indexes
+#   - 003_triggers.sql: Triggers, functions, validation
+#   - 004_materialized_views.sql: Dashboard views
+#
+# AWS Account: 377311924364 (Faiston One)
+# =============================================================================
+
+name: Migrate SGA PostgreSQL Schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Migration action'
+        required: true
+        default: 'apply'
+        type: choice
+        options:
+          - apply
+          - verify
+      schema_file:
+        description: 'Specific schema file (leave empty for all)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - '001_initial_schema.sql'
+          - '002_indexes.sql'
+          - '003_triggers.sql'
+          - '004_materialized_views.sql'
+
+env:
+  AWS_REGION: us-east-2
+  LAMBDA_FUNCTION_NAME: faiston-one-prod-sga-schema-migrator
+  S3_BUCKET: faiston-one-prod-sga-documents
+  # MANDATORY: All Lambdas use arm64 + Python 3.13
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  deploy-migrator:
+    name: Deploy Schema Migrator Lambda
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Upload schema files to S3
+        run: |
+          echo "=== Uploading Schema Files to S3 ==="
+          for file in server/agentcore-inventory/schema/*.sql; do
+            filename=$(basename "$file")
+            echo "Uploading $filename..."
+            aws s3 cp "$file" "s3://${{ env.S3_BUCKET }}/schema/$filename"
+          done
+          echo ""
+          echo "=== Files in S3 ==="
+          aws s3 ls "s3://${{ env.S3_BUCKET }}/schema/"
+
+      - name: Build migrator Lambda package
+        run: |
+          echo "=== Building Schema Migrator Lambda ==="
+
+          mkdir -p /tmp/lambda_build
+
+          # Create the migrator handler
+          cat > /tmp/lambda_build/schema_migrator.py << 'HANDLER_EOF'
+          """
+          SGA PostgreSQL Schema Migrator Lambda
+          Runs inside VPC to apply schema changes to Aurora via RDS Proxy.
+          """
+          import os
+          import json
+          import boto3
+          import psycopg
+
+          # Configuration
+          RDS_PROXY_ENDPOINT = os.environ.get("RDS_PROXY_ENDPOINT", "faiston-one-prod-sga-proxy.proxy-cgyciqgqoecv.us-east-2.rds.amazonaws.com")
+          RDS_DATABASE_NAME = os.environ.get("RDS_DATABASE_NAME", "sga_inventory")
+          RDS_PORT = int(os.environ.get("RDS_PORT", "5432"))
+          SECRET_ARN = os.environ.get("RDS_SECRET_ARN", "arn:aws:secretsmanager:us-east-2:377311924364:secret:faiston-one-prod-sga-rds-master-8UYiVQ")
+          AWS_REGION = os.environ.get("AWS_REGION_NAME", "us-east-2")
+          S3_BUCKET = os.environ.get("S3_BUCKET", "faiston-one-prod-sga-documents")
+
+          # Schema files in order
+          SCHEMA_FILES = [
+              "001_initial_schema.sql",
+              "002_indexes.sql",
+              "003_triggers.sql",
+              "004_materialized_views.sql",
+          ]
+
+
+          def get_db_credentials():
+              """Get database credentials from Secrets Manager."""
+              client = boto3.client("secretsmanager", region_name=AWS_REGION)
+              response = client.get_secret_value(SecretId=SECRET_ARN)
+              secret = json.loads(response["SecretString"])
+              return secret["username"], secret["password"]
+
+
+          def get_schema_from_s3(filename: str) -> str:
+              """Download schema file from S3."""
+              s3 = boto3.client("s3", region_name=AWS_REGION)
+              response = s3.get_object(Bucket=S3_BUCKET, Key=f"schema/{filename}")
+              return response["Body"].read().decode("utf-8")
+
+
+          def execute_sql(conn, sql: str, filename: str) -> dict:
+              """Execute SQL and return result."""
+              try:
+                  with conn.cursor() as cur:
+                      cur.execute(sql)
+                  conn.commit()
+                  return {"file": filename, "status": "success"}
+              except Exception as e:
+                  conn.rollback()
+                  error_str = str(e)
+                  # Check for idempotent errors
+                  if "already exists" in error_str.lower() or "duplicate" in error_str.lower():
+                      return {"file": filename, "status": "skipped", "reason": "already exists"}
+                  return {"file": filename, "status": "error", "error": error_str}
+
+
+          def verify_schema(conn) -> dict:
+              """Verify schema was applied correctly."""
+              with conn.cursor() as cur:
+                  # Check schema
+                  cur.execute("SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'sga'")
+                  if not cur.fetchone():
+                      return {"status": "error", "error": "sga schema does not exist"}
+
+                  # Count objects
+                  cur.execute("""
+                      SELECT COUNT(*) FROM information_schema.tables
+                      WHERE table_schema = 'sga' AND table_type = 'BASE TABLE'
+                  """)
+                  table_count = cur.fetchone()[0]
+
+                  cur.execute("SELECT COUNT(*) FROM pg_indexes WHERE schemaname = 'sga'")
+                  index_count = cur.fetchone()[0]
+
+                  cur.execute("SELECT COUNT(*) FROM pg_matviews WHERE schemaname = 'sga'")
+                  mv_count = cur.fetchone()[0]
+
+                  # List tables
+                  cur.execute("""
+                      SELECT table_name FROM information_schema.tables
+                      WHERE table_schema = 'sga' AND table_type = 'BASE TABLE'
+                      ORDER BY table_name
+                  """)
+                  tables = [row[0] for row in cur.fetchall()]
+
+                  return {
+                      "status": "success",
+                      "tables": table_count,
+                      "indexes": index_count,
+                      "materialized_views": mv_count,
+                      "table_list": tables
+                  }
+
+
+          def handler(event, context):
+              """Lambda handler for schema migration."""
+              action = event.get("action", "verify")
+              specific_file = event.get("schema_file", "")
+
+              print(f"Action: {action}")
+              print(f"Specific file: {specific_file}")
+
+              # Get credentials
+              username, password = get_db_credentials()
+              print(f"Username: {username}")
+
+              # Connect to database
+              conn_string = f"host={RDS_PROXY_ENDPOINT} port={RDS_PORT} dbname={RDS_DATABASE_NAME} user={username} password={password} sslmode=require"
+
+              try:
+                  with psycopg.connect(conn_string) as conn:
+                      print("Connected to database")
+
+                      if action == "verify":
+                          result = verify_schema(conn)
+                          return {"action": "verify", "result": result}
+
+                      elif action == "apply":
+                          # Determine files to apply
+                          if specific_file:
+                              files = [specific_file]
+                          else:
+                              files = SCHEMA_FILES
+
+                          results = []
+                          for filename in files:
+                              print(f"Applying {filename}...")
+                              try:
+                                  sql = get_schema_from_s3(filename)
+                                  result = execute_sql(conn, sql, filename)
+                                  results.append(result)
+                                  print(f"  Result: {result['status']}")
+                              except Exception as e:
+                                  results.append({"file": filename, "status": "error", "error": str(e)})
+
+                          # Verify after apply
+                          verification = verify_schema(conn)
+
+                          return {
+                              "action": "apply",
+                              "files_processed": results,
+                              "verification": verification
+                          }
+
+                      else:
+                          return {"error": f"Unknown action: {action}"}
+
+              except Exception as e:
+                  return {"error": f"Connection error: {str(e)}"}
+          HANDLER_EOF
+
+          # Install psycopg for arm64
+          pip install \
+            --platform manylinux2014_aarch64 \
+            --target /tmp/lambda_build \
+            --implementation cp \
+            --python-version 3.13 \
+            --only-binary=:all: \
+            --upgrade \
+            "psycopg[binary]>=3.1.0"
+
+          # Create ZIP
+          cd /tmp/lambda_build
+          zip -r /tmp/migrator_package.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
+
+          echo ""
+          echo "=== Package Size ==="
+          ls -lh /tmp/migrator_package.zip
+
+      - name: Check if Lambda exists
+        id: check_lambda
+        continue-on-error: true
+        run: |
+          aws lambda get-function --function-name ${{ env.LAMBDA_FUNCTION_NAME }} > /dev/null 2>&1
+          echo "exists=true" >> $GITHUB_OUTPUT
+
+      - name: Deploy migrator Lambda
+        run: |
+          if [ "${{ steps.check_lambda.outputs.exists }}" == "true" ]; then
+            echo "Updating existing Lambda..."
+            aws lambda update-function-code \
+              --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+              --zip-file fileb:///tmp/migrator_package.zip \
+              --publish
+
+            aws lambda wait function-updated --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+          else
+            echo "Lambda does not exist - it will be created by Terraform"
+            echo "Please run Terraform first to create the Lambda infrastructure"
+            exit 1
+          fi
+
+  migrate:
+    name: Run Schema Migration
+    runs-on: ubuntu-latest
+    needs: deploy-migrator
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run migration via Lambda
+        run: |
+          echo "=== Running Schema Migration ==="
+
+          # Build payload
+          PAYLOAD=$(cat << EOF
+          {
+            "action": "${{ github.event.inputs.action }}",
+            "schema_file": "${{ github.event.inputs.schema_file }}"
+          }
+          EOF
+          )
+
+          echo "Payload: $PAYLOAD"
+          echo "$PAYLOAD" > /tmp/payload.json
+
+          # Invoke Lambda
+          aws lambda invoke \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --cli-binary-format raw-in-base64-out \
+            --payload file:///tmp/payload.json \
+            --log-type Tail \
+            /tmp/response.json
+
+          echo ""
+          echo "=== Response ==="
+          cat /tmp/response.json | jq '.'
+
+          # Check for errors
+          if cat /tmp/response.json | jq -e '.error' > /dev/null 2>&1; then
+            echo "ERROR: Migration failed"
+            exit 1
+          fi
+
+      - name: Migration Summary
+        run: |
+          echo "## SGA Schema Migration Complete :database:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | \`${{ github.event.inputs.action }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Schema File | \`${{ github.event.inputs.schema_file || 'all' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Database | \`sga_inventory\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Response:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+          cat /tmp/response.json >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
