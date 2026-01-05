@@ -104,7 +104,7 @@ jobs:
           RDS_PORT = int(os.environ.get("RDS_PORT", "5432"))
           SECRET_ARN = os.environ.get("RDS_SECRET_ARN", "arn:aws:secretsmanager:us-east-2:377311924364:secret:faiston-one-prod-sga-rds-master-8UYiVQ")
           AWS_REGION = os.environ.get("AWS_REGION_NAME", "us-east-2")
-          S3_BUCKET = os.environ.get("S3_BUCKET", "faiston-one-prod-sga-documents")
+          S3_BUCKET = os.environ.get("S3_BUCKET", "faiston-one-sga-documents-prod")
 
           # Schema files in order
           SCHEMA_FILES = [
@@ -130,20 +130,90 @@ jobs:
               return response["Body"].read().decode("utf-8")
 
 
+          def split_sql_statements(sql: str) -> list:
+              """Split SQL into individual statements, handling $$ blocks."""
+              statements = []
+              current = []
+              in_dollar_block = False
+
+              lines = sql.split('\n')
+              for line in lines:
+                  stripped = line.strip()
+                  # Skip empty lines and comments
+                  if not stripped or stripped.startswith('--'):
+                      current.append(line)
+                      continue
+
+                  # Track $$ blocks (functions, triggers)
+                  if '$$' in stripped:
+                      in_dollar_block = not in_dollar_block
+
+                  current.append(line)
+
+                  # If we're not in a $$ block and line ends with semicolon
+                  if not in_dollar_block and stripped.endswith(';'):
+                      stmt = '\n'.join(current).strip()
+                      if stmt and not stmt.startswith('--'):
+                          statements.append(stmt)
+                      current = []
+
+              # Add any remaining content
+              if current:
+                  stmt = '\n'.join(current).strip()
+                  if stmt and not stmt.startswith('--'):
+                      statements.append(stmt)
+
+              return statements
+
+
           def execute_sql(conn, sql: str, filename: str) -> dict:
-              """Execute SQL and return result."""
-              try:
-                  with conn.cursor() as cur:
-                      cur.execute(sql)
-                  conn.commit()
-                  return {"file": filename, "status": "success"}
-              except Exception as e:
-                  conn.rollback()
-                  error_str = str(e)
-                  # Check for idempotent errors
-                  if "already exists" in error_str.lower() or "duplicate" in error_str.lower():
-                      return {"file": filename, "status": "skipped", "reason": "already exists"}
-                  return {"file": filename, "status": "error", "error": error_str}
+              """Execute SQL statements one by one to avoid timeout."""
+              statements = split_sql_statements(sql)
+              executed = 0
+              skipped = 0
+              errors = []
+
+              print(f"  Found {len(statements)} statements to execute")
+
+              for i, stmt in enumerate(statements):
+                  if not stmt.strip():
+                      continue
+
+                  # Get first 50 chars for logging
+                  preview = stmt[:50].replace('\n', ' ')
+                  print(f"  [{i+1}/{len(statements)}] {preview}...")
+
+                  try:
+                      with conn.cursor() as cur:
+                          cur.execute(stmt)
+                      conn.commit()
+                      executed += 1
+                  except Exception as e:
+                      conn.rollback()
+                      error_str = str(e)
+                      # Check for idempotent errors
+                      if "already exists" in error_str.lower() or "duplicate" in error_str.lower():
+                          skipped += 1
+                          print(f"    Skipped (already exists)")
+                      else:
+                          errors.append(f"Statement {i+1}: {error_str[:100]}")
+                          print(f"    ERROR: {error_str[:100]}")
+
+              result = {
+                  "file": filename,
+                  "statements": len(statements),
+                  "executed": executed,
+                  "skipped": skipped,
+                  "errors": len(errors)
+              }
+
+              if errors:
+                  result["status"] = "partial"
+                  result["error_details"] = errors[:5]  # Limit error details
+              else:
+                  result["status"] = "success"
+
+              return result
 
 
           def verify_schema(conn) -> dict:
@@ -311,10 +381,11 @@ jobs:
           echo "Payload: $PAYLOAD"
           echo "$PAYLOAD" > /tmp/payload.json
 
-          # Invoke Lambda
+          # Invoke Lambda with 5-minute timeout (schema migration is slow)
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
             --cli-binary-format raw-in-base64-out \
+            --cli-read-timeout 300 \
             --payload file:///tmp/payload.json \
             --log-type Tail \
             /tmp/response.json
