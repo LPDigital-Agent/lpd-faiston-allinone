@@ -1,0 +1,233 @@
+# =============================================================================
+# SGA PostgreSQL Tools Lambda Deployment
+# =============================================================================
+# Deploys the MCP tools Lambda that bridges AgentCore Gateway to PostgreSQL.
+#
+# Architecture:
+#   AgentCore Gateway -> Lambda (this) -> RDS Proxy -> Aurora PostgreSQL
+#
+# Tools deployed (8):
+#   - sga_list_inventory, sga_get_balance, sga_search_assets
+#   - sga_get_asset_timeline, sga_get_movements, sga_get_pending_tasks
+#   - sga_create_movement, sga_reconcile_sap
+#
+# AWS Account: 377311924364 (Faiston One)
+# =============================================================================
+
+name: Deploy SGA PostgreSQL Lambda
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/agentcore-inventory/tools/postgres_tools_lambda.py'
+      - 'server/agentcore-inventory/tools/postgres_client.py'
+      - '.github/workflows/deploy-sga-postgres-lambda.yml'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Deployment action'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - status
+
+env:
+  AWS_REGION: us-east-2
+  LAMBDA_FUNCTION_NAME: faiston-one-prod-sga-postgres-tools
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  deploy:
+    name: Build and Deploy Lambda
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action != 'status' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build deployment package
+        run: |
+          echo "=== Building Lambda Deployment Package ==="
+
+          # Create build directory
+          mkdir -p /tmp/lambda_build
+
+          # Copy Lambda handler and client
+          cp server/agentcore-inventory/tools/postgres_tools_lambda.py /tmp/lambda_build/
+          cp server/agentcore-inventory/tools/postgres_client.py /tmp/lambda_build/
+
+          # Install psycopg[binary] with manylinux wheels for Lambda
+          pip install \
+            --platform manylinux2014_x86_64 \
+            --target /tmp/lambda_build \
+            --implementation cp \
+            --python-version 3.12 \
+            --only-binary=:all: \
+            --upgrade \
+            "psycopg[binary]>=3.1.0"
+
+          # Create ZIP package
+          cd /tmp/lambda_build
+          zip -r /tmp/lambda_package.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
+
+          echo ""
+          echo "=== Package Contents ==="
+          unzip -l /tmp/lambda_package.zip | head -30
+
+          echo ""
+          echo "=== Package Size ==="
+          ls -lh /tmp/lambda_package.zip
+
+      - name: Deploy to Lambda
+        run: |
+          echo "=== Deploying to Lambda ==="
+
+          # Update Lambda function code
+          aws lambda update-function-code \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --zip-file fileb:///tmp/lambda_package.zip \
+            --publish
+
+          echo ""
+          echo "=== Waiting for update to complete ==="
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+
+          echo ""
+          echo "=== Lambda Configuration ==="
+          aws lambda get-function-configuration \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --query '{Version: Version, Runtime: Runtime, Handler: Handler, MemorySize: MemorySize, Timeout: Timeout, LastModified: LastModified}' \
+            --output table
+
+      - name: Update Lambda handler
+        run: |
+          echo "=== Updating Lambda Handler ==="
+
+          # Update handler to point to our module
+          aws lambda update-function-configuration \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --handler postgres_tools_lambda.handler
+
+          aws lambda wait function-updated \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }}
+
+          echo "Handler updated to: postgres_tools_lambda.handler"
+
+      - name: Test Lambda invocation
+        continue-on-error: true
+        run: |
+          echo "=== Testing Lambda Invocation ==="
+
+          # Test with tools/list style payload
+          echo '{"name": "SGAPostgresTools___sga_get_balance", "arguments": {"part_number": "TEST-001"}}' > /tmp/test_event.json
+
+          aws lambda invoke \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --cli-binary-format raw-in-base64-out \
+            --payload file:///tmp/test_event.json \
+            /tmp/response.json
+
+          echo ""
+          echo "=== Response ==="
+          cat /tmp/response.json | jq '.'
+
+      - name: Deployment Summary
+        run: |
+          echo "## SGA PostgreSQL Lambda Deployed! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Lambda Name | \`${{ env.LAMBDA_FUNCTION_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Handler | \`postgres_tools_lambda.handler\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Runtime | Python 3.12 |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**MCP Tools Deployed (8):**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_list_inventory\` - List assets with filters" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_get_balance\` - Get stock balance" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_search_assets\` - Search by serial/PN/description" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_get_asset_timeline\` - Asset event history" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_get_movements\` - Movement list" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_get_pending_tasks\` - HIL approval tasks" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_create_movement\` - Create movement" >> $GITHUB_STEP_SUMMARY
+          echo "- \`sga_reconcile_sap\` - SAP comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Gateway Integration:**" >> $GITHUB_STEP_SUMMARY
+          echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Gateway ID | \`faiston-one-sga-gateway-prod-qbnlm3ao63\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target Name | \`SGAPostgresTools\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target ID | \`SKVZZNCDKE\` |" >> $GITHUB_STEP_SUMMARY
+
+  status:
+    name: Check Lambda Status
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'status' }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check Lambda status
+        run: |
+          echo "=== Lambda Function Status ==="
+          aws lambda get-function \
+            --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \
+            --query '{
+              State: Configuration.State,
+              LastModified: Configuration.LastModified,
+              Runtime: Configuration.Runtime,
+              Handler: Configuration.Handler,
+              MemorySize: Configuration.MemorySize,
+              Timeout: Configuration.Timeout,
+              CodeSize: Configuration.CodeSize
+            }' \
+            --output table
+
+      - name: Check recent logs
+        run: |
+          echo "=== Recent CloudWatch Logs ==="
+          LOG_GROUP="/aws/lambda/${{ env.LAMBDA_FUNCTION_NAME }}"
+
+          # Get most recent log stream
+          STREAM=$(aws logs describe-log-streams \
+            --log-group-name "$LOG_GROUP" \
+            --order-by LastEventTime \
+            --descending \
+            --limit 1 \
+            --query 'logStreams[0].logStreamName' \
+            --output text 2>/dev/null || echo "NONE")
+
+          if [ "$STREAM" != "NONE" ] && [ -n "$STREAM" ]; then
+            echo "Log stream: $STREAM"
+            aws logs get-log-events \
+              --log-group-name "$LOG_GROUP" \
+              --log-stream-name "$STREAM" \
+              --limit 20 \
+              --query 'events[].message' \
+              --output text
+          else
+            echo "No log streams found"
+          fi
