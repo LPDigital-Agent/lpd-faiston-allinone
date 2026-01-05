@@ -57,6 +57,21 @@ resource "aws_vpc_security_group_egress_rule" "sga_lambda_to_endpoints" {
   ip_protocol                  = "tcp"
 }
 
+# Egress: Lambda → S3 (via Gateway Endpoint prefix list)
+# NOTE: S3 Gateway Endpoint uses prefix list, requires HTTPS egress
+data "aws_prefix_list" "s3" {
+  name = "com.amazonaws.${var.aws_region}.s3"
+}
+
+resource "aws_vpc_security_group_egress_rule" "sga_lambda_to_s3" {
+  security_group_id = aws_security_group.sga_lambda.id
+  description       = "Allow Lambda to access S3 via Gateway Endpoint"
+  prefix_list_id    = data.aws_prefix_list.s3.id
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
+}
+
 # =============================================================================
 # RDS Proxy Security Group
 # =============================================================================
