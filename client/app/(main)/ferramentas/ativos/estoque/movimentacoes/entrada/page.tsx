@@ -3,11 +3,15 @@
 // =============================================================================
 // Entrada de Materiais Page - SGA Inventory Module
 // =============================================================================
-// Unified material entry page with multiple input sources:
-// - NF-e (XML/PDF) - Electronic invoice processing
-// - Foto/Imagem (JPEG/PNG) - OCR via Gemini Vision
-// - SAP Export (CSV/XLSX) - Full asset import from ERP
-// - Manual - Direct entry without source file
+// REDESIGNED: Smart Universal File Importer with 2 tabs:
+// - Upload Inteligente: Auto-detects and processes ALL file types
+//   (XML, PDF, CSV, XLSX, JPG, PNG, TXT) via AI agents
+// - Manual: Direct entry without source file
+//
+// Architecture: SmartUploadZone → useSmartImporter → Backend Agent Routing
+// - XML/PDF/Image → IntakeAgent (NF-e extraction)
+// - CSV/XLSX → ImportAgent (spreadsheet mapping)
+// - TXT → ImportAgent + Gemini AI (intelligent text extraction)
 // =============================================================================
 
 import { useState } from 'react';
@@ -17,9 +21,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import {
   ArrowLeft,
-  FileText,
-  Camera,
-  FileSpreadsheet,
+  Upload,
   PenLine,
   X,
   FolderPlus,
@@ -28,18 +30,16 @@ import {
   Briefcase,
 } from 'lucide-react';
 import {
-  useNFReader,
   useAssetManagement,
-  useSAPImport,
   useManualEntry,
+  useSmartImporter,
   type ManualEntryRequest,
 } from '@/hooks/ativos';
 
-// Tab Components
+// Smart Import Components (NEW)
 import {
-  EntradaNFTab,
-  EntradaImagemTab,
-  EntradaSAPTab,
+  SmartUploadZone,
+  SmartPreview,
   EntradaManualTab,
   PendingEntriesList,
 } from './components';
@@ -48,55 +48,32 @@ import {
 // Tab Types
 // =============================================================================
 
-type EntradaTab = 'nfe' | 'image' | 'sap' | 'manual';
+type EntradaTab = 'smart' | 'manual';
 
 // =============================================================================
 // Page Component
 // =============================================================================
 
 export default function EntradaPage() {
-  const [activeTab, setActiveTab] = useState<EntradaTab>('nfe');
+  const [activeTab, setActiveTab] = useState<EntradaTab>('smart');
 
-  // NF-e Reader Hook (used for NF-e and Image tabs)
+  // Smart Importer Hook (NEW - unified for all file types)
   const {
-    isUploading,
-    uploadProgress,
-    uploadError,
-    extraction,
-    suggestedMappings,
-    confidenceScore,
-    entryId,
-    requiresReview,
-    requiresProject,
+    detectedType,
+    isProcessing: smartProcessing,
+    progress: smartProgress,
+    error: smartError,
+    preview: smartPreview,
+    uploadAndProcess,
+    clearPreview: clearSmartPreview,
+    confirmEntry: confirmSmartEntry,
     pendingEntries,
     pendingEntriesLoading,
-    uploadNF,
-    confirmEntry,
     assignProject,
-    clearExtraction,
-    mappings,
-    updateMapping,
-  } = useNFReader();
+  } = useSmartImporter();
 
   // Asset Management Hook for master data
   const { projects, locations, partNumbers } = useAssetManagement();
-
-  // Project Assignment Modal state
-  const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const [projectModalEntryId, setProjectModalEntryId] = useState<string | null>(null);
-  const [projectModalProject, setProjectModalProject] = useState('');
-  const [isAssigningProject, setIsAssigningProject] = useState(false);
-
-  // SAP Import Hook (real implementation - no more mock data!)
-  const {
-    isProcessing: sapProcessing,
-    progress: sapProgress,
-    error: sapError,
-    preview: sapPreview,
-    uploadAndPreview,
-    executeImport,
-    clearPreview: clearSapPreview,
-  } = useSAPImport();
 
   // Manual Entry Hook (real implementation)
   const {
@@ -104,6 +81,12 @@ export default function EntradaPage() {
     error: manualError,
     submitEntry,
   } = useManualEntry();
+
+  // Project Assignment Modal state
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [projectModalEntryId, setProjectModalEntryId] = useState<string | null>(null);
+  const [projectModalProject, setProjectModalProject] = useState('');
+  const [isAssigningProject, setIsAssigningProject] = useState(false);
 
   // Handle opening project assignment modal
   const openProjectModal = (entryId: string) => {
@@ -129,32 +112,14 @@ export default function EntradaPage() {
     }
   };
 
-  // Handle NF-e upload
-  const handleNFUpload = async (file: File, projectId: string | null, locationId: string) => {
-    await uploadNF(file, projectId, locationId);
+  // Handle Smart Upload (unified for ALL file types)
+  const handleSmartUpload = async (file: File, projectId: string | null, locationId: string) => {
+    await uploadAndProcess(file, projectId, locationId);
   };
 
-  // Handle NF-e confirm
-  const handleNFConfirm = async () => {
-    if (!entryId) return;
-    await confirmEntry(entryId, mappings);
-  };
-
-  // Handle Image upload (uses same backend as NF-e for now)
-  const handleImageUpload = async (file: File, projectId: string | null, locationId: string) => {
-    // For now, use the same NF upload - backend will detect image type
-    // TODO: Replace with dedicated useImageOCR hook
-    await uploadNF(file, projectId, locationId);
-  };
-
-  // Handle SAP preview (real implementation using useSAPImport hook)
-  const handleSAPPreview = async (file: File, projectId?: string, locationId?: string) => {
-    await uploadAndPreview(file, projectId, locationId);
-  };
-
-  // Handle SAP execute (real implementation using useSAPImport hook)
-  const handleSAPExecute = async () => {
-    await executeImport();
+  // Handle Smart Confirm
+  const handleSmartConfirm = async () => {
+    await confirmSmartEntry();
   };
 
   // Handle Manual submit (real implementation using useManualEntry hook)
@@ -179,102 +144,52 @@ export default function EntradaPage() {
             Entrada de Materiais
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Internalizacao via NF, imagem, SAP ou entrada manual
+            Upload inteligente ou entrada manual
           </p>
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* NEW: 2 Tabs Only (Smart Upload + Manual) */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as EntradaTab)}>
-        <TabsList className="w-full grid grid-cols-4 bg-white/5 p-1 rounded-lg">
+        <TabsList className="w-full grid grid-cols-2 bg-white/5 p-1 rounded-lg">
           <TabsTrigger
-            value="nfe"
-            className="flex items-center gap-2 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400"
+            value="smart"
+            className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-mid/20 data-[state=active]:to-magenta-mid/20 data-[state=active]:text-blue-light"
           >
-            <FileText className="w-4 h-4" />
-            <span className="hidden sm:inline">NF</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="image"
-            className="flex items-center gap-2 data-[state=active]:bg-magenta-mid/20 data-[state=active]:text-magenta-mid"
-          >
-            <Camera className="w-4 h-4" />
-            <span className="hidden sm:inline">Foto/Imagem</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="sap"
-            className="flex items-center gap-2 data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            <span className="hidden sm:inline">SAP Export</span>
+            <Upload className="w-4 h-4" />
+            <span>Upload Inteligente</span>
           </TabsTrigger>
           <TabsTrigger
             value="manual"
             className="flex items-center gap-2 data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400"
           >
             <PenLine className="w-4 h-4" />
-            <span className="hidden sm:inline">Manual</span>
+            <span>Manual</span>
           </TabsTrigger>
         </TabsList>
 
-        {/* NF-e Tab Content */}
-        <TabsContent value="nfe" className="mt-6">
-          <EntradaNFTab
-            isUploading={isUploading}
-            uploadProgress={uploadProgress}
-            uploadError={uploadError}
-            extraction={extraction}
-            confidenceScore={confidenceScore}
-            entryId={entryId}
-            requiresReview={requiresReview}
-            requiresProject={requiresProject}
-            projects={projects}
-            locations={locations}
-            onUpload={handleNFUpload}
-            onConfirm={handleNFConfirm}
-            onClear={clearExtraction}
-            onAssignProject={openProjectModal}
-            mappings={mappings}
-            updateMapping={updateMapping}
-          />
+        {/* Smart Upload Tab Content */}
+        <TabsContent value="smart" className="mt-6">
+          {!smartPreview ? (
+            <SmartUploadZone
+              onFileSelect={handleSmartUpload}
+              isProcessing={smartProcessing}
+              progress={smartProgress}
+              error={smartError}
+              detectedType={detectedType}
+              projects={projects}
+              locations={locations}
+            />
+          ) : (
+            <SmartPreview
+              preview={smartPreview}
+              onConfirm={handleSmartConfirm}
+              onCancel={clearSmartPreview}
+            />
+          )}
         </TabsContent>
 
-        {/* Image Tab Content */}
-        <TabsContent value="image" className="mt-6">
-          <EntradaImagemTab
-            isUploading={isUploading}
-            uploadProgress={uploadProgress}
-            uploadError={uploadError}
-            extraction={extraction}
-            confidenceScore={confidenceScore}
-            entryId={entryId}
-            requiresReview={requiresReview}
-            requiresProject={requiresProject}
-            projects={projects}
-            locations={locations}
-            onUpload={handleImageUpload}
-            onConfirm={handleNFConfirm}
-            onClear={clearExtraction}
-            onAssignProject={openProjectModal}
-          />
-        </TabsContent>
-
-        {/* SAP Tab Content */}
-        <TabsContent value="sap" className="mt-6">
-          <EntradaSAPTab
-            isProcessing={sapProcessing}
-            progress={sapProgress}
-            error={sapError}
-            preview={sapPreview}
-            projects={projects}
-            locations={locations}
-            onPreview={handleSAPPreview}
-            onExecute={handleSAPExecute}
-            onClear={clearSapPreview}
-          />
-        </TabsContent>
-
-        {/* Manual Tab Content */}
+        {/* Manual Tab Content (existing component) */}
         <TabsContent value="manual" className="mt-6">
           <EntradaManualTab
             isProcessing={manualProcessing}
@@ -288,8 +203,8 @@ export default function EntradaPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Pending Entries (shown when no extraction in progress) */}
-      {!extraction && pendingEntries.length > 0 && (
+      {/* Pending Entries (shown when no preview in progress) */}
+      {!smartPreview && pendingEntries.length > 0 && (
         <PendingEntriesList
           entries={pendingEntries}
           isLoading={pendingEntriesLoading}

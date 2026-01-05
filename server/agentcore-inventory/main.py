@@ -209,6 +209,12 @@ def invoke(payload: dict, context) -> dict:
             return asyncio.run(_validate_pn_mapping(payload))
 
         # =================================================================
+        # Smart Import (Auto-detect file type)
+        # =================================================================
+        elif action == "smart_import_upload":
+            return asyncio.run(_smart_import_upload(payload, user_id))
+
+        # =================================================================
         # Expedition (ExpeditionAgent)
         # =================================================================
         elif action == "process_expedition_request":
@@ -1391,6 +1397,145 @@ async def _validate_pn_mapping(payload: dict) -> dict:
         description=description,
         suggested_pn_id=suggested_pn_id,
     )
+
+    return result
+
+
+# =============================================================================
+# Smart Import Handler (Auto-detect file type)
+# =============================================================================
+
+
+async def _smart_import_upload(payload: dict, user_id: str) -> dict:
+    """
+    Smart import that auto-detects file type and routes to appropriate agent.
+
+    Philosophy: Observe -> Think -> Learn -> Act
+    1. OBSERVE: Download file from S3, examine raw bytes
+    2. THINK: Detect file type using magic bytes, MIME, extension
+    3. LEARN: Route to appropriate agent based on type
+    4. ACT: Process and return extraction/preview
+
+    Supports: XML, PDF, JPEG, PNG, CSV, XLSX, TXT
+
+    Payload:
+        s3_key: S3 key of uploaded file
+        filename: Original filename
+        content_type: Optional MIME type from upload
+        project_id: Optional project context
+        destination_location_id: Required destination location
+
+    Returns:
+        Processing result with source_type, extraction/preview, and confidence
+    """
+    import base64
+
+    s3_key = payload.get("s3_key", "")
+    filename = payload.get("filename", "")
+    content_type = payload.get("content_type", "")
+    project_id = payload.get("project_id")
+    destination_location_id = payload.get("destination_location_id", "ESTOQUE_CENTRAL")
+
+    if not s3_key:
+        return {"success": False, "error": "s3_key is required"}
+
+    if not filename:
+        return {"success": False, "error": "filename is required"}
+
+    # OBSERVE: Download file from S3
+    from tools.s3_client import SGAS3Client
+
+    s3_client = SGAS3Client()
+    try:
+        file_data = s3_client.download_file(s3_key)
+    except Exception as e:
+        return {"success": False, "error": f"Failed to download file from S3: {e}"}
+
+    # THINK: Detect file type using magic bytes
+    from tools.file_detector import detect_file_type, get_file_type_label
+
+    file_type = detect_file_type(filename, content_type, file_data)
+
+    if file_type == "unknown":
+        return {
+            "success": False,
+            "error": f"Formato de arquivo nao suportado: {filename}",
+            "detected_type": "unknown",
+            "supported_formats": ["xml", "pdf", "jpg", "jpeg", "png", "csv", "xlsx", "txt"],
+        }
+
+    # LEARN + ACT: Route to appropriate agent based on file type
+    result = None
+
+    if file_type in ["xml", "pdf", "image"]:
+        # Route to IntakeAgent for NF-e processing
+        from agents.intake_agent import IntakeAgent
+
+        agent = IntakeAgent()
+        result = await agent.process_nf_upload(
+            s3_key=s3_key,
+            file_type="pdf" if file_type == "image" else file_type,  # images use vision like PDFs
+            project_id=project_id,
+            destination_location_id=destination_location_id,
+            uploaded_by=user_id,
+        )
+
+        # Convert to dict if needed
+        if hasattr(result, "to_dict"):
+            result = result.to_dict()
+
+        # Add smart import metadata
+        result["source_type"] = f"nf_{file_type}"
+        result["detected_file_type"] = file_type
+        result["file_type_label"] = get_file_type_label(file_type)
+
+    elif file_type in ["csv", "xlsx"]:
+        # Route to ImportAgent for spreadsheet processing
+        from agents.import_agent import create_import_agent
+
+        agent = create_import_agent()
+        result = await agent.preview_import(
+            file_content=file_data,
+            filename=filename,
+            project_id=project_id,
+            destination_location_id=destination_location_id,
+        )
+
+        # Add smart import metadata
+        result["source_type"] = "spreadsheet"
+        result["detected_file_type"] = file_type
+        result["file_type_label"] = get_file_type_label(file_type)
+
+    elif file_type == "txt":
+        # Route to ImportAgent for text processing with Gemini AI
+        from agents.import_agent import create_import_agent
+
+        agent = create_import_agent()
+
+        # Decode text content
+        try:
+            text_content = file_data.decode("utf-8")
+        except UnicodeDecodeError:
+            text_content = file_data.decode("latin-1")
+
+        result = await agent.process_text_import(
+            file_content=text_content,
+            filename=filename,
+            project_id=project_id,
+            destination_location_id=destination_location_id,
+        )
+
+        # Add smart import metadata
+        result["source_type"] = "text"
+        result["detected_file_type"] = file_type
+        result["file_type_label"] = get_file_type_label(file_type)
+        result["requires_hil"] = True  # Text imports always require review
+
+    # Add common fields
+    if result:
+        result["smart_import"] = True
+        result["filename"] = filename
+        result["s3_key"] = s3_key
 
     return result
 

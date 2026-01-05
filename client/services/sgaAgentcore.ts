@@ -20,6 +20,10 @@
 import { getAcademyCognitoToken } from './academyCognito';
 import { SGA_STORAGE_KEYS } from '@/lib/ativos/constants';
 import type {
+  SmartImportUploadRequest,
+  SmartImportUploadResponse,
+} from '@/lib/ativos/smartImportTypes';
+import type {
   SGASearchAssetsRequest,
   SGASearchAssetsResponse,
   SGAGetBalanceRequest,
@@ -1131,5 +1135,43 @@ export async function createManualEntry(
   return invokeSGAAgentCore<ManualEntryResponse>({
     action: 'create_manual_entry',
     ...params,
+  });
+}
+
+// =============================================================================
+// Smart Import (Universal File Importer)
+// =============================================================================
+
+/**
+ * Smart import that auto-detects file type and routes to appropriate agent.
+ *
+ * Philosophy: Observe -> Think -> Learn -> Act
+ * - OBSERVE: Downloads file from S3 and examines magic bytes
+ * - THINK: Determines file type (XML, PDF, Image, CSV, XLSX, TXT)
+ * - LEARN: Routes to appropriate agent based on type
+ * - ACT: Returns preview with extraction results
+ *
+ * Supported file types:
+ * - XML/PDF/Image -> IntakeAgent (NF-e processing)
+ * - CSV/XLSX -> ImportAgent (spreadsheet processing)
+ * - TXT -> ImportAgent (Gemini AI text interpretation)
+ *
+ * @param params.s3_key - S3 key of uploaded file
+ * @param params.filename - Original filename with extension
+ * @param params.content_type - Optional MIME type from upload
+ * @param params.project_id - Optional project ID for entry
+ * @param params.destination_location_id - Required destination location
+ * @returns Preview with detected type and extraction results
+ */
+export async function invokeSmartImport(
+  params: SmartImportUploadRequest
+): Promise<AgentCoreResponse<SmartImportUploadResponse>> {
+  return invokeSGAAgentCore<SmartImportUploadResponse>({
+    action: 'smart_import_upload',
+    s3_key: params.s3_key,
+    filename: params.filename,
+    content_type: params.content_type,
+    project_id: params.project_id,
+    destination_location_id: params.destination_location_id,
   });
 }

@@ -73,6 +73,27 @@ export type {
   UseManualEntryReturn,
 } from './useManualEntry';
 
+// Smart Import hook (Universal File Importer)
+export {
+  useSmartImporter,
+  detectFileTypeFromFile,
+  validateSmartImportFile,
+  requiresHILReview,
+  isNFImportResult,
+  isSpreadsheetImportResult,
+  isTextImportResult,
+  getFileTypeLabel,
+  SMART_IMPORT_FORMATS,
+} from './useSmartImporter';
+export type {
+  SmartFileType,
+  SmartSourceType,
+  SmartImportPreview,
+  SmartImportProgress,
+  UseSmartImporterReturn,
+  SmartImportUploadResponse,
+} from './useSmartImporter';
+
 // Context-based hooks (re-exported from contexts for convenience)
 export {
   useAssetManagement,

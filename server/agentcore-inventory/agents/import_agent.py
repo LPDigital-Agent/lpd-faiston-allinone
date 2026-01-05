@@ -462,6 +462,164 @@ class ImportAgent(BaseInventoryAgent):
                 "error": str(e),
             }
 
+    async def process_text_import(
+        self,
+        file_content: str,
+        filename: str,
+        project_id: Optional[str] = None,
+        destination_location_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Process unstructured text files using Gemini AI.
+
+        The AI extracts inventory data from the text intelligently.
+        This is for files like .txt, .md, or any unstructured text.
+
+        Philosophy: Observe -> Think -> Learn -> Act
+        - OBSERVE: Read the unstructured text
+        - THINK: Use Gemini AI to identify inventory patterns
+        - LEARN: Extract structured data with confidence scoring
+        - ACT: Return extraction for HIL review (always required for text)
+
+        Args:
+            file_content: Text content of the file
+            filename: Original filename
+            project_id: Optional project context
+            destination_location_id: Target location
+
+        Returns:
+            Extraction result with items, confidence, and notes
+        """
+        log_agent_action(self.name, "process_text_import", {"filename": filename})
+
+        try:
+            from google import genai
+            from google.genai import types
+
+            # Limit content to avoid token overflow
+            content_preview = file_content[:5000]
+            truncated = len(file_content) > 5000
+
+            prompt = f"""Analise o seguinte texto e extraia informacoes de inventario/estoque.
+
+TEXTO:
+{content_preview}
+
+{"[NOTA: Texto truncado, mostrando primeiros 5000 caracteres]" if truncated else ""}
+
+INSTRUCOES:
+1. Identifique TODOS os itens de inventario mencionados no texto
+2. Para cada item, extraia:
+   - part_number: Codigo da peca (se identificavel)
+   - quantity: Quantidade (se mencionada, senao 1)
+   - description: Descricao do item
+   - serial: Numero de serie (se houver)
+   - unit_value: Valor unitario (se mencionado)
+
+3. Avalie a qualidade da extracao:
+   - confidence: 0.0-1.0 indicando confianca na extracao
+   - notes: Observacoes sobre a qualidade ou dificuldades
+
+Responda APENAS com JSON valido:
+{{
+  "items": [
+    {{
+      "part_number": "string ou null",
+      "quantity": numero,
+      "description": "string",
+      "serial": "string ou null",
+      "unit_value": numero ou null
+    }}
+  ],
+  "confidence": 0.0-1.0,
+  "notes": "observacoes sobre a qualidade da extracao",
+  "detected_format": "descricao do formato do texto (lista, tabela, paragrafo, etc)"
+}}
+"""
+
+            client = genai.Client()
+
+            response = client.models.generate_content(
+                model="gemini-3-pro-preview",
+                contents=[types.Part.from_text(prompt)],
+                config=types.GenerateContentConfig(
+                    temperature=0.2,  # Lower for more deterministic extraction
+                    max_output_tokens=4096,
+                ),
+            )
+
+            # Parse AI response
+            extraction = parse_json_safe(response.text)
+
+            if not extraction:
+                # Try to extract JSON from response
+                extraction = extract_json(response.text)
+
+            if not extraction:
+                return {
+                    "success": False,
+                    "error": "Nao foi possivel extrair dados estruturados do texto",
+                    "raw_response": response.text[:500],
+                    "source_type": "text",
+                    "filename": filename,
+                    "requires_hil": True,
+                }
+
+            # Ensure required fields
+            items = extraction.get("items", [])
+            confidence = extraction.get("confidence", 0.5)
+            notes = extraction.get("notes", "")
+            detected_format = extraction.get("detected_format", "unknown")
+
+            # Calculate overall stats
+            total_quantity = sum(
+                item.get("quantity", 1) for item in items
+                if isinstance(item.get("quantity"), (int, float))
+            )
+
+            # Text imports ALWAYS require HIL review
+            requires_hil = True
+
+            return {
+                "success": True,
+                "source_type": "text",
+                "filename": filename,
+                "items": items,
+                "item_count": len(items),
+                "total_quantity": total_quantity,
+                "confidence": confidence,
+                "confidence_score": {
+                    "overall": confidence,
+                    "factors": [
+                        "Extracao AI de texto nao estruturado",
+                        f"Formato detectado: {detected_format}",
+                        f"{len(items)} itens identificados",
+                        "Truncado" if truncated else "Texto completo analisado",
+                    ],
+                },
+                "notes": notes,
+                "detected_format": detected_format,
+                "text_preview": content_preview[:500] + ("..." if len(content_preview) > 500 else ""),
+                "requires_hil": requires_hil,
+                "message": (
+                    f"Extraidos {len(items)} itens do texto com confianca de {confidence*100:.0f}%. "
+                    f"Revisao manual obrigatoria."
+                ),
+                "project_id": project_id,
+                "destination_location_id": destination_location_id,
+            }
+
+        except Exception as e:
+            log_agent_action(self.name, "process_text_import_error", {"error": str(e)})
+            return {
+                "success": False,
+                "error": str(e),
+                "message": f"Erro ao processar texto: {e}",
+                "source_type": "text",
+                "filename": filename,
+                "requires_hil": True,
+            }
+
     # =========================================================================
     # Private Helpers
     # =========================================================================
