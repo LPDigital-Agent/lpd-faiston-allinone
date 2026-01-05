@@ -38,7 +38,8 @@ on:
 env:
   AWS_REGION: us-east-2
   LAMBDA_FUNCTION_NAME: faiston-one-prod-sga-postgres-tools
-  PYTHON_VERSION: '3.12'
+  # MANDATORY: All Lambdas use arm64 + Python 3.13
+  PYTHON_VERSION: '3.13'
 
 jobs:
   deploy:
@@ -73,12 +74,13 @@ jobs:
           cp server/agentcore-inventory/tools/postgres_tools_lambda.py /tmp/lambda_build/
           cp server/agentcore-inventory/tools/postgres_client.py /tmp/lambda_build/
 
-          # Install psycopg[binary] with manylinux wheels for Lambda
+          # Install psycopg[binary] with manylinux wheels for Lambda arm64
+          # MANDATORY: All Lambdas use arm64 + Python 3.13
           pip install \
-            --platform manylinux2014_x86_64 \
+            --platform manylinux2014_aarch64 \
             --target /tmp/lambda_build \
             --implementation cp \
-            --python-version 3.12 \
+            --python-version 3.13 \
             --only-binary=:all: \
             --upgrade \
             "psycopg[binary]>=3.1.0"

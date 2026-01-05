@@ -132,7 +132,9 @@ resource "aws_lambda_function" "sga_postgres_tools" {
   description   = "PostgreSQL MCP tools for SGA inventory"
   role          = aws_iam_role.sga_postgres_tools.arn
   handler       = "postgres_tools_lambda.handler"
-  runtime       = "python3.12"
+  # MANDATORY: All Lambdas use arm64 + Python 3.13
+  runtime       = "python3.13"
+  architectures = ["arm64"]
   timeout       = 30
   memory_size   = 512
 
