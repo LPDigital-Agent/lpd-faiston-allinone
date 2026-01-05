@@ -338,7 +338,7 @@ export function EntradaSAPTab({
 
               {/* Preview Button */}
               <Button
-                className="w-full bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-90"
+                className="w-full bg-gradient-to-r from-cyan-600 to-cyan-500 hover:opacity-90 text-white"
                 disabled={!selectedFile || isProcessing}
                 onClick={handlePreview}
               >

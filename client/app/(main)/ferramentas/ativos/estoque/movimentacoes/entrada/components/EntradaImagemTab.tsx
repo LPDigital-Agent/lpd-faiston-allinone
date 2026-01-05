@@ -327,7 +327,7 @@ export function EntradaImagemTab({
 
               {/* Upload Button */}
               <Button
-                className="w-full bg-gradient-to-r from-magenta-dark to-magenta-mid hover:opacity-90"
+                className="w-full bg-gradient-to-r from-magenta-dark to-magenta-mid hover:opacity-90 text-white"
                 disabled={!selectedFile || !selectedLocation || isUploading}
                 onClick={handleUpload}
               >
