@@ -5,7 +5,57 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+  [
+    // Layout
+    "inline-flex items-center justify-center gap-2",
+    "whitespace-nowrap rounded-md text-sm font-medium",
+
+    // Cursor
+    "cursor-pointer",
+
+    // Transitions (GPU-accelerated)
+    "transition-[transform,box-shadow,filter,background-color,border-color]",
+    "duration-150 ease-out",
+
+    // Hover - Subtle lift and brightness
+    "hover:-translate-y-0.5",
+    "hover:brightness-110",
+
+    // Active/Press - Physical feedback (34ms = 2 frames at 60fps)
+    "active:scale-[0.98]",
+    "active:brightness-95",
+    "active:translate-y-0",
+    "active:duration-[34ms]",
+
+    // Disabled
+    "disabled:pointer-events-none",
+    "disabled:opacity-50",
+    "disabled:cursor-not-allowed",
+    "disabled:hover:transform-none",
+    "disabled:hover:brightness-100",
+
+    // Focus (accessibility)
+    "outline-none",
+    "focus-visible:border-ring",
+    "focus-visible:ring-ring/50",
+    "focus-visible:ring-[3px]",
+
+    // Validation states
+    "aria-invalid:ring-destructive/20",
+    "dark:aria-invalid:ring-destructive/40",
+    "aria-invalid:border-destructive",
+
+    // Reduced motion preference
+    "motion-reduce:transition-none",
+    "motion-reduce:hover:transform-none",
+    "motion-reduce:active:transform-none",
+
+    // SVG handling
+    "[&_svg]:pointer-events-none",
+    "[&_svg:not([class*='size-'])]:size-4",
+    "shrink-0",
+    "[&_svg]:shrink-0",
+  ].join(" "),
   {
     variants: {
       variant: {

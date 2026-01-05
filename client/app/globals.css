@@ -499,3 +499,26 @@ body {
   opacity: 0.5;
   margin-bottom: 1rem;
 }
+
+/* ============================================
+   Button Interaction System
+   Cursor, Hover, and Press Feedback
+   ============================================ */
+
+/* Cursor pointer global para todos elementos clicáveis */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Disabled cursor */
+button:disabled,
+[aria-disabled="true"],
+.cursor-not-allowed {
+  cursor: not-allowed;
+}
