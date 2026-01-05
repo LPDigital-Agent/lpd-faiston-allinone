@@ -243,14 +243,19 @@ lpd-faiston-allinone/
 │       ├── agents/        # 5 Google ADK Agents
 │       └── tools/         # dynamodb, s3, nf_parser, hil
 ├── terraform/             # AWS Infrastructure as Code
-│   └── main/              # All AWS resources (19 .tf files)
+│   └── main/              # All AWS resources (20+ .tf files)
 │       ├── main.tf        # S3 backend, providers
 │       ├── cloudfront.tf  # CDN + URL rewriter function
 │       ├── s3*.tf         # 6 S3 buckets (frontend, academy, sga)
 │       ├── dynamodb*.tf   # 4 DynamoDB tables
 │       └── iam*.tf        # IAM roles/policies
-└── data/                   # Seed data
-    └── faiston_sga2_estoque_simulado_sap.csv  # SGA test data
+├── data/                   # Seed data
+│   └── faiston_sga2_estoque_simulado_sap.csv  # SGA test data
+└── docs/                   # Documentation
+    ├── AgentCore/         # AgentCore implementation guide
+    ├── agents/            # Agent documentation
+    ├── architecture/      # Architecture docs
+    └── Claude Code/       # Claude Code best practices
 ```
 
 ---
@@ -286,30 +291,38 @@ New types: `types/zoom-videosdk.d.ts`
 Asset management system at `/ferramentas/ativos/estoque/`. Complete product implementation.
 
 ### SGA Implementation Progress (January 2026)
-- ✅ Sprint 1-3: Backend (Terraform + 5 AgentCore agents)
+- ✅ Sprint 1-3: Backend (Terraform + 10 AgentCore agents)
 - ✅ Sprint 4: Frontend Foundation (6 contexts, 12 hooks, services)
-- ✅ Sprint 5-6: Frontend Pages (15+ pages, movement forms)
+- ✅ Sprint 5-6: Frontend Pages (25+ pages, movement forms)
 - ✅ Sprint 7-8: NEXO Copilot + Mobile/PWA components
 - ✅ Audit: ADK/AgentCore compliance (95% - lxml fixed)
+- ✅ SGA 2.0 Phases 1-3: Expedição, Cotação, Reversa, Analytics, Reconciliação SAP
+- ✅ Wiki: 14 sections documenting all SGA features
+- ⏳ Phase 4: SAP API Integration (pending credentials)
 
 ### SGA Key Components
 | Category | Components |
 |----------|------------|
-| **Backend Agents** | EstoqueControl, Intake, Reconciliacao, Compliance, Comunicacao |
+| **Backend Agents (10)** | EstoqueControl, Intake, Reconciliacao, Compliance, Comunicacao, Expedition, Carrier, Reverse, Import, Base |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
 | **Hooks** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner |
 | **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch |
 | **Mobile/PWA** | MobileScanner, MobileChecklist, ConfirmationButton |
 
-### SGA Pages Structure
+### SGA Pages Structure (25+ pages)
 ```
 /ferramentas/ativos/estoque/
-├── page.tsx           # Dashboard + KPIs
+├── page.tsx           # Dashboard + KPIs + Quick Actions
 ├── [id]/              # Asset detail
 ├── lista/             # Asset list
 ├── cadastros/         # Part numbers, locations, projects
-├── movimentacoes/     # Entrada, saida, transferencia, reserva, ajuste
-└── inventario/        # Campaigns and counting
+├── movimentacoes/     # Entrada, saida, transferencia, reserva, ajuste, importar
+├── inventario/        # Campaigns, counting, novo
+├── expedicao/         # AI-guided expedition + cotacao
+├── reversa/           # Reverse logistics
+├── analytics/         # Accuracy KPI dashboard
+├── reconciliacao/sap/ # SAP comparison
+└── wiki/              # User guide (14 sections)
 ```
 
 ---

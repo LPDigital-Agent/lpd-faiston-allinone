@@ -443,14 +443,23 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ Sprint 7: NEXO Copilot (NexoCopilot, NexoSearchBar, UnifiedSearch)
 - ✅ Sprint 8: Mobile/PWA (MobileScanner, MobileChecklist, ConfirmationButton)
 - ✅ Audit: ADK/AgentCore compliance (95% - lxml fixed, memory strategies pending)
+- ✅ SGA 2.0 Phase 1-3: Expedição Inteligente, Cotação de Frete, Reversa, Analytics, Reconciliação SAP
+- ✅ Wiki User Guide: 14 sections documenting all SGA features
+- ✅ UI Refinement: QuickActions redesigned to compact full-width layout
+- ⏳ Phase 4: SAP API Integration (requires SAP credentials)
 
-### SGA Backend Agents (5)
+### SGA Backend Agents (10)
 `server/agentcore-inventory/agents/`:
 - `estoque_control_agent.py` - Core +/- movements
 - `intake_agent.py` - NF-e PDF/XML extraction
 - `reconciliacao_agent.py` - Divergence detection
 - `compliance_agent.py` - Policy validation
 - `comunicacao_agent.py` - Notifications
+- `expedition_agent.py` - AI-guided shipping with SAP format
+- `carrier_agent.py` - Freight quotation and carrier comparison
+- `reverse_agent.py` - Returns/reverse logistics management
+- `import_agent.py` - CSV/Excel bulk import processing
+- `base_agent.py` - Base agent class with common utilities
 
 ### SGA Contexts (6)
 `client/contexts/ativos/`:
@@ -468,14 +477,19 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `useLocations`, `usePartNumbers`, `useProjects` - Master data
 - `useBalanceQuery`, `useNFReader`, `useSerialScanner` - Utilities
 
-### SGA Frontend Pages (15+)
+### SGA Frontend Pages (25+)
 `client/app/(main)/ferramentas/ativos/estoque/`:
-- `page.tsx` - Dashboard with KPIs and inbox
+- `page.tsx` - Dashboard with KPIs, Quick Actions, and inbox
 - `[id]/page.tsx` - Asset detail with timeline
 - `lista/page.tsx` - Asset list with filters
-- `cadastros/` - Part numbers, locations, projects
-- `movimentacoes/` - Entrada, saida, transferencia, reserva, ajuste
-- `inventario/` - Campaigns and counting sessions
+- `cadastros/` - Part numbers, locations, projects (3 pages)
+- `movimentacoes/` - Entrada, saida, transferencia, reserva, ajuste, importar (7 pages)
+- `inventario/` - Campaigns, counting sessions, novo (3 pages)
+- `expedicao/` - AI-guided expedition + cotacao (2 pages)
+- `reversa/` - Reverse logistics management
+- `analytics/` - Accuracy KPI dashboard
+- `reconciliacao/sap/` - SAP comparison and divergence resolution
+- `wiki/` - User guide with 14 sections (updated January 2026)
 
 ### SGA Components
 **NEXO AI (4):** `NexoCopilot`, `NexoSearchBar`, `UnifiedSearch`, index
