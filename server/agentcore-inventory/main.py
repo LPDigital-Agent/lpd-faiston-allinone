@@ -24,9 +24,100 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 import asyncio
 import json
 import os
+from typing import Optional
 
 # LAZY IMPORTS: Agents are imported inside handler functions to reduce cold start.
 # Each agent imports Google ADK packages (~3-5s each).
+
+# =============================================================================
+# Database Adapter Configuration (PostgreSQL Migration)
+# =============================================================================
+# Feature flag to enable PostgreSQL via MCP Gateway.
+# When enabled, agents use GatewayPostgresAdapter instead of DynamoDBAdapter.
+#
+# Migration phases:
+# 1. USE_POSTGRES_MCP=false (default): All reads/writes go to DynamoDB
+# 2. USE_POSTGRES_MCP=true: Reads go to PostgreSQL via MCP Gateway
+# 3. After validation: Remove DynamoDB code and set as default
+#
+# Environment variables:
+# - USE_POSTGRES_MCP: "true" to enable PostgreSQL adapter
+# - AGENTCORE_GATEWAY_URL: Full MCP endpoint URL
+# - AGENTCORE_GATEWAY_ID: Gateway ID (alternative to full URL)
+# =============================================================================
+
+USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "false").lower() == "true"
+AGENTCORE_GATEWAY_URL = os.environ.get("AGENTCORE_GATEWAY_URL", "")
+AGENTCORE_GATEWAY_ID = os.environ.get("AGENTCORE_GATEWAY_ID", "")
+
+# Cached adapter instance (lazy initialized)
+_database_adapter = None
+
+
+def get_database_adapter():
+    """
+    Factory function to get the appropriate database adapter.
+
+    Returns GatewayPostgresAdapter if USE_POSTGRES_MCP is enabled,
+    otherwise returns DynamoDBAdapter (legacy).
+
+    The adapter is cached after first initialization to avoid
+    repeated setup costs.
+
+    Returns:
+        DatabaseAdapter implementation (GatewayPostgresAdapter or DynamoDBAdapter)
+    """
+    global _database_adapter
+
+    if _database_adapter is not None:
+        return _database_adapter
+
+    if USE_POSTGRES_MCP and (AGENTCORE_GATEWAY_URL or AGENTCORE_GATEWAY_ID):
+        # Use PostgreSQL via MCP Gateway
+        from tools.mcp_gateway_client import MCPGatewayClientFactory
+        from tools.gateway_adapter import GatewayPostgresAdapter
+
+        def get_access_token():
+            """
+            Get JWT access token for Gateway authentication.
+
+            In AgentCore Runtime, the token is available from request context.
+            For local testing, can be set via environment variable.
+            """
+            # AgentCore injects token into environment during invocation
+            return os.environ.get("AGENTCORE_ACCESS_TOKEN", "")
+
+        mcp_client = MCPGatewayClientFactory.create_from_env(get_access_token)
+        _database_adapter = GatewayPostgresAdapter(mcp_client)
+
+        import logging
+        logging.info("Database adapter: GatewayPostgresAdapter (PostgreSQL via MCP)")
+    else:
+        # Use DynamoDB (legacy)
+        from tools.dynamodb_client import SGADynamoDBClient
+        _database_adapter = SGADynamoDBClient()
+
+        import logging
+        logging.info("Database adapter: SGADynamoDBClient (DynamoDB)")
+
+    return _database_adapter
+
+
+def get_adapter_info() -> dict:
+    """
+    Get information about the current database adapter configuration.
+
+    Useful for health checks and debugging.
+
+    Returns:
+        Dict with adapter type and configuration status
+    """
+    return {
+        "use_postgres_mcp": USE_POSTGRES_MCP,
+        "gateway_url_configured": bool(AGENTCORE_GATEWAY_URL),
+        "gateway_id_configured": bool(AGENTCORE_GATEWAY_ID),
+        "adapter_type": "PostgreSQL/MCP" if USE_POSTGRES_MCP else "DynamoDB",
+    }
 
 # =============================================================================
 # AgentCore Application
@@ -292,6 +383,7 @@ def _health_check() -> dict:
             "audit_log": os.environ.get("AUDIT_LOG_TABLE", ""),
         },
         "bucket": os.environ.get("DOCUMENTS_BUCKET", ""),
+        "database_adapter": get_adapter_info(),
     }
 
 

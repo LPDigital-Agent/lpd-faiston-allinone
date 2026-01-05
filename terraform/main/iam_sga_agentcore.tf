@@ -281,6 +281,34 @@ resource "aws_iam_role_policy" "sga_agentcore_dynamodb" {
 }
 
 # =============================================================================
+# AgentCore Gateway Invoke Policy
+# =============================================================================
+# Allows agents to invoke tools via AgentCore Gateway MCP endpoint
+# Required for PostgreSQL MCP tools communication
+
+data "aws_iam_policy_document" "sga_agentcore_gateway" {
+  statement {
+    sid    = "AgentCoreGatewayInvoke"
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:InvokeGateway",
+      "bedrock-agentcore:ListGateways",
+      "bedrock-agentcore:GetGateway"
+    ]
+    resources = [
+      # Allow invoking any gateway in this account/region
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:gateway/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "sga_agentcore_gateway" {
+  name   = "${var.project_name}-sga-gateway-policy"
+  role   = aws_iam_role.sga_agentcore_execution.id
+  policy = data.aws_iam_policy_document.sga_agentcore_gateway.json
+}
+
+# =============================================================================
 # SSM Parameter Store Access Policy
 # =============================================================================
 # Access to API keys for external services (Google API for Gemini)

@@ -27,3 +27,12 @@
 google-adk
 google-genai>=1.0.0
 bedrock-agentcore
+
+# MCP Protocol for AgentCore Gateway communication
+# Used by agents to call PostgreSQL tools via Gateway MCP endpoint
+mcp>=0.1.0
+
+# PostgreSQL driver for Lambda MCP Tools (psycopg v3)
+# Used by postgres_tools_lambda.py to connect to Aurora via RDS Proxy
+# Note: psycopg[binary] includes compiled C libraries for performance
+psycopg[binary]>=3.1.0

@@ -71,3 +71,38 @@ variable "academy_agentcore_memory_id" {
   type        = string
   default     = ""
 }
+
+# =============================================================================
+# SGA PostgreSQL Configuration
+# =============================================================================
+# Variables for Aurora PostgreSQL Serverless v2 migration
+
+variable "sga_vpc_cidr" {
+  description = "CIDR block for SGA VPC (PostgreSQL database)"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "sga_aurora_min_capacity" {
+  description = "Minimum ACU capacity for Aurora Serverless v2 (0.5-128)"
+  type        = number
+  default     = 0.5
+}
+
+variable "sga_aurora_max_capacity" {
+  description = "Maximum ACU capacity for Aurora Serverless v2 (0.5-128)"
+  type        = number
+  default     = 8.0
+}
+
+variable "sga_aurora_engine_version" {
+  description = "Aurora PostgreSQL engine version"
+  type        = string
+  default     = "16.4"
+}
+
+variable "sga_rds_proxy_idle_timeout" {
+  description = "Idle timeout in seconds for RDS Proxy connections"
+  type        = number
+  default     = 1800
+}
