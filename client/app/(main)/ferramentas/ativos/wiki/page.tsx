@@ -44,6 +44,10 @@ import {
   Wifi,
   WifiOff,
   HelpCircle,
+  DollarSign,
+  FileSearch,
+  BarChart3,
+  FileUp,
 } from 'lucide-react';
 
 // =============================================================================
@@ -96,8 +100,12 @@ O dashboard apresenta os principais KPIs:
 Use o menu horizontal para acessar os modulos:
 - **Dashboard** - Visao geral e KPIs
 - **Estoque** - Gestao de inventario (voce esta aqui)
-- **Expedicao** - Envios para campo
+- **Expedicao** - Envios para campo com IA
+- **Cotacao** - Cotacao de frete integrada
 - **Reversa** - Retornos de clientes
+- **Importacao** - Import em massa CSV/Excel
+- **Analytics** - Metricas de acuracia
+- **Reconciliacao** - Comparacao com SAP
 - **Tracking** - Rastreamento de envios
 - **Comunicacao** - Notificacoes e alertas
 - **Fiscal** - Documentos fiscais
@@ -201,6 +209,20 @@ Envio de materiais para campo ou cliente:
 4. Confirme os itens a expedir
 5. O sistema atualiza o saldo automaticamente
 
+> **Novo:** Use a **Expedicao Inteligente** para fluxo guiado com IA e geracao automatica de formato SAP. Veja a secao *Expedicao Inteligente*.
+
+### Importacao em Massa
+
+Para entradas em lote via arquivo:
+
+1. Acesse **Movimentacoes > Importar**
+2. Faca upload de arquivo **CSV** ou **Excel**
+3. O sistema mapeia automaticamente as colunas
+4. Revise o preview e corrija erros
+5. Confirme a importacao
+
+> **Dica:** Veja a secao *Importacao em Massa* para detalhes sobre formatos suportados.
+
 ### Transferencia
 
 Movimentacao entre locais internos:
@@ -231,6 +253,287 @@ Correcao de saldos para acertar divergencias:
 | **Ajuste (-)** | Remove quantidade do saldo |
 
 > **IMPORTANTE:** Todos os ajustes requerem aprovacao de um gestor (HIL).
+`,
+  },
+  {
+    id: 'expedicao',
+    title: 'Expedicao Inteligente',
+    icon: Truck,
+    content: `
+## Fluxo de Expedicao com IA
+
+A **Expedicao Inteligente** e um fluxo guiado por IA para preparar envios de forma rapida e precisa.
+
+### Campos Obrigatorios
+
+| Campo | Descricao | Exemplo |
+|-------|-----------|---------|
+| **Chamado/OS** | Numero do chamado ou ordem de servico | INC0012345 |
+| **Projeto** | Projeto associado ao envio | PROJ-NTT-SP |
+| **Itens** | Lista de materiais a enviar | PN001 x2, PN002 x1 |
+| **Destino** | Local de entrega (endereco completo) | Av. Paulista, 1000 - SP |
+
+### Urgencia e Natureza
+
+**Niveis de Urgencia:**
+- **Normal**: Entrega em 3-5 dias uteis
+- **Expresso**: Entrega em 1-2 dias uteis
+- **Urgente**: Entrega no mesmo dia (restricoes aplicam)
+
+**Natureza da Operacao:**
+- **Instalacao**: Material para novo site/equipamento
+- **Manutencao**: Reposicao ou reparo
+- **Projeto**: Demanda de projeto especifica
+
+### Formato SAP
+
+O sistema gera automaticamente os dados no formato SAP:
+
+| Campo SAP | Origem |
+|-----------|--------|
+| **Centro** | Configuracao do almoxarifado |
+| **Deposito** | Local de origem selecionado |
+| **Material** | Part Number do item |
+| **Quantidade** | Quantidade solicitada |
+| **UM** | Unidade de medida do PN |
+| **Texto Breve** | Descricao do item |
+
+> **Dica:** Clique em **Copiar para SAP** para copiar os dados formatados para a area de transferencia.
+
+### Verificacao de Estoque
+
+Antes de confirmar, o sistema verifica automaticamente:
+- Saldo disponivel no local de origem
+- Itens reservados (bloqueados)
+- Itens em quarentena
+- Alertas de estoque minimo
+
+### Integracao com Cotacao
+
+Apos confirmar a expedicao, voce pode:
+1. Clicar em **Cotar Frete**
+2. O sistema preenche automaticamente CEP destino e peso
+3. Compare precos entre transportadoras
+4. Selecione a melhor opcao
+`,
+  },
+  {
+    id: 'cotacao',
+    title: 'Cotacao de Frete',
+    icon: DollarSign,
+    content: `
+## Comparacao de Transportadoras
+
+O modulo de **Cotacao de Frete** permite comparar precos e prazos entre diferentes transportadoras.
+
+### Transportadoras Disponiveis
+
+| Transportadora | Tipo | Cobertura |
+|----------------|------|-----------|
+| **Correios** | PAC, SEDEX, SEDEX 10 | Nacional |
+| **Loggi** | Expresso | Capitais e regioes metropolitanas |
+| **Gollog** | Aereo | Nacional (entregas rapidas) |
+| **Transportadora** | Rodoviario | Nacional (cargas maiores) |
+| **Dedicado** | Veiculo exclusivo | Sob demanda |
+
+### Campos da Cotacao
+
+| Campo | Descricao | Obrigatorio |
+|-------|-----------|-------------|
+| **CEP Origem** | CEP do almoxarifado | Sim |
+| **CEP Destino** | CEP de entrega | Sim |
+| **Peso (kg)** | Peso total do envio | Sim |
+| **Dimensoes** | Altura x Largura x Comprimento (cm) | Nao |
+| **Valor Declarado** | Valor para seguro | Nao |
+
+### Niveis de Urgencia
+
+| Nivel | Prazo Tipico | Custo Relativo |
+|-------|--------------|----------------|
+| **Economico** | 5-10 dias uteis | $ |
+| **Normal** | 3-5 dias uteis | $$ |
+| **Expresso** | 1-2 dias uteis | $$$ |
+| **Urgente** | Mesmo dia | $$$$ |
+
+### Recomendacao AI
+
+O sistema analisa automaticamente:
+- **Melhor preco**: Opcao mais economica
+- **Melhor prazo**: Entrega mais rapida
+- **Custo-beneficio**: Equilibrio entre preco e prazo
+
+> **Nota:** A recomendacao considera historico de entregas e confiabilidade da transportadora.
+
+### Prazo de Entrega
+
+O prazo estimado considera:
+- Dias uteis (exclui fins de semana e feriados)
+- Horario de coleta (antes das 14h)
+- Localizacao geografica
+
+### Rastreamento
+
+Apos a confirmacao do envio:
+1. O codigo de rastreamento e gerado
+2. O sistema atualiza o status automaticamente
+3. Notificacoes sao enviadas em cada etapa
+4. O cliente pode acompanhar pelo link de tracking
+`,
+  },
+  {
+    id: 'reversa',
+    title: 'Logistica Reversa',
+    icon: RotateCcw,
+    content: `
+## Retornos e Devolucoes
+
+O modulo de **Logistica Reversa** gerencia o fluxo de retorno de materiais.
+
+### Tipos de Origem
+
+| Tipo | Descricao | Exemplo |
+|------|-----------|---------|
+| **CONSERTO** | Retorno de equipamento em reparo | Servidor com defeito |
+| **CLIENTE** | Devolucao de cliente | Equipamento substituido |
+| **PROJETO** | Encerramento de projeto | Desmobilizacao |
+| **GARANTIA** | Retorno em garantia | Troca por defeito |
+| **TRANSFERENCIA** | Entre unidades | Realocacao de ativos |
+| **OUTRO** | Demais casos | Especificar motivo |
+
+### Proprietarios
+
+| Proprietario | Descricao |
+|--------------|-----------|
+| **FAISTON** | Material proprio da empresa |
+| **NTT** | Material do cliente NTT |
+| **TERCEIROS** | Material de outros clientes |
+
+### Condicoes do Material
+
+| Condicao | Descricao | Proximo Passo |
+|----------|-----------|---------------|
+| **FUNCIONAL** | Operando normalmente | Disponibilizar para uso |
+| **DEFEITO_MENOR** | Problema leve, reparavel | Enviar para manutencao |
+| **DEFEITO_MAIOR** | Problema grave | Avaliar reparo vs descarte |
+| **IRREPARAVEL** | Sem possibilidade de reparo | Processo de baixa |
+| **NAO_AVALIADO** | Ainda nao inspecionado | Aguardar triagem |
+
+### Roteamento de Deposito
+
+O sistema sugere automaticamente o deposito destino:
+
+| Condicao | Deposito Sugerido |
+|----------|-------------------|
+| FUNCIONAL | 01 - Almoxarifado Principal |
+| DEFEITO_MENOR | 03 - Manutencao |
+| DEFEITO_MAIOR | 03.01 - Manutencao Avancada |
+| IRREPARAVEL | 04 - Descarte |
+| NAO_AVALIADO | 05 - Triagem |
+| QUARENTENA | 06 - Quarentena |
+
+### Avaliacao por IA
+
+O sistema utiliza IA para:
+- Sugerir a condicao com base na descricao
+- Identificar padroes de defeitos recorrentes
+- Recomendar acoes baseadas no historico do PN
+- Alertar sobre itens em garantia
+
+### Motivos de Retorno
+
+Ao registrar uma reversa, informe o motivo detalhado:
+
+- **Defeito de fabrica**: Problema desde a origem
+- **Dano em transporte**: Avaria durante envio
+- **Uso inadequado**: Operacao fora das especificacoes
+- **Fim de vida util**: Equipamento obsoleto
+- **Atualizacao tecnologica**: Substituicao por modelo novo
+
+> **Importante:** Reversas de itens em garantia requerem numero de RMA do fabricante.
+`,
+  },
+  {
+    id: 'importacao',
+    title: 'Importacao em Massa',
+    icon: FileUp,
+    content: `
+## Upload de Arquivos CSV/Excel
+
+O modulo de **Importacao em Massa** permite cadastrar ou atualizar grandes volumes de dados.
+
+### Formatos Suportados
+
+| Formato | Extensao | Observacao |
+|---------|----------|------------|
+| **CSV** | .csv | Separador: virgula ou ponto-e-virgula |
+| **Excel** | .xlsx | Planilha do Microsoft Excel |
+
+### Colunas Obrigatorias
+
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| **part_number** | Texto | Codigo do item (SKU) |
+| **quantity** | Numero | Quantidade a importar |
+| **location** | Texto | Codigo da localizacao destino |
+
+### Colunas Opcionais
+
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| **serial_number** | Texto | Numero de serie (se aplicavel) |
+| **project_id** | Texto | Codigo do projeto |
+| **unit_cost** | Numero | Custo unitario |
+| **condition** | Texto | Condicao do item |
+| **notes** | Texto | Observacoes adicionais |
+
+### Processo de Importacao
+
+**Passo 1 - Upload:**
+1. Acesse **Movimentacoes > Importar**
+2. Arraste o arquivo ou clique para selecionar
+3. O sistema detecta automaticamente o formato
+
+**Passo 2 - Mapeamento:**
+1. O sistema mapeia colunas automaticamente
+2. Ajuste o mapeamento se necessario
+3. Defina a linha de inicio dos dados (se houver cabecalho)
+
+**Passo 3 - Validacao:**
+1. O sistema valida cada linha
+2. Erros sao destacados em vermelho
+3. Avisos sao destacados em amarelo
+4. Linhas validas aparecem em verde
+
+**Passo 4 - Preview:**
+1. Revise o resumo da importacao
+2. Veja quantos itens serao criados vs atualizados
+3. Confirme ou cancele a operacao
+
+**Passo 5 - Execucao:**
+1. Clique em **Confirmar Importacao**
+2. O sistema processa em lote
+3. Um relatorio e gerado ao final
+
+### Validacao de Part Numbers
+
+O sistema verifica:
+- Se o PN existe no catalogo
+- Se a unidade de medida e compativel
+- Se o item e serializado (requer serial unico)
+- Se a localizacao e valida
+
+### Relatorio de Erros
+
+Apos a importacao, voce recebe um relatorio com:
+
+| Tipo | Descricao |
+|------|-----------|
+| **Sucesso** | Linhas importadas com sucesso |
+| **Erro** | Linhas rejeitadas (ex: PN invalido) |
+| **Aviso** | Linhas importadas com ressalvas |
+| **Ignorado** | Linhas em branco ou duplicadas |
+
+> **Dica:** Baixe o template CSV na pagina de importacao para garantir o formato correto.
 `,
   },
   {
@@ -465,6 +768,162 @@ Quando a conexao retornar:
 4. Notifica conflitos (se houver)
 
 > **Dica:** Verifique o indicador de conexao antes de operacoes criticas.
+`,
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics e Acuracia',
+    icon: BarChart3,
+    content: `
+## Dashboard de Metricas
+
+O modulo de **Analytics** apresenta KPIs de desempenho e confiabilidade do sistema.
+
+### KPIs Principais
+
+| Metrica | Descricao | Meta |
+|---------|-----------|------|
+| **Acuracia de Extracao** | % de NF-e processadas com sucesso | >= 95% |
+| **Taxa de Sucesso** | % de entradas sem rejeicao | >= 90% |
+| **Tempo Medio HIL** | Tempo de resposta para tarefas humanas | < 4h |
+| **Taxa de Divergencia** | % de discrepancias em inventario | < 2% |
+
+### Acuracia de Extracao
+
+Mede o sucesso da extracao automatica de dados de NF-e:
+
+- **100%**: Todos os campos extraidos corretamente
+- **80-99%**: Extracao parcial, alguns campos manuais
+- **< 80%**: Requer revisao manual completa (HIL)
+
+### Breakdown de Matching PN
+
+Como o sistema identifica Part Numbers:
+
+| Metodo | Confianca | Descricao |
+|--------|-----------|-----------|
+| **Codigo Fornecedor** | 95% | Match direto pelo codigo do fornecedor |
+| **Descricao (AI)** | 70-85% | IA analisa descricao e sugere PN |
+| **NCM (Categoria)** | 60% | Match por codigo fiscal NCM |
+| **Manual** | HIL | Usuario seleciona manualmente |
+
+### Resumo de Movimentacoes
+
+Metricas por tipo de operacao no periodo:
+
+- **Entradas**: Total de itens internalizados
+- **Saidas**: Total de itens expedidos
+- **Transferencias**: Movimentacoes internas
+- **Ajustes**: Correcoes de saldo
+- **Reservas**: Bloqueios ativos
+
+### Itens Pendentes
+
+Indicadores de atencao imediata:
+
+| Tipo | Descricao | Acao |
+|------|-----------|------|
+| **Aguardando Projeto** | Entradas sem ID de projeto | Atribuir projeto |
+| **Aguardando HIL** | Tarefas de validacao humana | Aprovar/rejeitar |
+| **Reconciliacao** | Divergencias SAP pendentes | Investigar |
+
+### Periodos de Analise
+
+Selecione o periodo de visualizacao:
+
+- **Ultimos 7 dias**: Visao semanal
+- **Ultimos 30 dias**: Visao mensal (padrao)
+- **Ultimos 90 dias**: Visao trimestral
+- **Ano atual**: Acumulado YTD
+
+> **Dica:** Use os filtros de periodo para identificar tendencias e sazonalidades.
+`,
+  },
+  {
+    id: 'reconciliacao',
+    title: 'Reconciliacao SAP',
+    icon: FileSearch,
+    content: `
+## Comparacao de Estoques
+
+O modulo de **Reconciliacao SAP** permite comparar os saldos do SGA com o sistema SAP.
+
+### Processo de Reconciliacao
+
+**Passo 1 - Exportar do SAP:**
+1. Acesse o SAP (transacao MB52 ou equivalente)
+2. Exporte o relatorio de estoque para CSV
+3. Inclua colunas: Material, Deposito, Quantidade
+
+**Passo 2 - Upload no SGA:**
+1. Acesse **Reconciliacao > SAP**
+2. Faca upload do arquivo CSV
+3. O sistema processa e compara automaticamente
+
+**Passo 3 - Analisar Divergencias:**
+1. Revise a lista de divergencias
+2. Filtre por tipo ou severidade
+3. Investigue cada caso
+
+### Formato do Arquivo
+
+| Coluna | Descricao | Obrigatorio |
+|--------|-----------|-------------|
+| **part_number** | Codigo do material SAP | Sim |
+| **location** | Codigo do deposito | Sim |
+| **quantity** | Quantidade no SAP | Sim |
+
+### Tipos de Divergencia
+
+| Tipo | Icone | Descricao |
+|------|-------|-----------|
+| **FALTA_SGA** | Vermelho | Item existe no SAP mas NAO no SGA |
+| **SOBRA_SGA** | Amarelo | Item existe no SGA mas NAO no SAP |
+| **QTD_DIFERENTE** | Laranja | Item existe em ambos mas quantidades diferentes |
+
+### Acoes Disponiveis
+
+Para cada divergencia, voce pode:
+
+| Acao | Descricao | Quando Usar |
+|------|-----------|-------------|
+| **Criar Ajuste** | Gera ajuste para corrigir saldo | Divergencia confirmada |
+| **Ignorar** | Marca como falso positivo | Erro de exportacao SAP |
+| **Investigar** | Marca para analise posterior | Requer verificacao fisica |
+
+### Workflow de Resolucao
+
+1. **Identificacao**: Sistema detecta divergencia
+2. **Triagem**: Operador analisa o caso
+3. **Acao**: Seleciona uma das opcoes acima
+4. **Aprovacao**: Ajustes geram tarefa HIL
+5. **Fechamento**: Divergencia resolvida
+
+### Relatorio de Reconciliacao
+
+Apos o processamento, o sistema gera:
+
+- **Total de linhas processadas**
+- **Itens correspondentes (OK)**
+- **Divergencias encontradas**
+- **Por tipo de divergencia**
+
+### Melhores Praticas
+
+> **Frequencia:** Recomenda-se reconciliacao semanal para manter acuracia.
+
+> **Horario:** Execute no inicio do dia, antes das movimentacoes.
+
+> **Historico:** O sistema mantem historico de todas as reconciliacoes.
+
+### Integracoes Futuras
+
+O modulo esta preparado para:
+- Integracao direta com SAP via API
+- Reconciliacao automatica agendada
+- Alertas proativos de divergencia
+
+> **Nota:** A integracao API com SAP requer configuracao de credenciais. Contate o suporte.
 `,
   },
   {
