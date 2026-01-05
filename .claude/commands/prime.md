@@ -78,6 +78,8 @@ aws sts get-caller-identity --profile faiston-aio
 | `deploy-frontend.yml` | Push to `client/**` | Build & deploy to S3/CloudFront |
 | `deploy-agentcore-academy.yml` | Manual | Deploy Academy agents |
 | `deploy-agentcore-inventory.yml` | Manual | Deploy SGA agents |
+| `deploy-sga-postgres-lambda.yml` | Push/Manual | Deploy PostgreSQL MCP tools Lambda |
+| `migrate-sga-schema.yml` | Manual | Apply PostgreSQL schema via Lambda bridge |
 
 ---
 
@@ -142,7 +144,7 @@ ls -la "docs faiston/"
 | Styling | Tailwind CSS 4.0 + shadcn/ui |
 | State | TanStack Query + Zustand |
 | Animations | Framer Motion + Rive |
-| Backend | Python 3.12 + AWS Lambda |
+| Backend | Python 3.13 + AWS Lambda (arm64) |
 | AI Framework | Google ADK v1.0 |
 | AI Runtime | AWS Bedrock AgentCore |
 | Agent Protocol | A2A (Agent-to-Agent) |
@@ -243,11 +245,15 @@ lpd-faiston-allinone/
 │       ├── agents/        # 5 Google ADK Agents
 │       └── tools/         # dynamodb, s3, nf_parser, hil
 ├── terraform/             # AWS Infrastructure as Code
-│   └── main/              # All AWS resources (20+ .tf files)
+│   └── main/              # All AWS resources (28+ .tf files)
 │       ├── main.tf        # S3 backend, providers
 │       ├── cloudfront.tf  # CDN + URL rewriter function
 │       ├── s3*.tf         # 6 S3 buckets (frontend, academy, sga)
 │       ├── dynamodb*.tf   # 4 DynamoDB tables
+│       ├── rds_aurora_sga.tf    # Aurora PostgreSQL cluster
+│       ├── rds_proxy_sga.tf     # RDS Proxy (connection pooling)
+│       ├── lambda_sga_*.tf      # PostgreSQL tools + schema migrator
+│       ├── agentcore_gateway.tf # MCP Gateway + targets
 │       └── iam*.tf        # IAM roles/policies
 ├── data/                   # Seed data
 │   └── faiston_sga2_estoque_simulado_sap.csv  # SGA test data
@@ -300,6 +306,12 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ Wiki: 14 sections documenting all SGA features
 - ✅ Unified Entry: Multi-source tabs (NF-e, Image OCR, SAP Export, Manual)
 - ✅ **Smart Import**: Universal file importer - auto-detects XML/PDF/CSV/XLSX/JPG/PNG/TXT
+- ⏳ **PostgreSQL Migration (Sprint 4-5)**: DynamoDB → Aurora PostgreSQL (in progress)
+  - ✅ RDS Aurora Serverless v2 cluster
+  - ✅ RDS Proxy (connection pooling)
+  - ✅ MCP Gateway + Lambda MCP Target
+  - ✅ PostgreSQL schema (15 tables, triggers, materialized views)
+  - ⏳ Schema migration workflow (running)
 - ⏳ Phase 4: SAP API Integration (pending credentials)
 
 ### SGA Key Components
