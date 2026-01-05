@@ -137,7 +137,7 @@ export function EntradaNFTab({
           <GlassCardHeader>
             <div className="flex items-center gap-2">
               <FileUp className="w-4 h-4 text-green-400" />
-              <GlassCardTitle>Upload de NF-e</GlassCardTitle>
+              <GlassCardTitle>Upload de NF</GlassCardTitle>
             </div>
           </GlassCardHeader>
 
@@ -215,7 +215,7 @@ export function EntradaNFTab({
               {isUploading && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-text-muted">Processando NF-e...</span>
+                    <span className="text-text-muted">Processando NF...</span>
                     <span className="text-text-primary">{uploadProgress}%</span>
                   </div>
                   <div className="h-2 bg-white/10 rounded-full overflow-hidden">
@@ -250,7 +250,7 @@ export function EntradaNFTab({
                 ) : (
                   <>
                     <FileUp className="w-4 h-4 mr-2" />
-                    Processar NF-e
+                    Processar NF
                   </>
                 )}
               </Button>

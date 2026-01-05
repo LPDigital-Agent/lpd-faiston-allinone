@@ -234,7 +234,7 @@ export default function EntradaPage() {
             Entrada de Materiais
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Internalizacao via NF-e, imagem, SAP ou entrada manual
+            Internalizacao via NF, imagem, SAP ou entrada manual
           </p>
         </div>
       </div>
@@ -247,7 +247,7 @@ export default function EntradaPage() {
             className="flex items-center gap-2 data-[state=active]:bg-green-500/20 data-[state=active]:text-green-400"
           >
             <FileText className="w-4 h-4" />
-            <span className="hidden sm:inline">NF-e</span>
+            <span className="hidden sm:inline">NF</span>
           </TabsTrigger>
           <TabsTrigger
             value="image"
