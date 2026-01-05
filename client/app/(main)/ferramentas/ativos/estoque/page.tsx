@@ -4,7 +4,7 @@
 // Estoque Page - SGA Inventory Module (Operations Hub)
 // =============================================================================
 // Operational hub for inventory management.
-// Features: Task Inbox, Quick Actions, Recent Assets, Module Navigation
+// Features: Unified Module Navigation (8 items), Task Inbox, Recent Assets
 // Note: KPIs moved to Dashboard page for unified asset overview
 // =============================================================================
 
@@ -24,8 +24,6 @@ import { Input } from '@/components/ui/input';
 import {
   Package,
   Search,
-  Plus,
-  FileUp,
   ArrowRightLeft,
   ClipboardCheck,
   AlertTriangle,
@@ -151,17 +149,31 @@ function TaskInboxSection() {
   );
 }
 
-function QuickActions() {
-  const actions = [
+/**
+ * ModuleNavigation - Unified navigation for all Estoque features
+ * Combines previous QuickActions and Bottom Navigation into one clean section
+ */
+function ModuleNavigation() {
+  const navItems = [
     {
-      label: 'Nova Entrada',
-      icon: FileUp,
-      href: '/ferramentas/ativos/estoque/movimentacoes/entrada',
+      label: 'Lista de Ativos',
+      description: 'Consultar inventário',
+      icon: Search,
+      href: '/ferramentas/ativos/estoque/lista',
       color: 'text-green-400',
       bgColor: 'bg-green-500/20',
     },
     {
+      label: 'Movimentações',
+      description: 'Entrada, Saída, Transferência',
+      icon: ArrowRightLeft,
+      href: '/ferramentas/ativos/estoque/movimentacoes',
+      color: 'text-magenta-mid',
+      bgColor: 'bg-magenta-dark/20',
+    },
+    {
       label: 'Expedição',
+      description: 'Envio de ativos',
       icon: Truck,
       href: '/ferramentas/ativos/estoque/expedicao',
       color: 'text-blue-light',
@@ -169,13 +181,31 @@ function QuickActions() {
     },
     {
       label: 'Reversa',
+      description: 'Devoluções e retornos',
       icon: RotateCcw,
       href: '/ferramentas/ativos/estoque/reversa',
       color: 'text-orange-400',
       bgColor: 'bg-orange-500/20',
     },
     {
+      label: 'Inventário',
+      description: 'Contagem física',
+      icon: ClipboardCheck,
+      href: '/ferramentas/ativos/estoque/inventario',
+      color: 'text-yellow-400',
+      bgColor: 'bg-yellow-500/20',
+    },
+    {
+      label: 'Cadastros',
+      description: 'PN, Locais, Projetos',
+      icon: Package,
+      href: '/ferramentas/ativos/estoque/cadastros',
+      color: 'text-blue-light',
+      bgColor: 'bg-blue-mid/20',
+    },
+    {
       label: 'Analytics',
+      description: 'Relatórios e KPIs',
       icon: BarChart3,
       href: '/ferramentas/ativos/estoque/analytics',
       color: 'text-purple-400',
@@ -183,6 +213,7 @@ function QuickActions() {
     },
     {
       label: 'Reconciliação SAP',
+      description: 'Comparação SAP',
       icon: FileSearch,
       href: '/ferramentas/ativos/estoque/reconciliacao/sap',
       color: 'text-cyan-400',
@@ -191,38 +222,34 @@ function QuickActions() {
   ];
 
   return (
-    <GlassCard>
-      <GlassCardHeader className="py-2">
-        <div className="flex items-center gap-2">
-          <Plus className="w-4 h-4 text-blue-light" />
-          <GlassCardTitle className="text-sm">Ações Rápidas</GlassCardTitle>
-        </div>
-      </GlassCardHeader>
-
-      <GlassCardContent className="py-2">
-        <div className="grid grid-cols-3 lg:grid-cols-5 gap-2">
-          {actions.map((action, index) => (
-            <motion.div
-              key={action.label}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Link href={action.href}>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-transparent hover:border-border transition-all cursor-pointer group">
-                  <div className={`p-1.5 rounded-md ${action.bgColor} shrink-0`}>
-                    <action.icon className={`w-4 h-4 ${action.color}`} />
-                  </div>
-                  <span className="text-xs font-medium text-text-primary group-hover:text-blue-light transition-colors truncate">
-                    {action.label}
-                  </span>
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {navItems.map((item, index) => (
+        <motion.div
+          key={item.label}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.05 }}
+        >
+          <Link href={item.href}>
+            <GlassCard className="p-3 h-full hover:border-border transition-all cursor-pointer group">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${item.bgColor} shrink-0`}>
+                  <item.icon className={`w-4 h-4 ${item.color}`} />
                 </div>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      </GlassCardContent>
-    </GlassCard>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-text-primary group-hover:text-blue-light transition-colors truncate">
+                    {item.label}
+                  </p>
+                  <p className="text-xs text-text-muted truncate">
+                    {item.description}
+                  </p>
+                </div>
+              </div>
+            </GlassCard>
+          </Link>
+        </motion.div>
+      ))}
+    </div>
   );
 }
 
@@ -324,8 +351,8 @@ export default function EstoquePage() {
         </div>
       </div>
 
-      {/* Quick Actions - Full Width */}
-      <QuickActions />
+      {/* Module Navigation - Unified navigation for all features */}
+      <ModuleNavigation />
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -338,65 +365,6 @@ export default function EstoquePage() {
         <div className="space-y-6">
           <RecentAssets />
         </div>
-      </div>
-
-      {/* Navigation Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link href="/ferramentas/ativos/estoque/cadastros">
-          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-blue-mid/20">
-                <Package className="w-5 h-5 text-blue-light" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-primary">Cadastros</p>
-                <p className="text-xs text-text-muted">PN, Locais, Projetos</p>
-              </div>
-            </div>
-          </GlassCard>
-        </Link>
-
-        <Link href="/ferramentas/ativos/estoque/lista">
-          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/20">
-                <Search className="w-5 h-5 text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-primary">Lista de Ativos</p>
-                <p className="text-xs text-text-muted">Consultar inventário</p>
-              </div>
-            </div>
-          </GlassCard>
-        </Link>
-
-        <Link href="/ferramentas/ativos/estoque/movimentacoes">
-          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-magenta-dark/20">
-                <ArrowRightLeft className="w-5 h-5 text-magenta-mid" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-primary">Movimentações</p>
-                <p className="text-xs text-text-muted">Entrada, Saída, Transferência</p>
-              </div>
-            </div>
-          </GlassCard>
-        </Link>
-
-        <Link href="/ferramentas/ativos/estoque/inventario">
-          <GlassCard className="p-4 hover:border-blue-mid/50 transition-colors cursor-pointer">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-yellow-500/20">
-                <ClipboardCheck className="w-5 h-5 text-yellow-400" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-text-primary">Inventário</p>
-                <p className="text-xs text-text-muted">Contagem e reconciliação</p>
-              </div>
-            </div>
-          </GlassCard>
-        </Link>
       </div>
     </div>
   );
