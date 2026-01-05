@@ -53,6 +53,10 @@ class SGAPostgresClient:
         self._database = os.environ.get("RDS_DATABASE_NAME", "sga_inventory")
         self._port = int(os.environ.get("RDS_PORT", "5432"))
         self._region = os.environ.get("AWS_REGION_NAME", "us-east-2")
+        # DIRECT_CONNECT=true bypasses RDS Proxy and connects directly to Aurora with password
+        # Use for bootstrap operations or when Proxy requires IAM auth not yet configured
+        self._direct_connect = os.environ.get("DIRECT_CONNECT", "false").lower() == "true"
+        # USE_IAM_AUTH=true uses IAM authentication (requires rds_iam role in PostgreSQL)
         self._use_iam_auth = os.environ.get("USE_IAM_AUTH", "false").lower() == "true"
 
         # Cache for credentials
@@ -81,8 +85,10 @@ class SGAPostgresClient:
         """
         Get or create a database connection.
 
-        Uses password auth from Secrets Manager by default.
-        Uses IAM auth if USE_IAM_AUTH=true.
+        Connection modes:
+        1. DIRECT_CONNECT=true: Connect directly to Aurora with password (bootstrap)
+        2. USE_IAM_AUTH=true: Connect to RDS Proxy with IAM auth (production)
+        3. Default: Connect to RDS Proxy with password (requires Proxy password auth)
 
         Returns:
             psycopg connection object
@@ -94,9 +100,27 @@ class SGAPostgresClient:
             import psycopg
             from psycopg.rows import dict_row
 
-            if self._use_iam_auth:
-                # IAM authentication mode
-                creds = self._get_credentials()
+            creds = self._get_credentials()
+
+            if self._direct_connect:
+                # Direct connection to Aurora (bypasses Proxy)
+                # Use for bootstrap when Proxy IAM auth not configured
+                host = creds.get("host")  # Use Aurora cluster endpoint
+                logger.info(f"Connecting directly to Aurora at {host}")
+
+                self._connection = psycopg.connect(
+                    host=host,
+                    port=creds.get("port", self._port),
+                    user=creds.get("username"),
+                    password=creds.get("password"),
+                    dbname=creds.get("dbname", self._database),
+                    sslmode="require",
+                    row_factory=dict_row
+                )
+                logger.info("Connected to PostgreSQL directly (bypass Proxy)")
+
+            elif self._use_iam_auth:
+                # IAM authentication via RDS Proxy
                 user = creds.get("username", "sgaadmin")
                 host = self._proxy_endpoint or creds.get("host")
 
@@ -118,9 +142,10 @@ class SGAPostgresClient:
                     row_factory=dict_row
                 )
                 logger.info("Connected to PostgreSQL via IAM auth")
+
             else:
-                # Password authentication mode (from Secrets Manager)
-                creds = self._get_credentials()
+                # Password authentication via RDS Proxy
+                # Note: RDS Proxy must be configured to accept password auth
                 host = self._proxy_endpoint or creds.get("host")
 
                 self._connection = psycopg.connect(
