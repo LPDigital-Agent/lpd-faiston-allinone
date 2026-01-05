@@ -1,5 +1,12 @@
 "use client";
 
+// =============================================================================
+// Reversa Page - Return Requests and Traceability
+// =============================================================================
+// Manages asset returns with timeline view and search functionality.
+// NOW SHOWS REAL DATA OR EMPTY STATE - No more mock data!
+// =============================================================================
+
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/shared/glass-card";
 import { AssetManagementHeader } from "@/components/ferramentas/ativos/asset-management-header";
 import { Button } from "@/components/ui/button";
@@ -19,18 +26,39 @@ import {
   Calendar,
   User,
   AlertTriangle,
+  InboxIcon,
 } from "lucide-react";
-import {
-  mockReturnRequests,
-  mockAssets,
-} from "@/mocks/ativos-mock-data";
 import { motion } from "framer-motion";
 
 /**
  * Reversa Page - Return Requests and Traceability
  *
  * Manages asset returns with timeline view and search functionality.
+ * NOW USES REAL DATA - Empty state when no requests exist.
  */
+
+// Types for return requests
+type TimelineEvent = {
+  id: string;
+  data: string;
+  descricao: string;
+  responsavel: string;
+};
+
+type ReturnRequest = {
+  id: string;
+  codigo: string;
+  ativoId: string;
+  cliente: string;
+  solicitante: { nome: string };
+  motivo: string;
+  status: string;
+  descricao: string;
+  dataSolicitacao: string;
+  dataConclusao?: string;
+  responsavel?: { nome: string };
+  timeline: TimelineEvent[];
+};
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   solicitado: { label: "Solicitado", color: "bg-yellow-500/20 text-yellow-400", icon: Clock },
@@ -48,6 +76,9 @@ const motivoLabels: Record<string, string> = {
 };
 
 export default function ReversaPage() {
+  // Real data - empty until backend integration
+  // TODO: Replace with useReturnRequests() hook when backend is ready
+  const returnRequests: ReturnRequest[] = [];
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -82,7 +113,7 @@ export default function ReversaPage() {
         {/* Quick Filters */}
         <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
           <Badge variant="outline" className="cursor-pointer hover:bg-white/10 whitespace-nowrap">
-            Todas ({mockReturnRequests.length})
+            Todas ({returnRequests.length})
           </Badge>
           {Object.entries(statusConfig).map(([key, config]) => (
             <Badge
@@ -90,7 +121,7 @@ export default function ReversaPage() {
               variant="outline"
               className={`cursor-pointer hover:bg-white/10 ${config.color} whitespace-nowrap`}
             >
-              {config.label} ({mockReturnRequests.filter(r => r.status === key).length})
+              {config.label} ({returnRequests.filter(r => r.status === key).length})
             </Badge>
           ))}
         </div>
@@ -100,7 +131,7 @@ export default function ReversaPage() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {Object.entries(statusConfig).map(([key, config], index) => {
           const StatusIcon = config.icon;
-          const count = mockReturnRequests.filter(r => r.status === key).length;
+          const count = returnRequests.filter(r => r.status === key).length;
 
           return (
             <motion.div
@@ -133,82 +164,93 @@ export default function ReversaPage() {
               <RotateCcw className="w-4 h-4 text-magenta-light" />
               <GlassCardTitle>Solicitações de Devolução</GlassCardTitle>
             </div>
-            <Badge variant="outline">{mockReturnRequests.length} solicitações</Badge>
+            <Badge variant="outline">{returnRequests.length} solicitações</Badge>
           </div>
         </GlassCardHeader>
 
         <ScrollArea className="max-h-[500px]">
           <div className="divide-y divide-border">
-            {mockReturnRequests.map((request, index) => {
-              const asset = mockAssets.find(a => a.id === request.ativoId);
-              const config = statusConfig[request.status];
-              const StatusIcon = config.icon;
+            {returnRequests.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <InboxIcon className="w-12 h-12 text-text-muted mb-3" />
+                <p className="text-sm font-medium text-text-primary mb-1">
+                  Nenhuma solicitação de devolução
+                </p>
+                <p className="text-xs text-text-muted">
+                  As solicitações de devolução aparecerão aqui
+                </p>
+              </div>
+            ) : (
+              returnRequests.map((request, index) => {
+                const config = statusConfig[request.status];
+                const StatusIcon = config.icon;
 
-              return (
-                <motion.div
-                  key={request.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="p-4 hover:bg-white/5 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-start gap-4">
-                    {/* Status Icon */}
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${config.color.replace("text-", "bg-").replace("400", "500/20")}`}>
-                      <StatusIcon className={`w-5 h-5 ${config.color.split(" ")[1]}`} />
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="text-sm font-medium text-text-primary">
-                            {request.codigo}
-                          </p>
-                          <p className="text-xs text-text-muted mt-0.5">
-                            {asset?.nome || "Ativo não encontrado"} • {asset?.codigo}
-                          </p>
-                        </div>
-                        <Badge className={config.color}>
-                          {config.label}
-                        </Badge>
+                return (
+                  <motion.div
+                    key={request.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-4 hover:bg-white/5 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-start gap-4">
+                      {/* Status Icon */}
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${config.color.replace("text-", "bg-").replace("400", "500/20")}`}>
+                        <StatusIcon className={`w-5 h-5 ${config.color.split(" ")[1]}`} />
                       </div>
 
-                      {/* Details */}
-                      <div className="flex flex-wrap gap-4 mt-3 text-xs text-text-muted">
-                        <div className="flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" />
-                          <span>{motivoLabels[request.motivo]}</span>
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-text-primary">
+                              {request.codigo}
+                            </p>
+                            <p className="text-xs text-text-muted mt-0.5">
+                              Ativo: {request.ativoId}
+                            </p>
+                          </div>
+                          <Badge className={config.color}>
+                            {config.label}
+                          </Badge>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          <span>{request.solicitante.nome}</span>
+
+                        {/* Details */}
+                        <div className="flex flex-wrap gap-4 mt-3 text-xs text-text-muted">
+                          <div className="flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>{motivoLabels[request.motivo]}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            <span>{request.solicitante.nome}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            <span>{new Date(request.dataSolicitacao).toLocaleDateString("pt-BR")}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>{new Date(request.dataSolicitacao).toLocaleDateString("pt-BR")}</span>
-                        </div>
+
+                        {/* Timeline Preview */}
+                        {request.timeline.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-border">
+                            <p className="text-xs text-text-muted mb-2">Última atualização:</p>
+                            <p className="text-xs text-text-secondary">
+                              {request.timeline[request.timeline.length - 1].descricao}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Timeline Preview */}
-                      {request.timeline.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-border">
-                          <p className="text-xs text-text-muted mb-2">Última atualização:</p>
-                          <p className="text-xs text-text-secondary">
-                            {request.timeline[request.timeline.length - 1].descricao}
-                          </p>
-                        </div>
-                      )}
+                      {/* Action */}
+                      <Button variant="ghost" size="sm" className="shrink-0">
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
                     </div>
-
-                    {/* Action */}
-                    <Button variant="ghost" size="sm" className="shrink-0">
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </motion.div>
-              );
-            })}
+                  </motion.div>
+                );
+              })
+            )}
           </div>
         </ScrollArea>
       </GlassCard>

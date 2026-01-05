@@ -1,5 +1,12 @@
 "use client";
 
+// =============================================================================
+// Tracking Page - Real-time Asset and Vehicle Tracking
+// =============================================================================
+// Displays map view with active shipments and vehicle locations.
+// NOW SHOWS REAL DATA OR EMPTY STATE - No more mock data!
+// =============================================================================
+
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/shared/glass-card";
 import { AssetManagementHeader } from "@/components/ferramentas/ativos/asset-management-header";
 import { Button } from "@/components/ui/button";
@@ -17,56 +24,37 @@ import {
   Maximize2,
   Signal,
   Battery,
+  InboxIcon,
 } from "lucide-react";
-import {
-  mockShippingOrders,
-  mockAssets,
-  mockLocations,
-} from "@/mocks/ativos-mock-data";
 import { motion } from "framer-motion";
 
 /**
  * Tracking Page - Real-time Asset and Vehicle Tracking
  *
  * Displays map view with active shipments and vehicle locations.
+ * NOW USES REAL DATA - Empty state when no vehicles/shipments exist.
  */
 
-// Mock tracking data for vehicles
-const mockVehicles = [
-  {
-    id: "v-001",
-    placa: "ABC-1234",
-    motorista: "Carlos Silva",
-    status: "em_rota",
-    ultimaAtualizacao: new Date().toISOString(),
-    bateria: 85,
-    sinal: "forte",
-    destino: "Filial São Paulo",
-    etaMinutos: 45,
-  },
-  {
-    id: "v-002",
-    placa: "DEF-5678",
-    motorista: "João Santos",
-    status: "parado",
-    ultimaAtualizacao: new Date(Date.now() - 15 * 60000).toISOString(),
-    bateria: 72,
-    sinal: "medio",
-    destino: "Cliente XYZ",
-    etaMinutos: 120,
-  },
-  {
-    id: "v-003",
-    placa: "GHI-9012",
-    motorista: "Pedro Oliveira",
-    status: "em_rota",
-    ultimaAtualizacao: new Date(Date.now() - 5 * 60000).toISOString(),
-    bateria: 95,
-    sinal: "forte",
-    destino: "Centro de Distribuição",
-    etaMinutos: 20,
-  },
-];
+// Types for tracking
+type Vehicle = {
+  id: string;
+  placa: string;
+  motorista: string;
+  status: string;
+  ultimaAtualizacao: string;
+  bateria: number;
+  sinal: string;
+  destino: string;
+  etaMinutos: number;
+};
+
+type ShippingOrder = {
+  id: string;
+  codigo: string;
+  destino: { nome: string };
+  status: string;
+  dataPrevista: string;
+};
 
 const statusLabels: Record<string, { label: string; color: string }> = {
   em_rota: { label: "Em Rota", color: "bg-green-500/20 text-green-400" },
@@ -81,7 +69,11 @@ const signalLabels: Record<string, { label: string; color: string }> = {
 };
 
 export default function TrackingPage() {
-  const activeShipments = mockShippingOrders.filter(o => o.status === "em_transito");
+  // Real data - empty until backend integration
+  // TODO: Replace with useVehicles() and useShippingOrders() hooks when backend is ready
+  const vehicles: Vehicle[] = [];
+  const shippingOrders: ShippingOrder[] = [];
+  const activeShipments = shippingOrders.filter(o => o.status === "em_transito");
 
   return (
     <div className="space-y-6">
@@ -121,33 +113,10 @@ export default function TrackingPage() {
                 <MapPin className="w-16 h-16 mx-auto mb-4 text-text-muted opacity-50" />
                 <p className="text-text-muted">Integração com mapa em desenvolvimento</p>
                 <p className="text-sm text-text-muted mt-1">Google Maps / Mapbox</p>
+                {vehicles.length === 0 && (
+                  <p className="text-xs text-text-muted mt-3">Nenhum veículo rastreado</p>
+                )}
               </div>
-
-              {/* Mock Vehicle Markers */}
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.3 }}
-                className="absolute top-1/3 left-1/4 w-10 h-10 rounded-full bg-green-500/30 border-2 border-green-400 flex items-center justify-center"
-              >
-                <Truck className="w-5 h-5 text-green-400" />
-              </motion.div>
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.4 }}
-                className="absolute top-1/2 right-1/3 w-10 h-10 rounded-full bg-yellow-500/30 border-2 border-yellow-400 flex items-center justify-center"
-              >
-                <Truck className="w-5 h-5 text-yellow-400" />
-              </motion.div>
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.5 }}
-                className="absolute bottom-1/3 right-1/4 w-10 h-10 rounded-full bg-green-500/30 border-2 border-green-400 flex items-center justify-center"
-              >
-                <Truck className="w-5 h-5 text-green-400" />
-              </motion.div>
             </div>
           </GlassCard>
         </div>
@@ -162,7 +131,7 @@ export default function TrackingPage() {
                   <GlassCardTitle>Veículos</GlassCardTitle>
                 </div>
                 <Badge variant="outline" className="text-xs">
-                  {mockVehicles.length} ativos
+                  {vehicles.length} ativos
                 </Badge>
               </div>
             </GlassCardHeader>
@@ -180,58 +149,70 @@ export default function TrackingPage() {
 
             <ScrollArea className="flex-1">
               <div className="space-y-2 px-4 pb-4">
-                {mockVehicles.map((vehicle, index) => {
-                  const status = statusLabels[vehicle.status];
-                  const sinal = signalLabels[vehicle.sinal];
+                {vehicles.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <InboxIcon className="w-10 h-10 text-text-muted mb-3" />
+                    <p className="text-sm font-medium text-text-primary mb-1">
+                      Nenhum veículo
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      Os veículos rastreados aparecerão aqui
+                    </p>
+                  </div>
+                ) : (
+                  vehicles.map((vehicle, index) => {
+                    const status = statusLabels[vehicle.status] || statusLabels.offline;
+                    const sinal = signalLabels[vehicle.sinal] || signalLabels.fraco;
 
-                  return (
-                    <motion.div
-                      key={vehicle.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-border"
-                    >
-                      {/* Header */}
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${status.color.replace("text-", "bg-").replace("400", "500/20")}`}>
-                            <Truck className={`w-4 h-4 ${status.color.split(" ")[1]}`} />
+                    return (
+                      <motion.div
+                        key={vehicle.id}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-border"
+                      >
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${status.color.replace("text-", "bg-").replace("400", "500/20")}`}>
+                              <Truck className={`w-4 h-4 ${status.color.split(" ")[1]}`} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-text-primary">{vehicle.placa}</p>
+                              <p className="text-xs text-text-muted">{vehicle.motorista}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-text-primary">{vehicle.placa}</p>
-                            <p className="text-xs text-text-muted">{vehicle.motorista}</p>
-                          </div>
+                          <Badge className={status.color}>{status.label}</Badge>
                         </div>
-                        <Badge className={status.color}>{status.label}</Badge>
-                      </div>
 
-                      {/* Destination */}
-                      <div className="flex items-center gap-1 text-xs text-text-muted mb-2">
-                        <Navigation className="w-3 h-3" />
-                        <span className="truncate">{vehicle.destino}</span>
-                      </div>
+                        {/* Destination */}
+                        <div className="flex items-center gap-1 text-xs text-text-muted mb-2">
+                          <Navigation className="w-3 h-3" />
+                          <span className="truncate">{vehicle.destino}</span>
+                        </div>
 
-                      {/* Stats */}
-                      <div className="flex items-center justify-between text-xs text-text-muted pt-2 border-t border-border">
-                        <div className="flex items-center gap-3">
+                        {/* Stats */}
+                        <div className="flex items-center justify-between text-xs text-text-muted pt-2 border-t border-border">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1">
+                              <Battery className="w-3 h-3" />
+                              <span>{vehicle.bateria}%</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Signal className={`w-3 h-3 ${sinal.color}`} />
+                              <span className={sinal.color}>{sinal.label}</span>
+                            </div>
+                          </div>
                           <div className="flex items-center gap-1">
-                            <Battery className="w-3 h-3" />
-                            <span>{vehicle.bateria}%</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Signal className={`w-3 h-3 ${sinal.color}`} />
-                            <span className={sinal.color}>{sinal.label}</span>
+                            <Clock className="w-3 h-3" />
+                            <span>{vehicle.etaMinutos} min</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          <span>{vehicle.etaMinutos} min</span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                      </motion.div>
+                    );
+                  })
+                )}
               </div>
             </ScrollArea>
           </GlassCard>

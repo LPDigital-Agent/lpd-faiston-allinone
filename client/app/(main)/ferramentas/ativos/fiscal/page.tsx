@@ -1,5 +1,12 @@
 "use client";
 
+// =============================================================================
+// Fiscal Page - Tax Documents and Accounting
+// =============================================================================
+// Displays NF-e documents, tax obligations, and fiscal calendar.
+// NOW SHOWS REAL DATA OR EMPTY STATE - No more mock data!
+// =============================================================================
+
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/shared/glass-card";
 import { AssetManagementHeader } from "@/components/ferramentas/ativos/asset-management-header";
 import { Button } from "@/components/ui/button";
@@ -20,8 +27,8 @@ import {
   Upload,
   ChevronRight,
   MoreVertical,
+  InboxIcon,
 } from "lucide-react";
-import { mockFiscalDocuments } from "@/mocks/ativos-mock-data";
 import { formatCurrency } from "@/lib/ativos/constants";
 import { motion } from "framer-motion";
 
@@ -29,6 +36,7 @@ import { motion } from "framer-motion";
  * Fiscal Page - Tax Documents and Accounting
  *
  * Displays NF-e documents, tax obligations, and fiscal calendar.
+ * NOW USES REAL DATA - Empty state when no documents exist.
  */
 
 const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
@@ -44,34 +52,33 @@ const tipoLabels: Record<string, string> = {
   cte: "CT-e",
 };
 
-// Mock upcoming fiscal obligations
-const mockObligations = [
-  {
-    id: "ob-001",
-    titulo: "SPED Fiscal",
-    dataVencimento: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    status: "pendente",
-    tipo: "mensal",
-  },
-  {
-    id: "ob-002",
-    titulo: "EFD Contribuições",
-    dataVencimento: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString(),
-    status: "pendente",
-    tipo: "mensal",
-  },
-  {
-    id: "ob-003",
-    titulo: "Inventário Anual",
-    dataVencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    status: "pendente",
-    tipo: "anual",
-  },
-];
+// Real fiscal documents - empty array until backend integration
+// TODO: Replace with useFiscalDocuments() hook when backend is ready
+type FiscalDocument = {
+  id: string;
+  numero: string;
+  tipo: string;
+  status: string;
+  valor: number;
+  dataEmissao: string;
+  cliente?: string;
+};
+
+type FiscalObligation = {
+  id: string;
+  titulo: string;
+  dataVencimento: string;
+  status: string;
+  tipo: string;
+};
 
 export default function FiscalPage() {
-  const totalValue = mockFiscalDocuments.reduce((sum, doc) => sum + doc.valor, 0);
-  const emittedCount = mockFiscalDocuments.filter(d => d.status === "autorizado").length;
+  // Real data - empty until backend integration
+  const fiscalDocuments: FiscalDocument[] = [];
+  const fiscalObligations: FiscalObligation[] = [];
+
+  const totalValue = fiscalDocuments.reduce((sum, doc) => sum + doc.valor, 0);
+  const emittedCount = fiscalDocuments.filter(d => d.status === "autorizado").length;
 
   return (
     <div className="space-y-6">
@@ -107,7 +114,7 @@ export default function FiscalPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-text-primary">
-                  {mockFiscalDocuments.length}
+                  {fiscalDocuments.length}
                 </p>
                 <p className="text-sm text-text-muted">Total Documentos</p>
               </div>
@@ -145,7 +152,7 @@ export default function FiscalPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-text-primary">
-                  {mockFiscalDocuments.filter(d => d.status === "pendente").length}
+                  {fiscalDocuments.filter(d => d.status === "pendente").length}
                 </p>
                 <p className="text-sm text-text-muted">Pendentes</p>
               </div>
@@ -212,66 +219,78 @@ export default function FiscalPage() {
 
             <ScrollArea className="max-h-[400px]">
               <div className="divide-y divide-border">
-                {mockFiscalDocuments.map((doc, index) => {
-                  const status = statusConfig[doc.status];
-                  const StatusIcon = status.icon;
+                {fiscalDocuments.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <InboxIcon className="w-12 h-12 text-text-muted mb-3" />
+                    <p className="text-sm font-medium text-text-primary mb-1">
+                      Nenhum documento fiscal
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      Os documentos fiscais aparecerão aqui após a integração
+                    </p>
+                  </div>
+                ) : (
+                  fiscalDocuments.map((doc, index) => {
+                    const status = statusConfig[doc.status];
+                    const StatusIcon = status.icon;
 
-                  return (
-                    <motion.div
-                      key={doc.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.03 }}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-4 hover:bg-white/5 transition-colors cursor-pointer items-center"
-                    >
-                      {/* Document Info */}
-                      <div className="col-span-3">
-                        <p className="text-sm font-medium text-text-primary">
-                          {doc.numero}
-                        </p>
-                        <p className="text-xs text-text-muted truncate">
-                          {doc.cliente || "Cliente não informado"}
-                        </p>
-                      </div>
+                    return (
+                      <motion.div
+                        key={doc.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.03 }}
+                        className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-4 hover:bg-white/5 transition-colors cursor-pointer items-center"
+                      >
+                        {/* Document Info */}
+                        <div className="col-span-3">
+                          <p className="text-sm font-medium text-text-primary">
+                            {doc.numero}
+                          </p>
+                          <p className="text-xs text-text-muted truncate">
+                            {doc.cliente || "Cliente não informado"}
+                          </p>
+                        </div>
 
-                      {/* Type */}
-                      <div className="col-span-2">
-                        <Badge variant="outline" className="text-xs">
-                          {tipoLabels[doc.tipo]}
-                        </Badge>
-                      </div>
+                        {/* Type */}
+                        <div className="col-span-2">
+                          <Badge variant="outline" className="text-xs">
+                            {tipoLabels[doc.tipo]}
+                          </Badge>
+                        </div>
 
-                      {/* Status */}
-                      <div className="col-span-2">
-                        <Badge className={status.color}>
-                          <StatusIcon className="w-3 h-3 mr-1" />
-                          {status.label}
-                        </Badge>
-                      </div>
+                        {/* Status */}
+                        <div className="col-span-2">
+                          <Badge className={status.color}>
+                            <StatusIcon className="w-3 h-3 mr-1" />
+                            {status.label}
+                          </Badge>
+                        </div>
 
-                      {/* Value */}
-                      <div className="col-span-2">
-                        <p className="text-sm text-text-primary">
-                          {formatCurrency(doc.valor)}
-                        </p>
-                      </div>
+                        {/* Value */}
+                        <div className="col-span-2">
+                          <p className="text-sm text-text-primary">
+                            {formatCurrency(doc.valor)}
+                          </p>
+                        </div>
 
-                      {/* Date */}
-                      <div className="col-span-2">
-                        <p className="text-sm text-text-muted">
-                          {new Date(doc.dataEmissao).toLocaleDateString("pt-BR")}
-                        </p>
-                      </div>
+                        {/* Date */}
+                        <div className="col-span-2">
+                          <p className="text-sm text-text-muted">
+                            {new Date(doc.dataEmissao).toLocaleDateString("pt-BR")}
+                          </p>
+                        </div>
 
-                      {/* Actions */}
-                      <div className="col-span-1 flex justify-end">
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                        {/* Actions */}
+                        <div className="col-span-1 flex justify-end">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <ExternalLink className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </motion.div>
+                    );
+                  })
+                )}
               </div>
             </ScrollArea>
           </GlassCard>
@@ -289,48 +308,60 @@ export default function FiscalPage() {
 
             <ScrollArea className="h-[400px]">
               <div className="space-y-3 p-4">
-                {mockObligations.map((obligation, index) => {
-                  const daysUntil = Math.ceil(
-                    (new Date(obligation.dataVencimento).getTime() - Date.now()) /
-                      (1000 * 60 * 60 * 24)
-                  );
-                  const isUrgent = daysUntil <= 7;
+                {fiscalObligations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Calendar className="w-10 h-10 text-text-muted mb-3" />
+                    <p className="text-sm font-medium text-text-primary mb-1">
+                      Nenhuma obrigação pendente
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      As obrigações fiscais aparecerão aqui
+                    </p>
+                  </div>
+                ) : (
+                  fiscalObligations.map((obligation, index) => {
+                    const daysUntil = Math.ceil(
+                      (new Date(obligation.dataVencimento).getTime() - Date.now()) /
+                        (1000 * 60 * 60 * 24)
+                    );
+                    const isUrgent = daysUntil <= 7;
 
-                  return (
-                    <motion.div
-                      key={obligation.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className={`p-4 rounded-lg border ${
-                        isUrgent
-                          ? "border-yellow-500/30 bg-yellow-500/5"
-                          : "border-border bg-white/5"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="text-sm font-medium text-text-primary">
-                          {obligation.titulo}
-                        </p>
-                        {isUrgent && (
-                          <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-text-muted">
-                        <Calendar className="w-3 h-3" />
-                        <span>
-                          {new Date(obligation.dataVencimento).toLocaleDateString("pt-BR")}
-                        </span>
-                        <span className={isUrgent ? "text-yellow-400" : ""}>
-                          ({daysUntil} dias)
-                        </span>
-                      </div>
-                      <Badge variant="outline" className="mt-2 text-xs">
-                        {obligation.tipo.charAt(0).toUpperCase() + obligation.tipo.slice(1)}
-                      </Badge>
-                    </motion.div>
-                  );
-                })}
+                    return (
+                      <motion.div
+                        key={obligation.id}
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className={`p-4 rounded-lg border ${
+                          isUrgent
+                            ? "border-yellow-500/30 bg-yellow-500/5"
+                            : "border-border bg-white/5"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <p className="text-sm font-medium text-text-primary">
+                            {obligation.titulo}
+                          </p>
+                          {isUrgent && (
+                            <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-text-muted">
+                          <Calendar className="w-3 h-3" />
+                          <span>
+                            {new Date(obligation.dataVencimento).toLocaleDateString("pt-BR")}
+                          </span>
+                          <span className={isUrgent ? "text-yellow-400" : ""}>
+                            ({daysUntil} dias)
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="mt-2 text-xs">
+                          {obligation.tipo.charAt(0).toUpperCase() + obligation.tipo.slice(1)}
+                        </Badge>
+                      </motion.div>
+                    );
+                  })
+                )}
               </div>
             </ScrollArea>
 

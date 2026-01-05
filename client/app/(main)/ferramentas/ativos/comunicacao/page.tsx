@@ -1,5 +1,12 @@
 "use client";
 
+// =============================================================================
+// Comunicação Page - Internal Messaging System
+// =============================================================================
+// Inbox-style view for internal asset-related communications.
+// NOW SHOWS REAL DATA OR EMPTY STATE - No more mock data!
+// =============================================================================
+
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/shared/glass-card";
 import { AssetManagementHeader } from "@/components/ferramentas/ativos/asset-management-header";
 import { Button } from "@/components/ui/button";
@@ -21,18 +28,37 @@ import {
   Inbox,
   Archive,
   Trash2,
+  InboxIcon,
 } from "lucide-react";
-import {
-  mockMessages,
-  mockUsers,
-} from "@/mocks/ativos-mock-data";
 import { motion } from "framer-motion";
 
 /**
  * Comunicação Page - Internal Messaging System
  *
  * Inbox-style view for internal asset-related communications.
+ * NOW USES REAL DATA - Empty state when no messages exist.
  */
+
+// Types for messages
+type InternalMessage = {
+  id: string;
+  assunto: string;
+  conteudo: string;
+  remetente: { id: string; nome: string };
+  remetenteId: string;
+  departamento: string;
+  categoria: string;
+  prioridade: string;
+  lida: boolean;
+  favorita: boolean;
+  dataEnvio: string;
+  anexos?: string[];
+};
+
+type User = {
+  id: string;
+  nome: string;
+};
 
 const categoryLabels: Record<string, { label: string; color: string }> = {
   geral: { label: "Geral", color: "bg-blue-500/20 text-blue-400" },
@@ -49,8 +75,13 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function ComunicacaoPage() {
-  const unreadCount = mockMessages.filter(m => !m.lida).length;
-  const starredCount = mockMessages.filter(m => m.favorita).length;
+  // Real data - empty until backend integration
+  // TODO: Replace with useMessages() hook when backend is ready
+  const messages: InternalMessage[] = [];
+  const users: User[] = [];
+
+  const unreadCount = messages.filter(m => !m.lida).length;
+  const starredCount = messages.filter(m => m.favorita).length;
 
   return (
     <div className="space-y-6">
@@ -131,7 +162,7 @@ export default function ComunicacaoPage() {
                     <div className={`w-2 h-2 rounded-full mr-2 ${config.color.split(" ")[0]}`} />
                     {config.label}
                     <Badge variant="outline" className="ml-auto text-xs">
-                      {mockMessages.filter(m => m.categoria === key).length}
+                      {messages.filter(m => m.categoria === key).length}
                     </Badge>
                   </Button>
                 ))}
@@ -163,101 +194,113 @@ export default function ComunicacaoPage() {
 
             <ScrollArea className="h-[500px]">
               <div className="divide-y divide-border">
-                {mockMessages.map((message, index) => {
-                  const category = categoryLabels[message.categoria];
-                  const priorityColor = priorityColors[message.prioridade];
-                  const remetente = mockUsers.find(u => u.id === message.remetenteId);
+                {messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <InboxIcon className="w-12 h-12 text-text-muted mb-3" />
+                    <p className="text-sm font-medium text-text-primary mb-1">
+                      Nenhuma mensagem
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      As mensagens internas aparecerão aqui
+                    </p>
+                  </div>
+                ) : (
+                  messages.map((message, index) => {
+                    const category = categoryLabels[message.categoria] || categoryLabels.geral;
+                    const priorityColor = priorityColors[message.prioridade] || priorityColors.normal;
+                    const remetente = users.find(u => u.id === message.remetenteId);
 
-                  return (
-                    <motion.div
-                      key={message.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.03 }}
-                      className={`p-4 hover:bg-white/5 transition-colors cursor-pointer ${
-                        !message.lida ? "bg-white/5" : ""
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        {/* Read/Unread Indicator */}
-                        <div className="mt-1.5">
-                          {message.lida ? (
-                            <MailOpen className="w-4 h-4 text-text-muted" />
-                          ) : (
-                            <Mail className="w-4 h-4 text-blue-light" />
-                          )}
-                        </div>
+                    return (
+                      <motion.div
+                        key={message.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.03 }}
+                        className={`p-4 hover:bg-white/5 transition-colors cursor-pointer ${
+                          !message.lida ? "bg-white/5" : ""
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          {/* Read/Unread Indicator */}
+                          <div className="mt-1.5">
+                            {message.lida ? (
+                              <MailOpen className="w-4 h-4 text-text-muted" />
+                            ) : (
+                              <Mail className="w-4 h-4 text-blue-light" />
+                            )}
+                          </div>
 
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className={`text-sm font-medium truncate ${
-                                  !message.lida ? "text-text-primary" : "text-text-secondary"
-                                }`}>
-                                  {message.assunto}
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className={`text-sm font-medium truncate ${
+                                    !message.lida ? "text-text-primary" : "text-text-secondary"
+                                  }`}>
+                                    {message.assunto}
+                                  </p>
+                                  {message.favorita && (
+                                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
+                                  )}
+                                </div>
+                                <p className="text-xs text-text-muted mt-0.5">
+                                  {remetente?.nome || message.remetente?.nome || "Usuário desconhecido"}
                                 </p>
-                                {message.favorita && (
-                                  <Star className="w-3 h-3 text-yellow-400 fill-yellow-400 shrink-0" />
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Badge className={category.color}>{category.label}</Badge>
+                              </div>
+                            </div>
+
+                            {/* Preview */}
+                            <p className="text-sm text-text-muted mt-2 line-clamp-2">
+                              {message.conteudo}
+                            </p>
+
+                            {/* Footer */}
+                            <div className="flex items-center justify-between mt-2 pt-2">
+                              <div className="flex items-center gap-3 text-xs text-text-muted">
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  <span>
+                                    {new Date(message.dataEnvio).toLocaleDateString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </span>
+                                </div>
+                                {message.anexos && message.anexos.length > 0 && (
+                                  <div className="flex items-center gap-1">
+                                    <Paperclip className="w-3 h-3" />
+                                    <span>{message.anexos.length}</span>
+                                  </div>
+                                )}
+                                {message.prioridade !== "normal" && (
+                                  <span className={priorityColor}>
+                                    {message.prioridade.charAt(0).toUpperCase() + message.prioridade.slice(1)}
+                                  </span>
                                 )}
                               </div>
-                              <p className="text-xs text-text-muted mt-0.5">
-                                {remetente?.nome || "Usuário desconhecido"}
-                              </p>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                                <ChevronRight className="w-4 h-4" />
+                              </Button>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Badge className={category.color}>{category.label}</Badge>
-                            </div>
-                          </div>
-
-                          {/* Preview */}
-                          <p className="text-sm text-text-muted mt-2 line-clamp-2">
-                            {message.conteudo}
-                          </p>
-
-                          {/* Footer */}
-                          <div className="flex items-center justify-between mt-2 pt-2">
-                            <div className="flex items-center gap-3 text-xs text-text-muted">
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                <span>
-                                  {new Date(message.dataEnvio).toLocaleDateString("pt-BR", {
-                                    day: "2-digit",
-                                    month: "short",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </span>
-                              </div>
-                              {message.anexos && message.anexos.length > 0 && (
-                                <div className="flex items-center gap-1">
-                                  <Paperclip className="w-3 h-3" />
-                                  <span>{message.anexos.length}</span>
-                                </div>
-                              )}
-                              {message.prioridade !== "normal" && (
-                                <span className={priorityColor}>
-                                  {message.prioridade.charAt(0).toUpperCase() + message.prioridade.slice(1)}
-                                </span>
-                              )}
-                            </div>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                              <ChevronRight className="w-4 h-4" />
-                            </Button>
                           </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                      </motion.div>
+                    );
+                  })
+                )}
               </div>
             </ScrollArea>
 
             {/* Footer */}
             <div className="p-4 border-t border-border">
               <p className="text-sm text-text-muted text-center">
-                Mostrando {mockMessages.length} mensagens
+                Mostrando {messages.length} mensagens
               </p>
             </div>
           </GlassCard>

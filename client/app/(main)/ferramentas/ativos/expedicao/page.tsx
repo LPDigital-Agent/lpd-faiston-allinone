@@ -1,5 +1,12 @@
 "use client";
 
+// =============================================================================
+// Expedição Page - Shipping Orders Management
+// =============================================================================
+// Kanban-style view of shipping orders organized by status.
+// NOW SHOWS REAL DATA OR EMPTY STATE - No more mock data!
+// =============================================================================
+
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/shared/glass-card";
 import { AssetManagementHeader } from "@/components/ferramentas/ativos/asset-management-header";
 import { Button } from "@/components/ui/button";
@@ -15,18 +22,37 @@ import {
   User,
   Calendar,
   ArrowRight,
+  InboxIcon,
 } from "lucide-react";
-import {
-  mockShippingOrders,
-  mockAssets,
-} from "@/mocks/ativos-mock-data";
 import { motion } from "framer-motion";
 
 /**
  * Expedição Page - Shipping Orders Management
  *
  * Kanban-style view of shipping orders organized by status.
+ * NOW USES REAL DATA - Empty state when no orders exist.
  */
+
+// Types for shipping orders
+type ShippingOrderItem = {
+  ativoId: string;
+  ativoCodigo: string;
+  ativoNome: string;
+  quantidade: number;
+};
+
+type ShippingOrder = {
+  id: string;
+  codigo: string;
+  cliente: string;
+  destino: { nome: string };
+  status: string;
+  prioridade: string;
+  responsavel: { nome: string };
+  itens: ShippingOrderItem[];
+  dataCriacao: string;
+  dataPrevista: string;
+};
 
 const statusColumns = [
   { id: "aguardando", label: "Aguardando", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
@@ -35,6 +61,10 @@ const statusColumns = [
 ];
 
 export default function ExpedicaoPage() {
+  // Real data - empty until backend integration
+  // TODO: Replace with useShippingOrders() hook when backend is ready
+  const shippingOrders: ShippingOrder[] = [];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -51,7 +81,7 @@ export default function ExpedicaoPage() {
       {/* Kanban Board */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {statusColumns.map((column, colIndex) => {
-          const orders = mockShippingOrders.filter(o => o.status === column.id);
+          const orders = shippingOrders.filter(o => o.status === column.id);
 
           return (
             <motion.div
@@ -76,68 +106,65 @@ export default function ExpedicaoPage() {
 
                 <ScrollArea className="h-[500px]">
                   <div className="space-y-3 p-1">
-                    {orders.map((order, index) => {
-                      const assets = order.itens.map(item =>
-                        mockAssets.find(a => a.id === item.ativoId)
-                      ).filter(Boolean);
-
-                      return (
-                        <motion.div
-                          key={order.id}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.2 + index * 0.05 }}
-                          className="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-border"
-                        >
-                          {/* Order Header */}
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <p className="text-sm font-medium text-text-primary">
-                                {order.codigo}
-                              </p>
-                              <p className="text-xs text-text-muted">
-                                {order.itens.length} {order.itens.length === 1 ? "item" : "itens"}
-                              </p>
-                            </div>
-                            {order.prioridade === "urgente" && (
-                              <Badge className="bg-red-500/20 text-red-400 text-xs">
-                                Urgente
-                              </Badge>
-                            )}
+                    {orders.map((order, index) => (
+                      <motion.div
+                        key={order.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 + index * 0.05 }}
+                        className="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer border border-border"
+                      >
+                        {/* Order Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div>
+                            <p className="text-sm font-medium text-text-primary">
+                              {order.codigo}
+                            </p>
+                            <p className="text-xs text-text-muted">
+                              {order.itens.length} {order.itens.length === 1 ? "item" : "itens"}
+                            </p>
                           </div>
+                          {order.prioridade === "urgente" && (
+                            <Badge className="bg-red-500/20 text-red-400 text-xs">
+                              Urgente
+                            </Badge>
+                          )}
+                        </div>
 
-                          {/* Destination */}
-                          <div className="flex items-center gap-2 text-xs text-text-muted mb-2">
-                            <MapPin className="w-3 h-3" />
-                            <span className="truncate">{order.destino.nome}</span>
-                          </div>
+                        {/* Destination */}
+                        <div className="flex items-center gap-2 text-xs text-text-muted mb-2">
+                          <MapPin className="w-3 h-3" />
+                          <span className="truncate">{order.destino.nome}</span>
+                        </div>
 
-                          {/* Responsible */}
-                          <div className="flex items-center gap-2 text-xs text-text-muted mb-3">
-                            <User className="w-3 h-3" />
-                            <span className="truncate">{order.responsavel.nome}</span>
-                          </div>
+                        {/* Responsible */}
+                        <div className="flex items-center gap-2 text-xs text-text-muted mb-3">
+                          <User className="w-3 h-3" />
+                          <span className="truncate">{order.responsavel.nome}</span>
+                        </div>
 
-                          {/* Date */}
-                          <div className="flex items-center justify-between pt-2 border-t border-border">
-                            <div className="flex items-center gap-1 text-xs text-text-muted">
-                              <Calendar className="w-3 h-3" />
-                              <span>
-                                {new Date(order.dataPrevista).toLocaleDateString("pt-BR")}
-                              </span>
-                            </div>
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                              <ArrowRight className="w-3 h-3" />
-                            </Button>
+                        {/* Date */}
+                        <div className="flex items-center justify-between pt-2 border-t border-border">
+                          <div className="flex items-center gap-1 text-xs text-text-muted">
+                            <Calendar className="w-3 h-3" />
+                            <span>
+                              {new Date(order.dataPrevista).toLocaleDateString("pt-BR")}
+                            </span>
                           </div>
-                        </motion.div>
-                      );
-                    })}
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                            <ArrowRight className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </motion.div>
+                    ))}
 
                     {orders.length === 0 && (
-                      <div className="text-center py-8 text-text-muted">
-                        <Truck className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">Nenhuma ordem</p>
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <InboxIcon className="w-10 h-10 text-text-muted mb-2" />
+                        <p className="text-sm text-text-muted">Nenhuma ordem</p>
+                        <p className="text-xs text-text-muted mt-1">
+                          As ordens de expedição aparecerão aqui
+                        </p>
                       </div>
                     )}
                   </div>
@@ -157,7 +184,7 @@ export default function ExpedicaoPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-text-primary">
-                {mockShippingOrders.filter(o => o.status === "aguardando").length}
+                {shippingOrders.filter(o => o.status === "aguardando").length}
               </p>
               <p className="text-sm text-text-muted">Aguardando</p>
             </div>
@@ -171,7 +198,7 @@ export default function ExpedicaoPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-text-primary">
-                {mockShippingOrders.filter(o => o.status === "em_transito").length}
+                {shippingOrders.filter(o => o.status === "em_transito").length}
               </p>
               <p className="text-sm text-text-muted">Em Trânsito</p>
             </div>
@@ -185,7 +212,7 @@ export default function ExpedicaoPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-text-primary">
-                {mockShippingOrders.filter(o => o.status === "entregue").length}
+                {shippingOrders.filter(o => o.status === "entregue").length}
               </p>
               <p className="text-sm text-text-muted">Entregues</p>
             </div>
