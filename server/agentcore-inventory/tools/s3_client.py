@@ -35,6 +35,9 @@ def _get_s3_client():
         import boto3
         from botocore.config import Config
 
+        # DEBUG: Log to CloudWatch to verify this code path is executed
+        print("[S3Client] Creating NEW S3 client with SigV4 config - 2026-01-06T03:50:00Z")
+
         # CRITICAL: Configure S3 client for SigV4 presigned URLs
         # Without this, presigned URLs use SigV2 which fails with 400 Bad Request
         # See CLAUDE.md "S3 Presigned URL Issues - CORS 307 Redirect (CRITICAL)"
@@ -47,6 +50,7 @@ def _get_s3_client():
             region_name='us-east-2',
             config=config
         )
+        print(f"[S3Client] Client created with config: signature_version=s3v4, region=us-east-2")
     return _s3_client
 
 
@@ -132,6 +136,12 @@ class SGAS3Client:
                 Params=params,
                 ExpiresIn=expires_in,
             )
+
+            # DEBUG: Log URL format to verify SigV4 is being used
+            has_sigv4 = "X-Amz-Algorithm" in url
+            has_sigv2 = "AWSAccessKeyId" in url
+            print(f"[S3Client] generate_upload_url: SigV4={has_sigv4}, SigV2={has_sigv2}")
+            print(f"[S3Client] URL prefix: {url[:100]}...")
 
             return {
                 "success": True,
