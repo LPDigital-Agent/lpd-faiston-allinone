@@ -1,13 +1,17 @@
 /**
  * NEXO Import Explanations - Contextual help content for Smart Import
  *
- * IMPORTANT: All text must be in FIRST PERSON voice.
- * NEXO speaks directly to the user ("Eu encontrei..." not "O NEXO encontrou...")
+ * PHILOSOPHY: Explanations must be ACTIONABLE, not just stating facts!
+ * - DON'T: "Identifiquei 9 abas" (user already sees this)
+ * - DO: "A aba principal é X, as outras são secundárias. Verifique se está certo!"
+ *
+ * VOICE: First person (NEXO speaks directly to user)
+ * - "Eu encontrei..." not "O NEXO encontrou..."
  *
  * Each section has:
- * - summary: Always visible (1-2 sentences) - FIRST PERSON
- * - details: Expandable explanation (optional) - FIRST PERSON
- * - action: Recommended next step (optional)
+ * - summary: Always visible - MUST be ACTIONABLE guidance
+ * - details: Expandable - explains WHAT things mean
+ * - action: What user should DO next
  *
  * Language: Brazilian Portuguese (pt-BR)
  * Following NEXO AI-First philosophy: Observant, Thoughtful, Collaborative
@@ -25,8 +29,8 @@ export interface NexoExplanation {
 
 export interface DynamicExplanation {
   getSummary: (params: Record<string, unknown>) => string;
-  details?: string;
-  action?: string;
+  getDetails?: (params: Record<string, unknown>) => string;
+  getAction?: (params: Record<string, unknown>) => string;
 }
 
 // =============================================================================
@@ -34,190 +38,215 @@ export interface DynamicExplanation {
 // =============================================================================
 
 export const REASONING_TRACE_EXPLANATION: NexoExplanation = {
-  summary: "Aqui você vê como estou pensando. Cada etapa mostra meu raciocínio, ações e observações.",
-  details: `Uso o padrão ReAct (Reason + Act) para ser transparente:
+  summary: "Aqui mostro meu raciocínio passo a passo. Se algo parecer errado, me corrija nas perguntas abaixo!",
+  details: `Uso o padrão ReAct para ser transparente com você:
 
-• Pensamento (roxo): Reflito sobre o que vi
-• Ação (ciano): Executo uma ferramenta ou análise
-• Observação (verde): Registro o que encontrei
+• Pensamento (roxo): O que estou analisando
+• Ação (ciano): Ferramenta que estou usando
+• Observação (verde): O que encontrei
 
-Assim você entende cada decisão que tomo.`,
-  action: "Acompanhe meu progresso em tempo real.",
+Se meu raciocínio parece errado em algum ponto, use as perguntas abaixo para me corrigir.`,
+  action: "Acompanhe meu raciocínio - me corrija se necessário!",
 };
 
 // =============================================================================
-// Sheet Analysis
+// Sheet Analysis - MUST explain PURPOSE of each type
 // =============================================================================
 
 export const SHEET_ANALYSIS_EXPLANATION: DynamicExplanation = {
   getSummary: (params) => {
     const count = params.sheetCount ?? 0;
-    if (count === 0) return "Não identifiquei nenhuma aba no arquivo.";
-    if (count === 1) return "Identifiquei 1 aba e classifiquei pelo tipo de conteúdo.";
-    return `Identifiquei ${count} abas e classifiquei cada uma pelo tipo de conteúdo.`;
+    if (count === 0) return "Não encontrei abas válidas. Verifique se o arquivo está correto.";
+    if (count === 1) return "Arquivo simples! Vou processar todos os dados desta única aba.";
+
+    // Multiple sheets - guide user
+    return `Encontrei ${count} abas. Verifique se identifiquei corretamente qual contém os itens a importar!`;
   },
-  details: `Classifico cada aba por propósito:
+  getDetails: () => `O que cada tipo de aba significa:
 
-• Itens: Materiais/produtos a importar (mais importante!)
-• Seriais: Números de série para cada item
-• Metadados: Informações do fornecedor/projeto
-• Resumo: Totais e estatísticas (geralmente ignoro)
+• Itens (ciano): Contém os materiais/produtos → É A MAIS IMPORTANTE!
+• Seriais (roxo): Números de série de cada item
+• Metadados (amarelo): Dados do fornecedor/projeto
+• Resumo (verde): Totais e estatísticas (geralmente ignoro)
 
-O percentual indica minha certeza. Abaixo de 70% pode precisar sua confirmação.`,
-  action: "Verifique se identifiquei a aba principal corretamente.",
+⚠️ Se eu errar a aba principal, vou processar os dados errados!`,
+  getAction: (params) => {
+    const count = params.sheetCount ?? 0;
+    if (count > 1) {
+      return "Confira se a aba marcada como 'Itens' é realmente a principal!";
+    }
+    return undefined;
+  },
 };
 
 // =============================================================================
-// Column Mappings (PRIORITY - Most confusing to users)
+// Column Mappings - MUST explain WHAT TO DO with low confidence
 // =============================================================================
 
 export const COLUMN_MAPPINGS_EXPLANATION: DynamicExplanation = {
   getSummary: (params) => {
     const total = params.total ?? 0;
     const high = params.high ?? 0;
-    const medium = params.medium ?? 0;
     const low = params.low ?? 0;
 
-    if (total === 0) return "Ainda não mapeei nenhuma coluna.";
+    if (total === 0) return "Ainda analisando as colunas...";
 
-    return `Mapeei ${total} colunas: ${high} com alta, ${medium} com média, ${low} com baixa confiança.`;
+    // Focus on what needs attention
+    if (low > 0) {
+      return `⚠️ ${low} colunas com baixa confiança precisam da sua atenção! Responda as perguntas abaixo.`;
+    }
+    if (high === total) {
+      return `✅ Tenho alta confiança em todos os ${total} mapeamentos. Pode prosseguir!`;
+    }
+    return `A maioria está ok, mas verifique os ${params.medium ?? 0} mapeamentos de média confiança.`;
   },
-  details: `Meus níveis de confiança significam:
+  getDetails: () => `O que os níveis de confiança significam:
 
-• Alta (verde, 80%+): Tenho quase certeza do mapeamento
-• Média (amarelo, 50-79%): Provavelmente correto, mas vale você verificar
-• Baixa (vermelho, <50%): Estou incerto, preciso da sua confirmação
+🟢 Alta (80%+): Tenho quase certeza - não precisa verificar
+🟡 Média (50-79%): Provavelmente correto - vale uma olhada
+🔴 Baixa (<50%): Não tenho certeza - VOCÊ precisa confirmar!
 
-Se eu errar um mapeamento, os dados vão para o campo errado! Ex: "EQUIPAMENTO" mapeado para "quantity" em vez de "part_number" impede a identificação dos itens.`,
-  action: "Revise os mapeamentos de baixa confiança nas perguntas abaixo.",
+⚠️ IMPORTANTE: Se eu mapear errado, os dados vão para o campo errado no sistema!
+Exemplo: Se "EQUIPAMENTO" virar "quantidade" em vez de "part_number", você não vai encontrar os itens depois.`,
+  getAction: (params) => {
+    const low = params.low ?? 0;
+    if (low > 0) {
+      return `Responda as ${low} perguntas abaixo para corrigir meus mapeamentos!`;
+    }
+    return "Tudo certo! Pode confirmar a importação.";
+  },
 };
 
 // =============================================================================
-// Questions Panel (PRIORITY - Requires user action)
+// Questions Panel - MUST explain WHY user needs to answer
 // =============================================================================
 
 export const QUESTIONS_CRITICAL_EXPLANATION: NexoExplanation = {
-  summary: "Preciso da sua ajuda nestas perguntas - não consegui inferir com certeza suficiente.",
-  details: `Tipos de perguntas que faço:
+  summary: "🚨 Preciso da sua ajuda aqui! Não consegui descobrir essas informações sozinho.",
+  details: `Por que estou perguntando:
 
-• Obrigatórias (vermelho): Sem sua resposta, a importação pode falhar
-• Importantes (laranja): Afetam a qualidade, mas tenho um padrão
-• Opcionais (cinza): Refinamentos que você pode pular
+• Sem sua resposta, a importação pode FALHAR ou criar dados incorretos
+• Cada pergunta tem opções baseadas no que encontrei no arquivo
+• Se nenhuma opção servir, use "Outros" para digitar manualmente
 
-Se selecionar "Outros", você pode digitar um valor personalizado.`,
-  action: "Responda pelo menos as obrigatórias para eu continuar.",
+Estas perguntas são OBRIGATÓRIAS - não consigo continuar sem elas.`,
+  action: "Responda todas para eu poder finalizar a importação!",
 };
 
 export const QUESTIONS_OPTIONAL_EXPLANATION: NexoExplanation = {
-  summary: "Estas respostas refinam a importação. Se pular, usarei valores padrão.",
-  details: `Baseei estas perguntas em:
+  summary: "Estas perguntas refinam a importação. Se pular, uso valores padrão que funcionam na maioria dos casos.",
+  details: `Quando você deve responder:
 
-• Padrões que aprendi em importações similares
-• Campos que detectei no arquivo atual
-• Regras de negócio do SGA
+• Se quiser mais precisão nos dados importados
+• Se conhece detalhes específicos deste arquivo
+• Se já teve problemas com valores padrão antes
 
-Respondê-las me ajuda a ser mais preciso e reduz correções manuais depois.`,
-  action: "Preencha se tiver tempo - não são obrigatórias.",
+Quando pode pular:
+• Se for importação padrão/rotineira
+• Se não tiver certeza da resposta`,
+  action: "Opcional: responda se quiser mais precisão.",
 };
 
 // =============================================================================
-// Prior Knowledge (Learning Memory)
+// Prior Knowledge - MUST explain HOW it helps
 // =============================================================================
 
 export const PRIOR_KNOWLEDGE_WITH_HISTORY: DynamicExplanation = {
   getSummary: (params) => {
     const count = params.episodeCount ?? 0;
-    return `Encontrei ${count} importaç${count === 1 ? 'ão anterior similar' : 'ões anteriores similares'} na minha memória!`;
+    if (count === 1) {
+      return "🧠 Encontrei 1 importação similar! Estou usando esse conhecimento para preencher automaticamente.";
+    }
+    return `🧠 Encontrei ${count} importações similares! Quanto mais você me usa, mais inteligente eu fico.`;
   },
-  details: `Aprendo com cada importação:
+  getDetails: () => `O que aprendi com importações anteriores:
 
-• Quais colunas contêm Part Number, Quantidade, etc.
-• Qual projeto está associado a cada tipo de arquivo
+• Quais colunas do SEU arquivo correspondem a quais campos
+• Qual projeto geralmente está associado a este tipo de arquivo
 • Quais mapeamentos você costuma corrigir
 
-Importações bem-sucedidas aumentam minha confiança em decisões futuras.`,
-  action: "Quanto mais você me usar, mais inteligente eu fico!",
+Isso significa que faço menos perguntas e acerto mais!`,
+  getAction: () => "Se minhas sugestões estiverem boas, você pode confiar nelas!",
 };
 
 export const PRIOR_KNOWLEDGE_FIRST_TIME: NexoExplanation = {
-  summary: "É minha primeira vez com este tipo de arquivo. Suas respostas vão me ajudar no futuro!",
-  details: `Estou aprendendo com você:
+  summary: "📝 Primeira vez com este tipo de arquivo! Suas respostas vão me ensinar para as próximas.",
+  details: `O que acontece agora:
 
-• Vou memorizar esta importação
-• Próximas importações similares serão mais rápidas
-• Seus ajustes refinam meu conhecimento
+• Vou fazer mais perguntas que o normal
+• Suas respostas vão direto para minha memória
+• Nas próximas importações similares, serei mais rápido e assertivo
 
-É normal eu fazer mais perguntas na primeira vez.`,
+É normal eu pedir mais confirmações na primeira vez!`,
   action: "Responda com atenção - você está me treinando!",
 };
 
 // =============================================================================
-// File Info
+// File Info - MUST explain processing strategy
 // =============================================================================
 
 export const FILE_INFO_EXPLANATION: DynamicExplanation = {
   getSummary: (params) => {
     const strategy = params.strategy ?? "unknown";
-    const strategyNames: Record<string, string> = {
-      direct_parse: "análise direta",
-      vision_ocr: "IA visual (OCR)",
-      multi_sheet: "múltiplas abas",
-      ai_extraction: "IA generativa",
+    const strategyMessages: Record<string, string> = {
+      direct_parse: "Arquivo estruturado! Vou processar diretamente - rápido e preciso.",
+      vision_ocr: "📸 Usando IA visual para ler este arquivo. Pode demorar um pouco mais.",
+      multi_sheet: "Excel com várias abas! Verifique se identifiquei a aba correta.",
+      ai_extraction: "Texto não estruturado - usando IA generativa para extrair os dados.",
     };
-    const name = strategyNames[strategy as string] ?? strategy;
-    return `Detectei o tipo do arquivo e escolhi a melhor estratégia: ${name}.`;
+    return strategyMessages[strategy as string] ?? "Analisando formato do arquivo...";
   },
-  details: `Minhas estratégias de processamento:
+  getDetails: () => `Estratégias de processamento:
 
-• direct_parse: Para arquivos estruturados (XML, CSV) - mais rápido
-• vision_ocr: Para imagens e PDFs escaneados - uso IA visual
-• multi_sheet: Para Excel com várias abas - analiso a estrutura
-• ai_extraction: Para texto livre - uso IA generativa para extrair
+• direct_parse: Para XML, CSV bem formatados - mais rápido
+• vision_ocr: Para PDFs escaneados, imagens - usa Gemini Vision
+• multi_sheet: Para Excel com várias abas - analiso cada uma
+• ai_extraction: Para texto livre - usa IA generativa
 
-Escolhi a estratégia que garante máxima precisão para este arquivo.`,
+Cada estratégia é otimizada para o tipo de arquivo.`,
 };
 
 // =============================================================================
-// Loading States
+// Loading States - MUST inform WHAT is happening
 // =============================================================================
 
 export const LOADING_EXPLANATIONS: Record<string, NexoExplanation> = {
   uploading: {
-    summary: "Estou recebendo seu arquivo e armazenando de forma segura...",
-    details: "Uso URLs assinadas temporárias para garantir a segurança dos seus dados.",
+    summary: "📤 Enviando seu arquivo para processamento seguro...",
+    details: "Usando URL assinada temporária para garantir segurança.",
   },
   recalling: {
-    summary: "Consultando minha memória para encontrar importações similares...",
-    details: "Estou buscando episódios passados que possam me ajudar nesta importação.",
+    summary: "🧠 Consultando minha memória por importações similares...",
+    details: "Buscando arquivos parecidos que você já importou antes.",
   },
   analyzing: {
-    summary: "Analisando a estrutura e detectando padrões...",
-    details: "Estou identificando abas, colunas e tipos de dados automaticamente.",
+    summary: "🔍 Analisando estrutura do arquivo...",
+    details: "Identificando abas, colunas e tipos de dados automaticamente.",
   },
   mapping: {
-    summary: "Mapeando colunas para campos do sistema...",
-    details: "Estou comparando nomes de colunas com campos conhecidos do SGA.",
+    summary: "🗺️ Mapeando colunas para campos do sistema...",
+    details: "Comparando nomes de colunas com campos conhecidos do SGA.",
   },
   generating: {
-    summary: "Gerando perguntas inteligentes para você...",
-    details: "Estou criando perguntas baseadas em ambiguidades que detectei e no histórico.",
+    summary: "❓ Gerando perguntas para esclarecer dúvidas...",
+    details: "Criando perguntas baseadas em ambiguidades que encontrei.",
   },
 };
 
 // =============================================================================
-// Error State
+// Error State - MUST give ACTIONABLE solutions
 // =============================================================================
 
 export const ERROR_EXPLANATION: NexoExplanation = {
-  summary: "Ops! Encontrei um problema. Veja abaixo o que pode ter causado.",
-  details: `Soluções comuns para me ajudar:
+  summary: "❌ Ops! Encontrei um problema. Veja abaixo como resolver.",
+  details: `Soluções mais comuns:
 
-1. Arquivo muito grande: Máximo 50MB
-2. Formato não suportado: Use XML, PDF, CSV, XLSX, JPG, PNG, TXT
-3. Arquivo corrompido: Reexporte do sistema de origem
-4. Timeout: Arquivo muito complexo - tente simplificar ou dividir
-5. Erro de rede: Verifique sua conexão e tente novamente`,
-  action: "Corrija o problema e vamos tentar de novo!",
+1. Arquivo muito grande → Máximo 50MB
+2. Formato não suportado → Use XML, PDF, CSV, XLSX, JPG, PNG ou TXT
+3. Arquivo corrompido → Reexporte do sistema de origem
+4. Timeout → Arquivo muito complexo - tente dividir em partes menores
+5. Erro de rede → Verifique sua conexão e tente novamente`,
+  action: "Corrija o problema e clique em 'Tentar novamente'!",
 };
 
 // =============================================================================
@@ -225,25 +254,25 @@ export const ERROR_EXPLANATION: NexoExplanation = {
 // =============================================================================
 
 export const SUCCESS_EXPLANATION: NexoExplanation = {
-  summary: "Análise completa! Revise os dados e me diga se está tudo certo.",
-  details: `Consegui analisar com sucesso:
+  summary: "✅ Análise completa! Revise os dados e confirme se está tudo certo.",
+  details: `O que foi feito:
 
 • Estrutura do arquivo detectada
 • Colunas mapeadas para campos do sistema
 • Perguntas geradas para esclarecer dúvidas
 
-Agora é sua vez de revisar e ajustar se necessário.`,
-  action: "Revise e clique em 'Confirmar Importação'.",
+Agora é sua vez de revisar e aprovar!`,
+  action: "Revise os dados e clique em 'Confirmar Importação'.",
 };
 
 // =============================================================================
-// Confidence Badges Tooltip
+// Confidence Badges Tooltip - Explains inline
 // =============================================================================
 
 export const CONFIDENCE_BADGE_EXPLANATIONS: Record<string, string> = {
-  high: "Confiança alta (80%+): Tenho quase certeza que este mapeamento está correto.",
-  medium: "Confiança média (50-79%): Provavelmente correto, mas vale você verificar.",
-  low: "Confiança baixa (<50%): Estou incerto. Por favor, confirme manualmente.",
+  high: "✅ Tenho quase certeza - não precisa verificar.",
+  medium: "⚠️ Provavelmente correto - vale uma olhada.",
+  low: "🚨 Não tenho certeza - confirme manualmente!",
 };
 
 // =============================================================================
@@ -255,10 +284,11 @@ export const CONFIDENCE_BADGE_EXPLANATIONS: Record<string, string> = {
  */
 export function getColumnMappingsExplanation(high: number, medium: number, low: number): NexoExplanation {
   const total = high + medium + low;
+  const params = { total, high, medium, low };
   return {
-    summary: COLUMN_MAPPINGS_EXPLANATION.getSummary({ total, high, medium, low }),
-    details: COLUMN_MAPPINGS_EXPLANATION.details,
-    action: COLUMN_MAPPINGS_EXPLANATION.action,
+    summary: COLUMN_MAPPINGS_EXPLANATION.getSummary(params),
+    details: COLUMN_MAPPINGS_EXPLANATION.getDetails?.(params) ?? COLUMN_MAPPINGS_EXPLANATION.getDetails?.({}) ?? "",
+    action: COLUMN_MAPPINGS_EXPLANATION.getAction?.(params),
   };
 }
 
@@ -266,10 +296,11 @@ export function getColumnMappingsExplanation(high: number, medium: number, low: 
  * Get explanation for sheet analysis
  */
 export function getSheetAnalysisExplanation(sheetCount: number): NexoExplanation {
+  const params = { sheetCount };
   return {
-    summary: SHEET_ANALYSIS_EXPLANATION.getSummary({ sheetCount }),
-    details: SHEET_ANALYSIS_EXPLANATION.details,
-    action: SHEET_ANALYSIS_EXPLANATION.action,
+    summary: SHEET_ANALYSIS_EXPLANATION.getSummary(params),
+    details: SHEET_ANALYSIS_EXPLANATION.getDetails?.(params) ?? "",
+    action: SHEET_ANALYSIS_EXPLANATION.getAction?.(params),
   };
 }
 
@@ -282,8 +313,8 @@ export function getPriorKnowledgeExplanation(episodeCount: number): NexoExplanat
   }
   return {
     summary: PRIOR_KNOWLEDGE_WITH_HISTORY.getSummary({ episodeCount }),
-    details: PRIOR_KNOWLEDGE_WITH_HISTORY.details,
-    action: PRIOR_KNOWLEDGE_WITH_HISTORY.action,
+    details: PRIOR_KNOWLEDGE_WITH_HISTORY.getDetails?.({ episodeCount }) ?? "",
+    action: PRIOR_KNOWLEDGE_WITH_HISTORY.getAction?.({ episodeCount }),
   };
 }
 
@@ -293,6 +324,6 @@ export function getPriorKnowledgeExplanation(episodeCount: number): NexoExplanat
 export function getFileInfoExplanation(strategy: string): NexoExplanation {
   return {
     summary: FILE_INFO_EXPLANATION.getSummary({ strategy }),
-    details: FILE_INFO_EXPLANATION.details,
+    details: FILE_INFO_EXPLANATION.getDetails?.({ strategy }) ?? "",
   };
 }
