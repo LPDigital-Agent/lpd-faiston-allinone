@@ -144,6 +144,127 @@ jobs:
           echo "=== Checking AgentCore Status ==="
           agentcore status --agent ${{ env.AGENT_NAME }} 2>&1 || true
 
+      # =========================================================================
+      # Configure JWT Authorizer for Cognito Authentication
+      # =========================================================================
+      # The agentcore CLI does NOT apply authorizerConfiguration from YAML.
+      # We must call UpdateAgentRuntime API directly to enable JWT Bearer token
+      # authentication from the frontend.
+      # =========================================================================
+      - name: Configure JWT Authorizer
+        env:
+          COGNITO_USER_POOL_ID: us-east-2_6Vzhr0J6M
+          COGNITO_CLIENT_ID: dqqebean5q4fq14bkp2bofnsj
+        run: |
+          pip install boto3 requests --quiet
+          python3 << 'PYTHON_SCRIPT'
+          import boto3
+          import json
+          import os
+          from botocore.auth import SigV4Auth
+          from botocore.awsrequest import AWSRequest
+          import requests
+
+          REGION = "us-east-2"
+          AGENT_NAME = "faiston_asset_management"
+          COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
+          COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
+
+          print(f"Configuring JWT Authorizer for {AGENT_NAME}")
+          print(f"  Cognito Pool: {COGNITO_POOL_ID}")
+          print(f"  Cognito Client: {COGNITO_CLIENT_ID}")
+
+          session = boto3.Session(region_name=REGION)
+          credentials = session.get_credentials()
+
+          # Step 1: List agent runtimes to find the runtime ID
+          list_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com/runtimes/"
+          list_request = AWSRequest(method="GET", url=list_url)
+          SigV4Auth(credentials, "bedrock-agentcore", REGION).add_auth(list_request)
+
+          list_response = requests.get(list_url, headers=dict(list_request.headers))
+          runtimes = list_response.json().get("agentRuntimeSummaries", [])
+
+          agent_runtime_id = None
+          for runtime in runtimes:
+              if runtime.get("name") == AGENT_NAME:
+                  agent_runtime_id = runtime.get("agentRuntimeId")
+                  break
+
+          if not agent_runtime_id:
+              print(f"ERROR: Agent runtime '{AGENT_NAME}' not found!")
+              exit(1)
+
+          print(f"  Runtime ID: {agent_runtime_id}")
+
+          # Step 2: Get current runtime configuration
+          get_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com/runtimes/{agent_runtime_id}/"
+          get_request = AWSRequest(method="GET", url=get_url)
+          SigV4Auth(credentials, "bedrock-agentcore", REGION).add_auth(get_request)
+
+          get_response = requests.get(get_url, headers=dict(get_request.headers))
+          if get_response.status_code != 200:
+              print(f"ERROR: Failed to get runtime config: {get_response.text}")
+              exit(1)
+
+          current_config = get_response.json()
+          print(f"  Current status: {current_config.get('status')}")
+
+          # Check if already configured
+          existing_auth = current_config.get("authorizerConfiguration", {})
+          if existing_auth.get("customJWTAuthorizer"):
+              print("  JWT Authorizer already configured - skipping update")
+              exit(0)
+
+          # Step 3: Build update payload with JWT authorizer
+          discovery_url = f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_POOL_ID}/.well-known/openid-configuration"
+
+          update_body = {
+              "agentRuntimeArtifact": current_config.get("agentRuntimeArtifact"),
+              "networkConfiguration": current_config.get("networkConfiguration"),
+              "roleArn": current_config.get("roleArn"),
+              "authorizerConfiguration": {
+                  "customJWTAuthorizer": {
+                      "discoveryUrl": discovery_url,
+                      "allowedClients": [COGNITO_CLIENT_ID],
+                      "allowedAudiences": [COGNITO_CLIENT_ID]
+                  }
+              }
+          }
+
+          # Preserve optional configurations
+          if current_config.get("protocolConfiguration"):
+              update_body["protocolConfiguration"] = current_config["protocolConfiguration"]
+          if current_config.get("environmentVariables"):
+              update_body["environmentVariables"] = current_config["environmentVariables"]
+          if current_config.get("description"):
+              update_body["description"] = current_config["description"]
+
+          # Step 4: Update runtime with JWT authorizer
+          update_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com/runtimes/{agent_runtime_id}/"
+          update_request = AWSRequest(
+              method="PUT",
+              url=update_url,
+              data=json.dumps(update_body),
+              headers={"Content-Type": "application/json"}
+          )
+          SigV4Auth(credentials, "bedrock-agentcore", REGION).add_auth(update_request)
+
+          update_response = requests.put(
+              update_url,
+              headers=dict(update_request.headers),
+              data=json.dumps(update_body)
+          )
+
+          if update_response.status_code in [200, 202]:
+              print("✅ JWT Authorizer configured successfully!")
+              print(f"  Discovery URL: {discovery_url}")
+          else:
+              print(f"ERROR: Failed to update runtime: {update_response.status_code}")
+              print(update_response.text)
+              exit(1)
+          PYTHON_SCRIPT
+
       - name: Health check
         working-directory: server/agentcore-inventory
         continue-on-error: true
@@ -165,6 +286,13 @@ jobs:
           echo "| Model | gemini-3-pro-preview |" >> $GITHUB_STEP_SUMMARY
           echo "| Region | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| AWS Account | \`377311924364\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Auth** | **Cognito JWT Bearer Token** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Authentication:**" >> $GITHUB_STEP_SUMMARY
+          echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| User Pool | \`us-east-2_6Vzhr0J6M\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Client ID | \`dqqebean5q4fq14bkp2bofnsj\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**PostgreSQL MCP Gateway (Sprint 4):**" >> $GITHUB_STEP_SUMMARY
           echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
