@@ -418,11 +418,13 @@ export function useSmartImporter(): UseSmartImporterReturn & {
       const data = analysisResult.data as NexoAnalyzeFileResponse;
 
       // STATELESS: Build session state from response (or use returned session_state)
+      // NOTE: stage MUST be a valid Python ImportStage enum value:
+      // analyzing, reasoning, questioning, awaiting, learning, processing, complete
       const sessionState: NexoSessionState = data.session_state || {
         session_id: data.import_session_id,
         filename: file.name,
         s3_key: urlResult.data.s3_key,
-        stage: 'analysis_complete',
+        stage: data.questions && data.questions.length > 0 ? 'questioning' : 'processing',
         file_analysis: {
           sheets: data.analysis.sheets,
           sheet_count: data.analysis.sheet_count,
@@ -438,10 +440,16 @@ export function useSmartImporter(): UseSmartImporterReturn & {
           acc[m.file_column] = m.target_field;
           return acc;
         }, {} as Record<string, string>),
+        // NOTE: confidence format MUST match Python ConfidenceScore dataclass:
+        // overall, extraction_quality, evidence_strength, historical_match, risk_level, factors, requires_hil
         confidence: {
-          level: data.overall_confidence >= 0.8 ? 'high' : data.overall_confidence >= 0.5 ? 'medium' : 'low',
-          score: data.overall_confidence,
-          reason: data.analysis.recommended_strategy,
+          overall: data.overall_confidence,
+          extraction_quality: 1.0,
+          evidence_strength: 1.0,
+          historical_match: 1.0,
+          risk_level: data.overall_confidence >= 0.8 ? 'low' : data.overall_confidence >= 0.5 ? 'medium' : 'high',
+          factors: [],
+          requires_hil: data.overall_confidence < 0.6,
         },
         error: null,
         created_at: new Date().toISOString(),

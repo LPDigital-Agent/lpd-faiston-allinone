@@ -2565,10 +2565,13 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
         overall_confidence = float(confidence)
 
     # Convert reasoning to reasoning_trace format
+    # NOTE: Frontend expects 'type' field, not 'step'
     reasoning_trace = [
         {
-            "step": r.get("type", "observation"),
+            "type": r.get("type", "observation"),
             "content": r.get("content", ""),
+            "tool": r.get("tool"),
+            "result": r.get("result"),
             "timestamp": r.get("timestamp"),
         }
         for r in reasoning

@@ -1158,7 +1158,16 @@ export interface NexoSessionState {
   answers: Record<string, string>;
   learned_mappings: Record<string, string>;
   column_mappings?: Record<string, string>;
-  confidence?: { level: string; score: number; reason: string } | null;
+  // NOTE: confidence format MUST match Python ConfidenceScore dataclass
+  confidence?: {
+    overall: number;
+    extraction_quality: number;
+    evidence_strength: number;
+    historical_match: number;
+    risk_level: string;
+    factors: string[];
+    requires_hil: boolean;
+  } | null;
   error?: string | null;
   created_at: string;
   updated_at: string;
