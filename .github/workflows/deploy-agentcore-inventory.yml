@@ -153,8 +153,9 @@ jobs:
       # =========================================================================
       - name: Configure JWT Authorizer
         env:
-          COGNITO_USER_POOL_ID: us-east-2_6Vzhr0J6M
-          COGNITO_CLIENT_ID: dqqebean5q4fq14bkp2bofnsj
+          # Faiston NEXO Cognito (faiston-users-prod)
+          COGNITO_USER_POOL_ID: us-east-2_lkBXr4kjy
+          COGNITO_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg
           # Known runtime ID from successful deployment
           AGENT_RUNTIME_ID: faiston_asset_management-uSuLPsFQNH
         run: |
@@ -281,8 +282,8 @@ jobs:
           echo "**Authentication:**" >> $GITHUB_STEP_SUMMARY
           echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| User Pool | \`us-east-2_6Vzhr0J6M\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Client ID | \`dqqebean5q4fq14bkp2bofnsj\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| User Pool | \`us-east-2_lkBXr4kjy\` (faiston-users-prod) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Client ID | \`7ovjm09dr94e52mpejvbu9v1cg\` (faiston-client-prod) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**PostgreSQL MCP Gateway (Sprint 4):**" >> $GITHUB_STEP_SUMMARY
           echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
