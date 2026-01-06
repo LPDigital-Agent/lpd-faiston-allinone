@@ -279,10 +279,11 @@ Educational platform at `/ferramentas/academy/` with AI-powered features.
 - ⏳ Sprint 6: Style and Polish
 
 ### Sprint 4 Build Fixes (January 2026)
-New components added: `textarea.tsx`, `slider.tsx`, `markdown-content.tsx`, `use-toast.ts`
+New components added: `textarea.tsx`, `slider.tsx`, `markdown-content.tsx`, `use-toast.ts`, `skeleton.tsx`
 New hooks: `useLibrary.ts`
 New types: `types/zoom-videosdk.d.ts`
 **Pattern**: All Academy hooks use object-based parameters (not positional)
+**TypeScript Fixes**: Discriminated union types in `portalAgentcore.ts` for `DailySummarySectionData`
 
 ### Key Adaptations (Hive → Faiston)
 - "Sasha" → "NEXO" (AI tutor)
@@ -305,13 +306,14 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ SGA 2.0 Phases 1-3: Expedição, Cotação, Reversa, Analytics, Reconciliação SAP
 - ✅ Wiki: 14 sections documenting all SGA features
 - ✅ Unified Entry: Multi-source tabs (NF-e, Image OCR, SAP Export, Manual)
+- ✅ **Estoque Page Refactor (January 2026)**: Unified navigation into single ModuleNavigation (8 items), removed KPIs (already in Dashboard)
 - ✅ **Smart Import**: Universal file importer - auto-detects XML/PDF/CSV/XLSX/JPG/PNG/TXT
-- ⏳ **PostgreSQL Migration (Sprint 4-5)**: DynamoDB → Aurora PostgreSQL (in progress)
-  - ✅ RDS Aurora Serverless v2 cluster
-  - ✅ RDS Proxy (connection pooling)
-  - ✅ MCP Gateway + Lambda MCP Target
-  - ✅ PostgreSQL schema (15 tables, triggers, materialized views)
-  - ⏳ Schema migration workflow (running)
+- ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
+  - Aurora Serverless v2 cluster with RDS Proxy (connection pooling)
+  - 13 tables, 110 indexes, 8 materialized views
+  - VPC with private subnets + S3/Secrets Manager/RDS endpoints
+  - MCP Gateway + Lambda MCP tools (8 tools working)
+  - Schema migration workflow via Lambda bridge (GitHub Actions)
 - ⏳ Phase 4: SAP API Integration (pending credentials)
 
 ### SGA Key Components
@@ -327,7 +329,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 ### SGA Pages Structure (25+ pages)
 ```
 /ferramentas/ativos/estoque/
-├── page.tsx           # Dashboard + KPIs + Quick Actions
+├── page.tsx           # Operations hub + unified ModuleNavigation (8 items)
 ├── [id]/              # Asset detail
 ├── lista/             # Asset list
 ├── cadastros/         # Part numbers, locations, projects
@@ -393,7 +395,7 @@ You now have:
 
 **Project**: Faiston NEXO
 **Type**: AI-First All-in-One Intranet Portal
-**Stack**: Next.js 15 + Python 3.12 + Google ADK + AWS Bedrock AgentCore
+**Stack**: Next.js 15 + Python 3.13 + Google ADK + AWS Bedrock AgentCore
 **Phase**: Phase 1 (Foundation)
 
 ---

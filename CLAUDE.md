@@ -6,55 +6,75 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > Context-specific documentation is in subdirectory CLAUDE.md files (lazy-loaded).
 
 ---
-
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## Primary Instructions
 - NEVER create files on root unless necessary
 - ALL documentation in `docs/` folder
 - Be extremely concise in commits and interactions
 - Always create plans before implementation
-
 ## GitHub & Git
 - Primary method: GitHub CLI
 - Branch prefix: `fabio/`
-
 ## SubAgents and Skills
 - ALWAYS use cluade code SubAgents and Skills for parallel execution
 - Use `prompt-engineer` SubAgent to improve prompts
-
 ---
+
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## Authentication Policy
 - **NO AWS Amplify** - EVER
 - **Cognito**: PRIMARY authentication method (direct API, no SDK)
 
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## AWS Configuration
-
 - **MANDATORY** to Deploy for Developer:
   - AWS Account ID: 377311924364\
   - AWS Regionb: us-east-2 
   
 ---
 
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## Infrastructure Policy (MANDATORY)
-
 ### NEVER DO:
 1. Create AWS resources via CloudFormation/SAM - use ONLY Terraform
 2. Create parallel environments (prod vs prod-v2) - consolidate FIRST
 3. Duplicate CORS - lives ONLY in `terraform/main/locals.tf`
 4. Hardcode AWS values - use Terraform variables/locals
 5. Deploy from local console - use ONLY GitHub Actions CI/CD
-
 ### ALWAYS DO:
 1. Check existing resources BEFORE creating:
-   ```bash
-   aws s3 ls | grep hive
-   aws lambda list-functions | grep hive
-   aws cloudformation list-stacks
-   ```
 2. Use Terraform for ALL AWS resources
 3. Update `terraform/main/locals.tf` for CORS changes
 4. Run `terraform plan` via GitHub Actions before apply
 ---
 
+## DO NOT REMOVE
+### Important (Never Change or replace it)
+## Additional Global Policies (MANDATORY)
+- MCP ACCESS POLICY (MANDATORY): ALL MCP tools/servers MUST be accessed ONLY via **AWS Bedrock AgentCore Gateway** (single MCP endpoint). DO NOT connect agents directly to external MCP servers or tool endpoints; use MCP operations (`tools/list`, `tools/call`) through the Gateway URL.
+- DOCUMENTATION CHECK (MANDATORY): Before implementing ANY AWS/AgentCore/MCP code or IaC, Claude Code MUST consult **MCP AWS Documentation** (AgentCore + Gateway) AND **MCP Context7 documentation** to validate APIs, best practices, and current usage. If docs conflict or are unclear → STOP and ASK.
+- LAMBDA RUNTIME POLICY (MANDATORY): ALL AWS Lambda functions MUST use **architecture: arm64** and **runtime: Python 3.13**. No exceptions unless explicitly approved by me.
+- TERRAFORM DOCS (MANDATORY): For ANY Terraform work related to AgentCore, ALWAYS consult the official Terraform Registry docs FIRST (source of truth) — including:
+  - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagentcore_gateway
+  - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagentcore_agent_runtime
+  - and other relevant AWS/AgentCore resources in the same registry before writing/updating IaC.
+- SDLC + CLEAN CODE (MANDATORY): Você MUST seguir as melhores práticas de mercado de **SDLC (Software Development Life Cycle)** e aplicar **Clean Code** (padrões consistentes, code reviews, testes automatizados, CI/CD, lint/format, logging, docs mínimos). Código MUST ser state-of-the-art e maintainable.
+- SECURITY / PENTEST-READY (MANDATORY): Esta plataforma MUST ser construída com postura **security-first** e estar pronta para pentest (zero “quick hacks”). Você MUST alinhar implementação e validações com as referências oficiais:
+  - OWASP: https://owasp.org/
+  - NIST CSF: https://www.nist.gov/cyberframework
+  - MITRE ATT&CK: https://attack.mitre.org/
+  - CWE: https://cwe.mitre.org/
+  - SANS: https://www.sans.org/
+  - CIS: https://www.cisecurity.org/
+  - AWS Security: https://aws.amazon.com/security/
+  - AWS Well-Architected Security Pillar: https://aws.amazon.com/architecture/well-architected/security/
+  - Microsoft SDL: https://www.microsoft.com/security/sdl
+
+---
 ## Project Overview
 
 **Faiston NEXO** - AI-First All-in-One Intranet Portal for Faiston employees. The platform is commanded by the AI assistant **NEXO** which orchestrates all interactions, integrations, and automations.
@@ -171,16 +191,18 @@ lpd-faiston-allinone/
 | `/ultra-think` | Deep analysis and problem solving |
 | `/sync-project` | Synchronize all project documentation |
 
+---
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## Available Skills
-
 Use these skills for specialized tasks:
-
 - **adk-agentcore-architect**: Google ADK agents, AWS Bedrock AgentCore, A2A protocol
 - **ui-ux-designer**: Component design, Tailwind CSS, glassmorphism, accessibility
 - **frontend-builder**: Next.js, React, TypeScript components
 - **backend-architect**: Python FastAPI, Lambda, DynamoDB
 - **ai-engineer**: LLM integration, prompt engineering, agent design
 
+---
 ## Architecture Reference
 
 ```
@@ -214,53 +236,38 @@ Frontend (Next.js 15 - CloudFront + S3)
 ---
 
 ## DO NOT REMOVE
-###Important (Never Change or replace it)
 ### Important (Never Change or replace it)
-
 - MUST MANDATORY use ONLY **Gemini 3.0 Family** models (**Pro or Flash**).
 - USING ANY OTHER MODEL, VERSION, OR FAMILY IS **STRICTLY FORBIDDEN**.
-
 - MUST MUST MANDATORY use **Agent Architecture** for **ALL microservices**, **WHEN IT MAKES SENSE**.
   - “MAKES SENSE” means the service involves **reasoning, orchestration, decision-making, autonomy, learning, memory, workflows, or multi-step execution**.
-
 - If it DOES NOT MAKE SENSE:
   - you MUST still design the service using **Agentic AI Architecture** based on **Google ADK, A2A, MCP, A2P, and Memory**.
   - In this case, you MUST **STOP** and **ASK ME** to **VALIDATE AND APPROVE** the architectural decision **BEFORE IMPLEMENTING ANY CODE**.
-
 - ONLY IF I explicitly approve NOT using Agentic Architecture:
   - you MUST then implement the service using **microservices**, **serverless**, and **event-driven architecture**.
-
 - ANY ASSUMPTION ABOUT ARCHITECTURE **WITHOUT MY EXPLICIT APPROVAL** IS **NOT ALLOWED**.
-
 - MUST MANDATORY use the **A2A Python SDK** located at:  
   https://github.com/a2aproject/a2a-python
-
 - MUST MANDATORY use the **Google ADK Framework**, strictly following **OFFICIAL DOCUMENTATION**, including but not limited to:
   - https://google.github.io/adk-docs/
   - https://developers.googleblog.com/en/agent-development-kit-easy-to-build-multi-agent-applications/
   - https://docs.cloud.google.com/agent-builder/agent-development-kit/overview
   - https://cloud.google.com/blog/topics/developers-practitioners/build-your-first-adk-agent-workforce
   - https://github.com/google/adk-python
-
 - MUST ONLY use **GEMINI 3 FAMILY MODELS**, as defined in **Google Official Documentation**:
   - https://ai.google.dev/gemini-api/docs/models
   - https://ai.google.dev/gemini-api/docs/gemini-3
-
 - USING OLDER GEMINI VERSIONS, EXPERIMENTAL MODELS, OR UNLISTED VARIANTS IS **NOT PERMITTED**.
-
 #### HARD STOP & FAILURE CONDITIONS
-
 - IF ANY RULE ABOVE CANNOT BE MET:
   - YOU MUST **STOP IMMEDIATELY**.
   - YOU MUST **EXPLAIN WHY**.
   - YOU MUST **ASK FOR EXPLICIT APPROVAL OR GUIDANCE** BEFORE CONTINUING.
-
 - DO NOT AUTOFIX.
 - DO NOT SUBSTITUTE TECHNOLOGIES.
 - DO NOT SIMPLIFY THE ARCHITECTURE WITHOUT PERMISSION.
-
 #### DEFAULT BEHAVIOR
-
 - WHEN IN DOUBT → **ASK ME FIRST**.
 - WHEN A CHOICE EXISTS → **PRESENT OPTIONS AND TRADE-OFFS**.
 - WHEN A SHORTCUT EXISTS → **DO NOT TAKE IT WITHOUT APPROVAL**.
@@ -290,22 +297,19 @@ Frontend (Next.js 15 - CloudFront + S3)
 
 ---
 
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## 🚨 Cold Start Limit (30 seconds) — CRITICAL
-
 AgentCore has a **30-SECOND COLD START LIMIT**.  
 Exceeding this causes **HTTP 424 errors** and **BREAKS ALL AI FEATURES**.
-
 ### ❌ NEVER DO
-
 1. Add heavy dependencies to `requirements.txt`  
    Examples: `trafilatura`, `beautifulsoup4`, `lxml`, `Pillow`, or anything similar/heavy.
 2. Add imports to `agents/__init__.py` or `tools/__init__.py`  
    These files **MUST remain EMPTY**.
 3. Import agents at module level  
    Each Google ADK import may take ~**5–6 seconds** and will destroy cold start.
-
 ### ✅ ALWAYS DO
-
 1. Keep `requirements.txt` minimal
    Current baseline: `google-adk`, `google-genai`, `bedrock-agentcore`, `elevenlabs`
 2. Use **lazy imports** in `main.py`
@@ -316,34 +320,26 @@ Exceeding this causes **HTTP 424 errors** and **BREAKS ALL AI FEATURES**.
    **NEVER use lxml** - it's a heavy C extension that violates cold start limits.
 
 ---
-
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## Important Notes (DO NOT DELETE)
-
 - All docs MUST stay in `docs/` folder (NOT root).
 - Only essential files are allowed in root: `package.json`, configs, `CLAUDE.md`, `README.md`.
 - ALL deployments via GitHub Actions — **NEVER local console**.
 - TypeScript strict mode: **DISABLED** (rapid prototyping).
-
 - Antes de criar, atualizar ou fazer qualquer análise de agentes usando o AgentCore,  
   MUST consultar o documento: `@docs/AgentCore/IMPLEMENTATION_GUIDE.md`.
-
 - BE CAREFUL with Brazilian Portuguese in UI text and scripts (voices/videos).  
   Accent marks are MANDATORY (ex: “ação”, “técnico”, “integração”).
-
 - MUST USE Claude Skills available in all tasks.
-
 - ATTENTION AND MANDATORY:  
   A documentação oficial da AWS mostra que o AgentCore Runtime já tem dezenas de bibliotecas pré-instaladas.  
   Antes de adicionar qualquer dependência ao deploy package, VALIDAR se já não existe no runtime.
-
 - MUST USE MCP Context7 to check documentation and ensure best practices before implementing any function or code.
-
 - USE best practices for the SDLC (Software Development Life Cycle):  
   comments in all code + Clean Code principles.
-
 - MUST MANDATORY when creating ANY Terraform:  
   check MCP Terraform to ensure best practices and latest stable modules/providers.
-
 - MUST check `/docs/Claude Code/` and apply best practices for prompts and working with Claude Code in ALL tasks.
 
 ---
@@ -403,6 +399,7 @@ Components and utilities added to fix build errors:
 - `client/components/ui/slider.tsx` - Slider input control
 - `client/components/ui/markdown-content.tsx` - Markdown rendering with react-markdown
 - `client/components/ui/use-toast.ts` - Toast notification hook
+- `client/components/ui/skeleton.tsx` - Loading placeholder with pulse animation (added January 2026)
 
 **New Hooks:**
 - `client/hooks/academy/useLibrary.ts` - Library file management
@@ -448,6 +445,11 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ UI Refinement: QuickActions redesigned to compact full-width layout
 - ✅ Unified Entry: Multi-source material entry (NF-e, Image OCR, SAP Export, Manual)
 - ✅ **Smart Import (January 2026)**: Universal file importer with auto-detect (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
+- ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
+  - Aurora Serverless v2 cluster with RDS Proxy
+  - 13 tables, 110 indexes, 8 materialized views
+  - MCP Gateway + Lambda MCP tools (8 tools working)
+  - VPC with private subnets, S3/Secrets Manager/RDS endpoints
 - ⏳ Phase 4: SAP API Integration (requires SAP credentials)
 
 ### SGA Backend Agents (10)
@@ -486,7 +488,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 
 ### SGA Frontend Pages (25+)
 `client/app/(main)/ferramentas/ativos/estoque/`:
-- `page.tsx` - Dashboard with KPIs, Quick Actions, and inbox
+- `page.tsx` - Operations hub with unified ModuleNavigation (8 items), Task Inbox, Recent Assets (refactored January 2026)
 - `[id]/page.tsx` - Asset detail with timeline
 - `lista/page.tsx` - Asset list with filters
 - `cadastros/` - Part numbers, locations, projects (3 pages)
@@ -613,3 +615,25 @@ export function isNFImportResult(preview: SmartImportPreview): preview is NFImpo
 const unknownPreview = preview as SmartImportPreview;
 ```
 **Also**: Lucide icons don't accept `title` prop - use `aria-label` instead
+
+### 7. Portal AgentCore Discriminated Unions (January 2026)
+**Issue**: TypeScript errors when accessing `DailySummarySection.data` properties like `total_articles` or `tip`
+**Fix**: Use discriminated union types and explicit type assertions
+```typescript
+// In portalAgentcore.ts - define specific data types
+export interface NewsSectionData { total_articles: number; categories?: string[]; }
+export interface TipsSectionData { tip: string; category?: string; }
+export type DailySummarySectionData = NewsSectionData | CalendarSectionData | TeamsSectionData | TipsSectionData;
+
+// In consumer components - use type assertions
+const newsData = newsSection?.data as NewsSectionData | undefined;
+const newsCount = newsData?.total_articles || 2;
+```
+
+### 8. Estoque Page Navigation Consolidation (January 2026)
+**Issue**: Estoque page had two separate navigation sections (Quick Actions + Bottom Nav) causing UX confusion and duplication
+**Fix**: Unified both into single `ModuleNavigation` component with 8 items:
+- Lista de Ativos, Movimentações, Expedição, Reversa, Inventário, Cadastros, Analytics, Reconciliação SAP
+- KPIs removed (already in Gestão de Ativos Dashboard)
+- Grid: 2 cols mobile → 3 cols sm → 4 cols lg
+- Compact cards with icon + label + description

@@ -121,6 +121,9 @@ mcp__memory__search_nodes "Hive Academy"
 
 **File**: `CLAUDE.md` (root)
 
+## MANDATORY: On Claude.md NEVER REMOVE OR REPLACE Items with ## DO NOT REMOVE or ### Important (Never Change or replace it) items.
+
+
 Based on Phase 1 analysis, UPDATE the following sections in CLAUDE.md:
 
 ### 4.1 Sections to Update
