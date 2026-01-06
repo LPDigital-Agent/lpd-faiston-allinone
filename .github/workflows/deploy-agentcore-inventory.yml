@@ -155,6 +155,8 @@ jobs:
         env:
           COGNITO_USER_POOL_ID: us-east-2_6Vzhr0J6M
           COGNITO_CLIENT_ID: dqqebean5q4fq14bkp2bofnsj
+          # Known runtime ID from successful deployment
+          AGENT_RUNTIME_ID: faiston_asset_management-uSuLPsFQNH
         run: |
           pip install boto3 requests --quiet
           python3 << 'PYTHON_SCRIPT'
@@ -166,34 +168,17 @@ jobs:
           import requests
 
           REGION = "us-east-2"
-          AGENT_NAME = "faiston_asset_management"
           COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
           COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
+          # Use known runtime ID directly (avoids name lookup issues)
+          agent_runtime_id = os.environ.get("AGENT_RUNTIME_ID")
 
-          print(f"Configuring JWT Authorizer for {AGENT_NAME}")
+          print(f"Configuring JWT Authorizer for runtime: {agent_runtime_id}")
           print(f"  Cognito Pool: {COGNITO_POOL_ID}")
           print(f"  Cognito Client: {COGNITO_CLIENT_ID}")
 
           session = boto3.Session(region_name=REGION)
           credentials = session.get_credentials()
-
-          # Step 1: List agent runtimes to find the runtime ID
-          list_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com/runtimes/"
-          list_request = AWSRequest(method="GET", url=list_url)
-          SigV4Auth(credentials, "bedrock-agentcore", REGION).add_auth(list_request)
-
-          list_response = requests.get(list_url, headers=dict(list_request.headers))
-          runtimes = list_response.json().get("agentRuntimeSummaries", [])
-
-          agent_runtime_id = None
-          for runtime in runtimes:
-              if runtime.get("name") == AGENT_NAME:
-                  agent_runtime_id = runtime.get("agentRuntimeId")
-                  break
-
-          if not agent_runtime_id:
-              print(f"ERROR: Agent runtime '{AGENT_NAME}' not found!")
-              exit(1)
 
           print(f"  Runtime ID: {agent_runtime_id}")
 
