@@ -94,7 +94,7 @@ jobs:
               aws:
                 account: '377311924364'
                 region: us-east-2
-                execution_role_arn: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+                execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
                 network_configuration:
                   network_mode: PUBLIC
                   network_mode_config: null
