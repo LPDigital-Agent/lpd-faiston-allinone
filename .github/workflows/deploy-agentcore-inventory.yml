@@ -10,7 +10,7 @@
 #
 # Agents:
 # - EstoqueControlAgent: Core +/- inventory movements
-# - IntakeAgent: NF-e reading (PDF/XML extraction)
+# - IntakeAgent: NF reading (PDF/XML extraction)
 # - ReconciliacaoAgent: Divergence detection and inventory counts
 # - ComplianceAgent: Policy validation and approval workflows
 # - ComunicacaoAgent: Notifications and technician communication
@@ -300,7 +300,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**5 AI Agents:**" >> $GITHUB_STEP_SUMMARY
           echo "- EstoqueControlAgent - Core inventory movements" >> $GITHUB_STEP_SUMMARY
-          echo "- IntakeAgent - NF-e PDF/XML extraction" >> $GITHUB_STEP_SUMMARY
+          echo "- IntakeAgent - NF PDF/XML extraction" >> $GITHUB_STEP_SUMMARY
           echo "- ReconciliacaoAgent - Divergence detection" >> $GITHUB_STEP_SUMMARY
           echo "- ComplianceAgent - Policy validation" >> $GITHUB_STEP_SUMMARY
           echo "- ComunicacaoAgent - Notifications" >> $GITHUB_STEP_SUMMARY
@@ -310,7 +310,7 @@ jobs:
           echo "- \`search_assets\` - Asset search" >> $GITHUB_STEP_SUMMARY
           echo "- \`where_is_serial\` - Serial lookup" >> $GITHUB_STEP_SUMMARY
           echo "- \`get_balance\` - Balance queries" >> $GITHUB_STEP_SUMMARY
-          echo "- \`process_nf_upload\` - NF-e processing" >> $GITHUB_STEP_SUMMARY
+          echo "- \`process_nf_upload\` - NF processing" >> $GITHUB_STEP_SUMMARY
           echo "- \`create_movement\` - Inventory movements" >> $GITHUB_STEP_SUMMARY
           echo "- \`start_inventory_count\` - Counting campaigns" >> $GITHUB_STEP_SUMMARY
           echo "- \`chat\` - NEXO Estoque assistant" >> $GITHUB_STEP_SUMMARY

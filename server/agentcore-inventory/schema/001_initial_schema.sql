@@ -307,7 +307,7 @@ COMMENT ON TABLE sga.reservations IS 'Temporary stock reservations with TTL';
 -- =============================================================================
 -- Table: pending_entries
 -- =============================================================================
--- Pending material entries (NF-e uploads awaiting processing).
+-- Pending material entries (NF uploads awaiting processing).
 -- DynamoDB equivalent: DOC# entities
 
 CREATE TABLE sga.pending_entries (
@@ -331,7 +331,7 @@ CREATE TABLE sga.pending_entries (
     created_by VARCHAR(100)
 );
 
-COMMENT ON TABLE sga.pending_entries IS 'Pending material entries (NF-e uploads)';
+COMMENT ON TABLE sga.pending_entries IS 'Pending material entries (NF uploads)';
 
 -- =============================================================================
 -- Table: pending_entry_items

@@ -32,7 +32,7 @@ export type { SGAPartNumber } from './usePartNumbers';
 export { useProjects } from './useProjects';
 export type { SGAProject } from './useProjects';
 
-// NF-e hook
+// NF hook
 export { useNFReader } from './useNFReader';
 export type { NFExtraction, NFItemMapping, PendingNFEntry, ConfidenceScore } from './useNFReader';
 

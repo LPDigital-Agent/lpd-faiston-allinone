@@ -1,10 +1,10 @@
 # =============================================================================
 # Intake Agent - Faiston SGA Inventory
 # =============================================================================
-# Agent for processing incoming materials via NF-e (Nota Fiscal Eletrônica).
+# Agent for processing incoming materials via NF (Nota Fiscal Eletrônica).
 #
 # Features:
-# - Upload and parse NF-e XML/PDF files
+# - Upload and parse NF XML/PDF files
 # - AI-assisted data extraction from PDFs
 # - Automatic part number matching
 # - Serial number detection
@@ -53,7 +53,7 @@ no sistema Faiston SGA (Sistema de Gestao de Ativos).
 
 ## Suas Responsabilidades
 
-1. **Processar NF-e**: Ler e extrair dados de Notas Fiscais (XML ou PDF)
+1. **Processar NF**: Ler e extrair dados de Notas Fiscais (XML ou PDF)
 2. **Identificar Itens**: Mapear itens da NF para part numbers do cadastro
 3. **Detectar Seriais**: Identificar numeros de serie nos itens
 4. **Criar Entradas**: Registrar movimentacao de entrada no estoque
@@ -61,7 +61,7 @@ no sistema Faiston SGA (Sistema de Gestao de Ativos).
 
 ## Regras de Negocio
 
-### Processamento de NF-e
+### Processamento de NF
 - XML e OBRIGATORIO para validacao fiscal
 - PDF pode ser usado para informacoes complementares
 - Chave de acesso (44 digitos) identifica a NF unicamente
@@ -99,7 +99,7 @@ Responda SEMPRE em JSON estruturado:
 
 ## Contexto
 
-Voce processa NF-e de fornecedores de equipamentos de TI e telecomunicacoes.
+Voce processa NF de fornecedores de equipamentos de TI e telecomunicacoes.
 Os itens podem ser: switches, roteadores, access points, cabos, SFPs, etc.
 Cada item pode ter numero de serie unico ou ser item de consumo (quantidade).
 """
@@ -153,9 +153,9 @@ class EntryResult:
 
 class IntakeAgent(BaseInventoryAgent):
     """
-    Agent for processing incoming materials via NF-e.
+    Agent for processing incoming materials via NF.
 
-    Handles NF-e parsing, data extraction, part number matching,
+    Handles NF parsing, data extraction, part number matching,
     and entry creation with confidence scoring.
     """
 
@@ -170,7 +170,7 @@ class IntakeAgent(BaseInventoryAgent):
         super().__init__(
             name="IntakeAgent",
             instruction=INTAKE_AGENT_INSTRUCTION,
-            description="Processamento de entrada de materiais via NF-e",
+            description="Processamento de entrada de materiais via NF",
         )
         # Lazy-loaded clients
         self._db_client = None
@@ -202,7 +202,7 @@ class IntakeAgent(BaseInventoryAgent):
         return self._nf_parser
 
     # =========================================================================
-    # NF-e Processing
+    # NF Processing
     # =========================================================================
 
     async def process_nf_upload(
@@ -214,7 +214,7 @@ class IntakeAgent(BaseInventoryAgent):
         uploaded_by: str = "system",
     ) -> EntryResult:
         """
-        Process an uploaded NF-e file (XML or PDF).
+        Process an uploaded NF file (XML or PDF).
 
         Args:
             s3_key: S3 key of the uploaded file
@@ -241,7 +241,7 @@ class IntakeAgent(BaseInventoryAgent):
                     message=f"Arquivo nao encontrado: {s3_key}",
                 )
 
-            # 2. Parse NF-e based on file type
+            # 2. Parse NF based on file type
             if file_type.lower() == "xml":
                 extraction = self.nf_parser.parse_xml(
                     file_data.decode("utf-8")
@@ -256,7 +256,7 @@ class IntakeAgent(BaseInventoryAgent):
             if not extraction or extraction.get("confidence", 0) < 0.3:
                 return EntryResult(
                     success=False,
-                    message="Falha ao extrair dados da NF-e",
+                    message="Falha ao extrair dados da NF",
                     extraction=extraction,
                 )
 
@@ -346,7 +346,7 @@ class IntakeAgent(BaseInventoryAgent):
             if requires_project:
                 project_task = await hil_manager.create_task(
                     task_type=HILTaskType.NEW_PROJECT_REQUEST,
-                    title=f"Atribuir projeto para NF-e: {extraction.get('numero', 'N/A')}",
+                    title=f"Atribuir projeto para NF: {extraction.get('numero', 'N/A')}",
                     description=self._format_project_request_message(
                         extraction=extraction,
                         entry_id=entry_id,
@@ -370,7 +370,7 @@ class IntakeAgent(BaseInventoryAgent):
             if requires_hil and not requires_project:
                 hil_task = await hil_manager.create_task(
                     task_type=HILTaskType.APPROVAL_ENTRY if unmatched_items else HILTaskType.REVIEW_ENTRY,
-                    title=f"Revisar entrada NF-e: {extraction.get('numero', 'N/A')}",
+                    title=f"Revisar entrada NF: {extraction.get('numero', 'N/A')}",
                     description=self._format_entry_review_message(
                         extraction=extraction,
                         confidence=confidence,
@@ -394,11 +394,11 @@ class IntakeAgent(BaseInventoryAgent):
 
             # Build status message
             if requires_project:
-                status_message = "NF-e processada, aguardando atribuicao de projeto"
+                status_message = "NF processada, aguardando atribuicao de projeto"
             elif requires_hil:
-                status_message = "NF-e processada, aguardando revisao"
+                status_message = "NF processada, aguardando revisao"
             else:
-                status_message = "NF-e processada, pronta para confirmacao"
+                status_message = "NF processada, pronta para confirmacao"
 
             result = EntryResult(
                 success=True,
@@ -431,12 +431,12 @@ class IntakeAgent(BaseInventoryAgent):
             )
             return EntryResult(
                 success=False,
-                message=f"Erro ao processar NF-e: {str(e)}",
+                message=f"Erro ao processar NF: {str(e)}",
             )
 
     async def _process_nf_pdf(self, pdf_data: bytes) -> Dict[str, Any]:
         """
-        Process NF-e PDF using AI extraction.
+        Process NF PDF using AI extraction.
 
         For PDFs with embedded text, extracts text and uses AI.
         For scanned PDFs (images), delegates to _process_scanned_nf().
@@ -467,7 +467,7 @@ class IntakeAgent(BaseInventoryAgent):
 
             response = await self.invoke(
                 prompt=f"""
-                Extraia os dados da NF-e do seguinte texto/imagem.
+                Extraia os dados da NF do seguinte texto/imagem.
                 {prompt}
 
                 Formato de saida OBRIGATORIO: JSON conforme especificado.
@@ -531,7 +531,7 @@ class IntakeAgent(BaseInventoryAgent):
 
     async def _process_scanned_nf(self, pdf_data: bytes) -> Dict[str, Any]:
         """
-        Process scanned NF-e document using Gemini Vision.
+        Process scanned NF document using Gemini Vision.
 
         Uses Gemini 3.0 Pro Vision to extract data from scanned
         paper documents (DANFE images, photographed invoices).
@@ -578,7 +578,7 @@ class IntakeAgent(BaseInventoryAgent):
                 ],
                 config=types.GenerateContentConfig(
                     temperature=0.1,  # Low temperature for accurate extraction
-                    max_output_tokens=8192,  # Allow for large NF-e responses
+                    max_output_tokens=8192,  # Allow for large NF responses
                 ),
             )
 
@@ -688,10 +688,10 @@ class IntakeAgent(BaseInventoryAgent):
         nf_items: List[Dict[str, Any]],
     ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Match NF-e items to existing part numbers.
+        Match NF items to existing part numbers.
 
         Args:
-            nf_items: List of items from NF-e extraction
+            nf_items: List of items from NF extraction
 
         Returns:
             Tuple of (matched_items, unmatched_items)
@@ -723,7 +723,7 @@ class IntakeAgent(BaseInventoryAgent):
         item: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """
-        Find matching part number for an NF-e item.
+        Find matching part number for an NF item.
 
         Tries multiple matching strategies:
         1. Exact match on supplier code (cProd)
@@ -731,7 +731,7 @@ class IntakeAgent(BaseInventoryAgent):
         3. Match on NCM code
 
         Args:
-            item: NF-e item dict
+            item: NF item dict
 
         Returns:
             Match info or None
@@ -782,7 +782,7 @@ class IntakeAgent(BaseInventoryAgent):
         This provides the highest confidence match (95%) when found.
 
         Args:
-            supplier_code: Supplier's internal product code (cProd from NF-e)
+            supplier_code: Supplier's internal product code (cProd from NF)
 
         Returns:
             Part number item if found, None otherwise
@@ -820,7 +820,7 @@ class IntakeAgent(BaseInventoryAgent):
         Returns confidence score based on match quality.
 
         Args:
-            description: Product description (xProd from NF-e)
+            description: Product description (xProd from NF)
 
         Returns:
             Dict with part_number and match_score, or None if no match
@@ -914,7 +914,7 @@ class IntakeAgent(BaseInventoryAgent):
         Use Gemini AI to rank candidate part numbers against target description.
 
         Args:
-            target_description: Description to match (from NF-e)
+            target_description: Description to match (from NF)
             candidates: List of candidate part number items
 
         Returns:
@@ -946,7 +946,7 @@ class IntakeAgent(BaseInventoryAgent):
 
             prompt = f"""Analise a descricao do produto e identifique qual Part Number do catalogo melhor corresponde.
 
-## Descricao do Produto (da NF-e)
+## Descricao do Produto (da NF)
 {target_description}
 
 ## Catalogo de Part Numbers Disponiveis
@@ -1078,12 +1078,12 @@ Responda APENAS com JSON no formato:
         total_count: int,
     ) -> ConfidenceScore:
         """
-        Calculate confidence score for NF-e extraction.
+        Calculate confidence score for NF extraction.
 
         Args:
-            extraction: Extracted NF-e data
+            extraction: Extracted NF data
             matched_count: Number of items matched to PN
-            total_count: Total items in NF-e
+            total_count: Total items in NF
 
         Returns:
             ConfidenceScore
@@ -1132,7 +1132,7 @@ Responda APENAS com JSON no formato:
 
         Args:
             confidence: Calculated confidence
-            extraction: NF-e extraction
+            extraction: NF extraction
             unmatched_items: Items without PN match
 
         Returns:
@@ -1167,7 +1167,7 @@ Responda APENAS com JSON no formato:
         Format message for HIL entry review task.
         """
         message = f"""
-## Revisao de Entrada NF-e
+## Revisao de Entrada NF
 
 ### Dados da Nota
 - **Numero**: {extraction.get('numero', 'N/A')} / Serie: {extraction.get('serie', 'N/A')}
@@ -1216,7 +1216,7 @@ Responda APENAS com JSON no formato:
         """
         Format message for HIL project assignment request.
 
-        Sent to Finance team when NF-e arrives without a project ID.
+        Sent to Finance team when NF arrives without a project ID.
         Finance needs to create the project in SAP and assign it here.
         """
         items = extraction.get("items", [])
@@ -1230,10 +1230,10 @@ Responda APENAS com JSON no formato:
 ## Solicitacao de Atribuicao de Projeto
 
 ### Contexto
-Uma NF-e foi recebida, mas **NAO possui ID de projeto atribuido**.
+Uma NF foi recebida, mas **NAO possui ID de projeto atribuido**.
 Por favor, identifique o projeto correspondente no SAP e atribua a esta entrada.
 
-### Dados da NF-e
+### Dados da NF
 - **Entry ID**: `{entry_id}`
 - **Numero**: {extraction.get('numero', 'N/A')} / Serie: {extraction.get('serie', 'N/A')}
 - **Chave de Acesso**: {extraction.get('chave_acesso', 'N/A')}
@@ -1251,13 +1251,13 @@ Por favor, identifique o projeto correspondente no SAP e atribua a esta entrada.
 {chr(10).join(items_summary)}
 
 ### Acoes Necessarias
-1. **Identificar Projeto**: Verifique no SAP qual projeto corresponde a esta NF-e
+1. **Identificar Projeto**: Verifique no SAP qual projeto corresponde a esta NF
 2. **Se nao existir**: Crie o projeto no SAP Business One
 3. **Atribuir**: Selecione o projeto nesta tarefa e aprove
 
 ### Acoes Disponiveis
 - **Atribuir Projeto**: Selecionar projeto existente ou recem-criado
-- **Rejeitar**: Se NF-e foi enviada por erro
+- **Rejeitar**: Se NF foi enviada por erro
 - **Escalar**: Se houver duvidas sobre o projeto
 
 ---
@@ -1524,7 +1524,7 @@ Por favor, identifique o projeto correspondente no SAP e atribua a esta entrada.
         content_type: str = "application/xml",
     ) -> Dict[str, Any]:
         """
-        Generate presigned URL for NF-e upload.
+        Generate presigned URL for NF upload.
 
         Args:
             filename: Original filename

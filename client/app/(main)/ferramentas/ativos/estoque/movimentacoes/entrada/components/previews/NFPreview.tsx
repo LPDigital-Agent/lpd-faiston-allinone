@@ -1,9 +1,9 @@
 'use client';
 
 // =============================================================================
-// NFPreview - NF-e Extraction Preview Component
+// NFPreview - NF Extraction Preview Component
 // =============================================================================
-// Displays extracted data from NF-e (XML, PDF, or Image via OCR).
+// Displays extracted data from NF (XML, PDF, or Image via OCR).
 // Shows confidence score, supplier info, and extracted items.
 // =============================================================================
 

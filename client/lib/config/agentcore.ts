@@ -73,7 +73,7 @@ export const ACADEMY_AGENTCORE_ARN =
 
 /**
  * SGA Inventory AgentCore ARN
- * Handles: Asset management, NF-e processing, Inventory counts, Expeditions
+ * Handles: Asset management, NF processing, Inventory counts, Expeditions
  */
 export const SGA_AGENTCORE_ARN =
   process.env.NEXT_PUBLIC_SGA_AGENTCORE_ARN ||

@@ -7,7 +7,7 @@
 # - Process expedition requests from chamados/tickets
 # - Verify stock availability
 # - Suggest shipping modal
-# - Generate SAP-ready data for NF-e
+# - Generate SAP-ready data for NF
 # - Handle separation and packaging workflow
 #
 # Module: Gestao de Ativos -> Gestao de Estoque
@@ -18,7 +18,7 @@
 # 2. ExpeditionAgent verifies stock and project
 # 3. Agent suggests shipping modal (via CarrierAgent)
 # 4. Physical separation and packaging
-# 5. Generate SAP-ready data for NF-e emission
+# 5. Generate SAP-ready data for NF emission
 # =============================================================================
 
 from typing import Dict, Any, List, Optional
@@ -46,7 +46,7 @@ from .utils import (
 # SAP Export Formats
 # =============================================================================
 
-# Nature of operation options for SAP NF-e
+# Nature of operation options for SAP NF
 NATUREZA_OPERACAO = {
     "USO_CONSUMO": "REMESSA PARA USO E CONSUMO",
     "CONSERTO": "REMESSA PARA CONSERTO",
@@ -69,7 +69,7 @@ no sistema Faiston SGA (Sistema de Gestao de Ativos).
 1. **Processar Chamados**: Receber e validar solicitacoes de expedicao
 2. **Verificar Estoque**: Confirmar disponibilidade do item solicitado
 3. **Sugerir Modal**: Recomendar melhor forma de envio
-4. **Gerar Dados SAP**: Preparar informacoes para emissao de NF-e
+4. **Gerar Dados SAP**: Preparar informacoes para emissao de NF
 5. **Controlar Separacao**: Acompanhar processo de separacao fisica
 
 ## Regras de Negocio
@@ -91,7 +91,7 @@ no sistema Faiston SGA (Sistema de Gestao de Ativos).
 - LOCACAO: Equipamento em contrato de locacao
 - EMPRESTIMO: Equipamento emprestado temporariamente
 
-### Campos Obrigatorios para NF-e
+### Campos Obrigatorios para NF
 - Cliente destino (CNPJ/razao social)
 - Part Number + Serial
 - Quantidade
@@ -142,7 +142,7 @@ class ExpeditionRequest:
 
 @dataclass
 class SAPExportData:
-    """Data formatted for SAP NF-e emission."""
+    """Data formatted for SAP NF emission."""
     cliente: str
     item_numero: str
     serial_number: str
@@ -167,14 +167,14 @@ class ExpeditionAgent(BaseInventoryAgent):
     Agent for handling outbound shipments.
 
     Processes expedition requests, verifies stock, suggests
-    shipping modals, and generates SAP-ready data for NF-e.
+    shipping modals, and generates SAP-ready data for NF.
     """
 
     def __init__(self):
         super().__init__(
             name="ExpeditionAgent",
             instruction=EXPEDITION_AGENT_INSTRUCTION,
-            description="Agent for handling outbound shipments and NF-e data generation",
+            description="Agent for handling outbound shipments and NF data generation",
         )
 
         # Lazy import to avoid cold start overhead
@@ -329,7 +329,7 @@ class ExpeditionAgent(BaseInventoryAgent):
                 "next_steps": [
                     "1. Separar itens fisicamente",
                     "2. Embalar equipamento",
-                    "3. Copiar dados SAP para NF-e",
+                    "3. Copiar dados SAP para NF",
                     "4. Confirmar expedicao no sistema",
                 ],
             }
@@ -418,9 +418,9 @@ class ExpeditionAgent(BaseInventoryAgent):
                 "success": True,
                 "expedition_id": expedition_id,
                 "status": "SEPARATED",
-                "message": "Separacao confirmada. Pronto para emissao de NF-e.",
+                "message": "Separacao confirmada. Pronto para emissao de NF.",
                 "next_steps": [
-                    "1. Emitir NF-e no SAP",
+                    "1. Emitir NF no SAP",
                     "2. Transmitir para SEFAZ",
                     "3. Imprimir DANFE",
                     "4. Despachar com transportadora",
@@ -443,14 +443,14 @@ class ExpeditionAgent(BaseInventoryAgent):
         operator_id: str = "system",
     ) -> Dict[str, Any]:
         """
-        Complete the expedition after NF-e emission.
+        Complete the expedition after NF emission.
 
         Creates EXIT movements and updates stock.
 
         Args:
             expedition_id: Expedition ID
-            nf_number: NF-e number
-            nf_key: NF-e access key (44 digits)
+            nf_number: NF number
+            nf_key: NF access key (44 digits)
             carrier: Carrier/transportadora name
             tracking_code: Optional tracking number
             operator_id: User completing
@@ -545,7 +545,7 @@ class ExpeditionAgent(BaseInventoryAgent):
                 "movements_created": movements,
                 "nf_number": nf_number,
                 "tracking_code": tracking_code,
-                "message": f"Expedicao concluida com sucesso. NF-e {nf_number}.",
+                "message": f"Expedicao concluida com sucesso. NF {nf_number}.",
             }
 
         except Exception as e:
@@ -643,7 +643,7 @@ class ExpeditionAgent(BaseInventoryAgent):
         project_id: str,
         chamado_id: str,
     ) -> Dict[str, Any]:
-        """Generate SAP-ready data for NF-e emission."""
+        """Generate SAP-ready data for NF emission."""
         natureza = NATUREZA_OPERACAO.get(nature, NATUREZA_OPERACAO["USO_CONSUMO"])
 
         return {

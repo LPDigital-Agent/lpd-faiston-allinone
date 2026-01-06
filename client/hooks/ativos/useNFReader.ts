@@ -1,7 +1,7 @@
 // =============================================================================
 // useNFReader Hook - SGA Inventory Module
 // =============================================================================
-// NF-e (Nota Fiscal Eletronica) upload and processing.
+// NF (Nota Fiscal Eletronica) upload and processing.
 // Handles file upload, extraction, and entry confirmation.
 // =============================================================================
 

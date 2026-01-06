@@ -212,7 +212,7 @@ Observação: ${data.observacao}`;
             Nova Expedição
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            Criar expedição com dados prontos para NF-e SAP
+            Criar expedição com dados prontos para NF SAP
           </p>
         </div>
         <Link href="/ferramentas/ativos/estoque/expedicao/cotacao">
@@ -492,7 +492,7 @@ Observação: ${data.observacao}`;
 
           <GlassCardContent>
             <p className="text-sm text-text-muted mb-4">
-              Copie os dados abaixo para colar no SAP e emitir a NF-e:
+              Copie os dados abaixo para colar no SAP e emitir a NF:
             </p>
 
             <div className="space-y-4">

@@ -18,7 +18,7 @@
 # - chardet
 # - Pillow
 #
-# NF-e XML Parsing:
+# NF XML Parsing:
 # Using Python stdlib xml.etree.ElementTree (no external dependency needed)
 # REMOVED lxml - violates CLAUDE.md cold start rules (C extension, ~50MB)
 # =============================================================================

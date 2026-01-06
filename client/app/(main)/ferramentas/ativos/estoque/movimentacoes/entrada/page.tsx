@@ -9,7 +9,7 @@
 // - Manual: Direct entry without source file
 //
 // Architecture: SmartUploadZone → useSmartImporter → Backend Agent Routing
-// - XML/PDF/Image → IntakeAgent (NF-e extraction)
+// - XML/PDF/Image → IntakeAgent (NF extraction)
 // - CSV/XLSX → ImportAgent (spreadsheet mapping)
 // - TXT → ImportAgent + Gemini AI (intelligent text extraction)
 // =============================================================================

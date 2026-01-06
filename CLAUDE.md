@@ -452,7 +452,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ SGA 2.0 Phase 1-3: Expedição Inteligente, Cotação de Frete, Reversa, Analytics, Reconciliação SAP
 - ✅ Wiki User Guide: 14 sections documenting all SGA features
 - ✅ UI Refinement: QuickActions redesigned to compact full-width layout
-- ✅ Unified Entry: Multi-source material entry (NF-e, Image OCR, SAP Export, Manual)
+- ✅ Unified Entry: Multi-source material entry (NF, Image OCR, SAP Export, Manual)
 - ✅ **Smart Import (January 2026)**: Universal file importer with auto-detect (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
   - Aurora Serverless v2 cluster with RDS Proxy
@@ -464,7 +464,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 ### SGA Backend Agents (10)
 `server/agentcore-inventory/agents/`:
 - `estoque_control_agent.py` - Core +/- movements
-- `intake_agent.py` - NF-e PDF/XML/Image extraction (Gemini Vision OCR)
+- `intake_agent.py` - NF PDF/XML/Image extraction (Gemini Vision OCR)
 - `reconciliacao_agent.py` - Divergence detection
 - `compliance_agent.py` - Policy validation
 - `comunicacao_agent.py` - Notifications
@@ -520,7 +520,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `dynamodb_sga_inventory.tf` - Main inventory table (6 GSIs)
 - `dynamodb_sga_hil.tf` - Human-in-the-Loop tasks
 - `dynamodb_sga_audit.tf` - Audit log
-- `s3_sga_documents.tf` - NF-e and evidence storage
+- `s3_sga_documents.tf` - NF and evidence storage
 - `iam_sga_agentcore.tf` - AgentCore IAM policies
 - `cloudfront.tf` - CDN with URL rewriter function for Next.js static export
 
@@ -574,10 +574,10 @@ export function ClientComponent({ id }: { id: string }) {
 **Fix**: Use hyphens instead of commas in tag values
 ```hcl
 # WRONG
-Purpose = "NF-e files, evidence photos, and documents"
+Purpose = "NF files, evidence photos, and documents"
 
 # CORRECT
-Purpose = "NF-e files - evidence photos - documents"
+Purpose = "NF files - evidence photos - documents"
 ```
 
 ### 2. CloudFront Function Naming After Import

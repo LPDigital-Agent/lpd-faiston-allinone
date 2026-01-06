@@ -49,7 +49,7 @@ class SGAS3Client:
     S3 client for SGA Inventory document management.
 
     Directory Structure:
-    - notas-fiscais/{YYYY}/{MM}/{nf_id}/ - NF-e files
+    - notas-fiscais/{YYYY}/{MM}/{nf_id}/ - NF files
     - evidences/{movement_id}/ - Movement evidence
     - inventories/{campaign_id}/ - Inventory campaign files
     - temp/uploads/ - Temporary upload staging
@@ -356,7 +356,7 @@ class SGAS3Client:
         year_month: Optional[str] = None,
     ) -> str:
         """
-        Generate path for NF-e file.
+        Generate path for NF file.
 
         Args:
             nf_id: NF identifier
@@ -440,7 +440,7 @@ class SGAS3Client:
         return self.move_file(temp_key, final_key)
 
     # =========================================================================
-    # NF-e Specific Operations
+    # NF Specific Operations
     # =========================================================================
 
     def upload_nf_xml(
@@ -450,7 +450,7 @@ class SGAS3Client:
         year_month: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Upload NF-e XML file.
+        Upload NF XML file.
 
         Args:
             nf_id: NF identifier
@@ -478,7 +478,7 @@ class SGAS3Client:
         year_month: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Upload NF-e extraction result as JSON.
+        Upload NF extraction result as JSON.
 
         Args:
             nf_id: NF identifier
@@ -503,7 +503,7 @@ class SGAS3Client:
 
     def get_nf_files(self, nf_id: str) -> List[Dict[str, Any]]:
         """
-        List all files for an NF-e.
+        List all files for an NF.
 
         Args:
             nf_id: NF identifier

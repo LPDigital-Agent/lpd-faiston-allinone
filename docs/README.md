@@ -157,7 +157,7 @@ Educational platform with AI-powered learning features:
 ### SGA Inventory (Gestao de Estoque)
 
 Asset/inventory management system:
-- Multi-source entry (NF-e, OCR, SAP, Manual)
+- Multi-source entry (NF, OCR, SAP, Manual)
 - Smart Import (auto-detect file types)
 - Expedition with AI guidance
 - Reverse logistics

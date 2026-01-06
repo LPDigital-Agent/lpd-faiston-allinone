@@ -94,7 +94,7 @@ flowchart LR
 
         subgraph "/movimentacoes - Movements"
             MovHub["/movimentacoes\nHub"]
-            Entrada["/entrada\nEntrada NF-e"]
+            Entrada["/entrada\nEntrada NF"]
             Saida["/saida\nExpedição"]
             Transfer["/transferencia\nTransferência"]
             Reserva["/reserva\nReserva"]
@@ -295,7 +295,7 @@ flowchart TB
     end
 
     subgraph "LEARN"
-        Router -->|XML/PDF/Image| IA[IntakeAgent\nNF-e Extraction]
+        Router -->|XML/PDF/Image| IA[IntakeAgent\nNF Extraction]
         Router -->|CSV/XLSX| IMP[ImportAgent\nColumn Mapping]
         Router -->|TXT| TXT[ImportAgent\nGemini AI Text]
     end
@@ -319,7 +319,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph "ANTES (4 Tabs)"
-        T1[NF-e\nXML/PDF]
+        T1[NF\nXML/PDF]
         T2[Foto\nJPG/PNG]
         T3[SAP\nCSV/XLSX]
         T4[Manual]
@@ -341,7 +341,7 @@ flowchart TB
     subgraph "file_detector.py"
         FB[File Bytes] --> MB{Magic Bytes\nAnalysis}
 
-        MB -->|"<?xml"| XML[XML\nNF-e]
+        MB -->|"<?xml"| XML[XML\nNF]
         MB -->|"%PDF"| PDF[PDF\nDocument]
         MB -->|"0x89PNG"| PNG[PNG\nImage]
         MB -->|"0xFFD8"| JPG[JPEG\nImage]
@@ -463,7 +463,7 @@ flowchart TB
 
 ---
 
-## 7. Fluxo de Entrada via NF-e (Legacy)
+## 7. Fluxo de Entrada via NF (Legacy)
 
 ```mermaid
 sequenceDiagram
@@ -475,7 +475,7 @@ sequenceDiagram
     participant DDB as DynamoDB
     participant HIL as HIL Tasks
 
-    U->>FE: Upload NF-e (XML/PDF)
+    U->>FE: Upload NF (XML/PDF)
     FE->>AC: getNFUploadUrl()
     AC->>S3: Generate presigned URL
     S3-->>FE: Presigned URL (15min)
@@ -483,7 +483,7 @@ sequenceDiagram
 
     FE->>AC: processNFUpload(s3_key)
     AC->>IA: process_nf_upload()
-    IA->>S3: Download NF-e file
+    IA->>S3: Download NF file
 
     alt XML File
         IA->>IA: Parse XML (stdlib)
@@ -669,9 +669,9 @@ stateDiagram-v2
 | Reserva cross-project | - | 🔒 HIL Obrigatório |
 | Transferência normal | - | ✅ Autônomo |
 | Transferência p/ COFRE/QUARENTENA | - | 🔒 HIL Obrigatório |
-| Entrada NF-e | Confidence ≥ 80% | ✅ Autônomo |
-| Entrada NF-e | Confidence < 80% | 🔒 HIL Obrigatório |
-| Entrada NF-e | Itens não mapeados | 🔒 HIL Obrigatório |
+| Entrada NF | Confidence ≥ 80% | ✅ Autônomo |
+| Entrada NF | Confidence < 80% | 🔒 HIL Obrigatório |
+| Entrada NF | Itens não mapeados | 🔒 HIL Obrigatório |
 | Ajuste de inventário | Qualquer | 🔒 **SEMPRE** HIL |
 | Descarte/Perda | Qualquer | 🔒 **SEMPRE** HIL |
 | Novo Part Number | Qualquer | 🔒 HIL Obrigatório |
@@ -775,7 +775,7 @@ flowchart LR
 | **DynamoDB** | `faiston-one-sga-inventory-prod` | Tabela principal (6 GSIs, Streams) |
 | **DynamoDB** | `faiston-one-sga-hil-tasks-prod` | Tarefas de aprovação (4 GSIs) |
 | **DynamoDB** | `faiston-one-sga-audit-log-prod` | Audit trail imutável (4 GSIs) |
-| **S3** | `faiston-one-sga-documents-prod` | NF-e, evidências, fotos |
+| **S3** | `faiston-one-sga-documents-prod` | NF, evidências, fotos |
 | **IAM Role** | `faiston-one-sga-agentcore-role` | Execução AgentCore |
 | **CloudFront** | `faiston-one-cdn` | CDN com URL Rewriter |
 | **Cognito** | Pool compartilhado | Autenticação JWT |
@@ -810,7 +810,7 @@ flowchart LR
 - **Components**:
   - `SmartUploadZone.tsx` - Universal drag-and-drop
   - `SmartPreview.tsx` - Preview router
-  - `previews/NFPreview.tsx` - NF-e preview
+  - `previews/NFPreview.tsx` - NF preview
   - `previews/SpreadsheetPreview.tsx` - CSV/XLSX preview
   - `previews/TextPreview.tsx` - AI text preview
 

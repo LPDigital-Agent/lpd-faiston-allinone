@@ -39,7 +39,7 @@ export default function MovimentacoesPage() {
   const movementTypes = [
     {
       title: 'Entrada',
-      description: 'Internalização de materiais via NF-e',
+      description: 'Internalização de materiais via NF',
       icon: FileUp,
       color: 'text-green-400',
       bgColor: 'bg-green-500/20',

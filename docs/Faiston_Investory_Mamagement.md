@@ -18,7 +18,7 @@ To build the future system, it is essential to first understand the complexities
 
 Core inventory management—including stock entries, exits, and transfers—is currently a highly manual process distributed across multiple systems and documents. The stock entry ("internalização") process, in particular, highlights the operational overhead and risk.
 
-* Initiation: The process begins upon receiving a Fiscal Note (NF-e), either via email or with a physical delivery of goods.
+* Initiation: The process begins upon receiving a Fiscal Note (NF), either via email or with a physical delivery of goods.
 * Manual Inventory: Logistics personnel manually inventory the arriving items, capturing the Part Number and Serial Number.
 * Project Validation: If a project ID is not associated with the items, the team must manually request validation from the Finance team. This inter-departmental dependency is a critical bottleneck that introduces significant latency into the stock entry process.
 * SAP Data Entry: Merchandise data is manually entered into SAP. This includes the item number, quantity, price, and the correct warehouse code (e.g., 01 – Recebimento for Faiston-owned equipment, 05 – Itens de terceiros for third-party items). Serial numbers are also entered manually in a separate SAP module.

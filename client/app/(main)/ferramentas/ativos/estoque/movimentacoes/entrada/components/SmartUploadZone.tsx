@@ -336,7 +336,7 @@ export function SmartUploadZone({
               <p className="font-medium text-text-secondary mb-0.5">Processamento Inteligente</p>
               <p>
                 O sistema detecta automaticamente o tipo de arquivo e roteia para o agente apropriado
-                (IntakeAgent para NF-e, ImportAgent para planilhas e texto).
+                (IntakeAgent para NF, ImportAgent para planilhas e texto).
               </p>
             </div>
           </div>

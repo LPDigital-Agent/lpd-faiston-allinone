@@ -204,7 +204,7 @@ export const SHIPPING_STATUS_COLORS = {
  * Fiscal document type labels
  */
 export const FISCAL_DOC_TYPE_LABELS = {
-  nfe: "NF-e",
+  nfe: "NF",
   nfse: "NFS-e",
   cte: "CT-e",
 };
@@ -449,7 +449,7 @@ export const LOCATION_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * NF-e entry status labels.
+ * NF entry status labels.
  */
 export const NF_ENTRY_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pendente',
@@ -459,7 +459,7 @@ export const NF_ENTRY_STATUS_LABELS: Record<string, string> = {
 };
 
 /**
- * NF-e entry status colors.
+ * NF entry status colors.
  */
 export const NF_ENTRY_STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-yellow-500/20 text-yellow-400',

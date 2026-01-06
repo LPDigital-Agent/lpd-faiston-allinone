@@ -4,7 +4,7 @@
 // Analytics Page - SGA Accuracy Dashboard
 // =============================================================================
 // KPI dashboard showing system accuracy metrics:
-// - Extraction accuracy (NF-e parsing success rate)
+// - Extraction accuracy (NF parsing success rate)
 // - Entry success rate (% without rejection)
 // - Average HIL time (human-in-the-loop response time)
 // - Divergence rate (inventory discrepancies)
@@ -189,7 +189,7 @@ export default function AnalyticsPage() {
               title="Acurácia de Extração"
               metric={metrics.extraction_accuracy}
               icon={<Target className="w-5 h-5" />}
-              description="Taxa de NF-e processadas com sucesso"
+              description="Taxa de NF processadas com sucesso"
               colorClass="text-green-400"
             />
             <MetricCard

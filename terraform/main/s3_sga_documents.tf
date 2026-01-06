@@ -1,13 +1,13 @@
 # =============================================================================
 # S3 Bucket for SGA Documents (Gestão de Estoque)
 # =============================================================================
-# Storage for inventory documents, evidence, and NF-e files:
+# Storage for inventory documents, evidence, and NF files:
 #
 # Directory Structure:
 # notas-fiscais/{YYYY}/{MM}/
 # │   └── {nf_id}/
-# │       ├── original.pdf         # Original NF-e PDF
-# │       ├── original.xml         # Original NF-e XML
+# │       ├── original.pdf         # Original NF PDF
+# │       ├── original.xml         # Original NF XML
 # │       ├── extraction.json      # AI-extracted data
 # │       └── thumbnail.jpg        # Preview image
 #
@@ -41,7 +41,7 @@ resource "aws_s3_bucket" "sga_documents" {
     Environment = var.environment
     Module      = "Gestao de Ativos"
     Feature     = "Gestao de Estoque"
-    Purpose     = "NF-e files - evidence photos - inventory documents"
+    Purpose     = "NF files - evidence photos - inventory documents"
     Compliance  = "Fiscal"
   }
 }
@@ -49,7 +49,7 @@ resource "aws_s3_bucket" "sga_documents" {
 # =============================================================================
 # Bucket Versioning (MANDATORY for fiscal documents)
 # =============================================================================
-# NF-e files and evidence must be versioned for compliance
+# NF files and evidence must be versioned for compliance
 
 resource "aws_s3_bucket_versioning" "sga_documents" {
   bucket = aws_s3_bucket.sga_documents.id
@@ -91,7 +91,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "sga_documents" {
 # Lifecycle Rules
 # =============================================================================
 # - Temp uploads deleted after 24 hours
-# - NF-e files: Transition to IA after 90 days, Glacier after 2 years
+# - NF files: Transition to IA after 90 days, Glacier after 2 years
 # - Evidence: Keep for 5 years, then Glacier Deep Archive
 # - Incomplete multipart uploads aborted after 7 days
 
@@ -116,7 +116,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "sga_documents" {
     }
   }
 
-  # Rule 2: NF-e storage tiering for cost optimization
+  # Rule 2: NF storage tiering for cost optimization
   rule {
     id     = "nf-storage-tiering"
     status = "Enabled"

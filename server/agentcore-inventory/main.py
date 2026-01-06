@@ -10,7 +10,7 @@
 #
 # 5 AI Agents:
 # - EstoqueControlAgent: Core +/- inventory movements
-# - IntakeAgent: NF-e PDF/XML extraction
+# - IntakeAgent: NF PDF/XML extraction
 # - ReconciliacaoAgent: Divergence detection and inventory counts
 # - ComplianceAgent: Policy validation and approval workflows
 # - ComunicacaoAgent: Notifications and technician communication
@@ -174,7 +174,7 @@ def invoke(payload: dict, context) -> dict:
             return asyncio.run(_nexo_estoque_chat(payload, user_id, session_id))
 
         # =================================================================
-        # NF-e Processing (IntakeAgent)
+        # NF Processing (IntakeAgent)
         # =================================================================
         elif action == "get_nf_upload_url":
             return asyncio.run(_get_nf_upload_url(payload))
@@ -307,6 +307,9 @@ def invoke(payload: dict, context) -> dict:
         # =================================================================
         elif action == "smart_import_upload":
             return asyncio.run(_smart_import_upload(payload, user_id))
+
+        elif action == "generate_import_observations":
+            return asyncio.run(_generate_import_observations(payload))
 
         # =================================================================
         # Expedition (ExpeditionAgent)
@@ -536,13 +539,13 @@ async def _nexo_estoque_chat(payload: dict, user_id: str, session_id: str) -> di
 
 
 # =============================================================================
-# NF-e Processing Handlers
+# NF Processing Handlers
 # =============================================================================
 
 
 async def _get_nf_upload_url(payload: dict) -> dict:
     """
-    Get presigned URL for NF-e/document upload.
+    Get presigned URL for NF/document upload.
 
     Used by Smart Import to get S3 presigned URL before file upload.
 
@@ -573,7 +576,7 @@ async def _get_nf_upload_url(payload: dict) -> dict:
 
 async def _process_nf_upload(payload: dict, user_id: str) -> dict:
     """
-    Process uploaded NF-e (PDF or XML).
+    Process uploaded NF (PDF or XML).
 
     Extracts:
     - NF number, date, value
@@ -654,10 +657,10 @@ async def _confirm_nf_entry(payload: dict, user_id: str) -> dict:
 
 async def _process_scanned_nf_upload(payload: dict, user_id: str) -> dict:
     """
-    Process scanned NF-e document using Gemini Vision.
+    Process scanned NF document using Gemini Vision.
 
     Specifically designed for:
-    - Paper NF-e scanned as PDF/image
+    - Paper NF scanned as PDF/image
     - Camera photos of DANFE documents
     - Low-quality scans from older equipment
 
@@ -1594,7 +1597,7 @@ async def _smart_import_upload(payload: dict, user_id: str) -> dict:
     result = None
 
     if file_type in ["xml", "pdf", "image"]:
-        # Route to IntakeAgent for NF-e processing
+        # Route to IntakeAgent for NF processing
         from agents.intake_agent import IntakeAgent
 
         agent = IntakeAgent()
@@ -1662,6 +1665,48 @@ async def _smart_import_upload(payload: dict, user_id: str) -> dict:
         result["smart_import"] = True
         result["filename"] = filename
         result["s3_key"] = s3_key
+
+    return result
+
+
+async def _generate_import_observations(payload: dict) -> dict:
+    """
+    Generate NEXO AI observations for import preview data.
+
+    Called before user confirms import to display AI commentary
+    in the confirmation modal.
+
+    Pattern: Observe -> Learn -> Act
+
+    Payload:
+        preview: Import preview data containing:
+            - source_type: Type of import (nf_xml, nf_pdf, spreadsheet, text)
+            - items_count: Number of items
+            - total_value: Optional total value
+            - items: Optional list of item details
+            - validation_warnings: Any warnings from validation
+        context: Optional context (project_id, location_id, user_notes)
+
+    Returns:
+        NexoObservation with confidence, patterns, suggestions, and commentary
+    """
+    preview_data = payload.get("preview", {})
+    context = payload.get("context")
+
+    if not preview_data:
+        return {
+            "success": False,
+            "error": "preview data is required",
+        }
+
+    # Lazy import to respect AgentCore cold start limit
+    from agents.observation_agent import ObservationAgent
+
+    agent = ObservationAgent()
+    result = agent.generate_observations(
+        preview_data=preview_data,
+        context=context,
+    )
 
     return result
 
@@ -1786,12 +1831,12 @@ async def _confirm_separation(payload: dict, user_id: str) -> dict:
 
 async def _complete_expedition(payload: dict, user_id: str) -> dict:
     """
-    Complete the expedition after NF-e emission.
+    Complete the expedition after NF emission.
 
     Payload:
         expedition_id: Expedition ID
-        nf_number: NF-e number
-        nf_key: NF-e access key (44 digits)
+        nf_number: NF number
+        nf_key: NF access key (44 digits)
         carrier: Carrier/transportadora name
         tracking_code: Optional tracking number
 
@@ -2130,7 +2175,7 @@ async def _get_accuracy_metrics(payload: dict) -> dict:
         "extraction_accuracy": {
             "value": 0,
             "unit": "%",
-            "description": "NF-e items matched on first attempt",
+            "description": "NF items matched on first attempt",
             "trend": "neutral",
             "change": 0,
             "note": "Requer integracao com audit log",

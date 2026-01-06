@@ -1,7 +1,7 @@
 # =============================================================================
-# NF-e Parser for SGA Inventory
+# NF Parser for SGA Inventory
 # =============================================================================
-# Parser for Brazilian NF-e (Nota Fiscal Eletrônica) documents.
+# Parser for Brazilian NF (Nota Fiscal Eletrônica) documents.
 #
 # Features:
 # - XML parsing with stdlib ElementTree (no external dependencies)
@@ -29,7 +29,7 @@ import xml.etree.ElementTree as ET
 @dataclass
 class NFItem:
     """
-    Represents a single item from an NF-e.
+    Represents a single item from an NF.
 
     Attributes:
         item_number: Sequential item number in the NF
@@ -73,7 +73,7 @@ class NFItem:
 @dataclass
 class NFExtraction:
     """
-    Complete extraction result from an NF-e document.
+    Complete extraction result from an NF document.
 
     Attributes:
         nf_number: NF number (nNF)
@@ -131,16 +131,16 @@ class NFExtraction:
 
 
 # =============================================================================
-# NF-e Parser Class
+# NF Parser Class
 # =============================================================================
 
 
 class NFParser:
     """
-    Parser for Brazilian NF-e (Nota Fiscal Eletrônica) documents.
+    Parser for Brazilian NF (Nota Fiscal Eletrônica) documents.
 
     Supports:
-    - XML format (standard NF-e)
+    - XML format (standard NF)
     - PDF text extraction (via AI prompts)
 
     Example:
@@ -148,7 +148,7 @@ class NFParser:
         extraction = parser.parse_xml(xml_content)
     """
 
-    # NF-e XML namespaces
+    # NF XML namespaces
     NAMESPACES = {
         "nfe": "http://www.portalfiscal.inf.br/nfe",
     }
@@ -182,7 +182,7 @@ class NFParser:
 
     def parse_xml(self, xml_content: str) -> NFExtraction:
         """
-        Parse NF-e XML content.
+        Parse NF XML content.
 
         Args:
             xml_content: XML string content
@@ -197,7 +197,7 @@ class NFParser:
             root = ET.fromstring(xml_content)
 
             # Try to find infNFe with namespace first, then without
-            # NF-e standard namespace
+            # NF standard namespace
             nfe_ns = "{http://www.portalfiscal.inf.br/nfe}"
 
             infNFe = root.find(f".//{nfe_ns}infNFe")
@@ -568,7 +568,7 @@ class NFParser:
         Returns:
             Prompt string for the LLM
         """
-        return f"""Extraia os dados da Nota Fiscal Eletrônica (NF-e) do texto abaixo.
+        return f"""Extraia os dados da Nota Fiscal Eletrônica (NF) do texto abaixo.
 
 Retorne um JSON com a seguinte estrutura:
 {{
@@ -605,14 +605,14 @@ IMPORTANTE:
 - CNPJ deve conter apenas 14 dígitos numéricos
 - Se não encontrar algum campo, use string vazia ou 0
 
-Texto da NF-e:
+Texto da NF:
 {pdf_text}
 
 JSON:"""
 
     def get_scanned_nf_prompt(self) -> str:
         """
-        Generate prompt for Vision AI to extract NF-e data from scanned images.
+        Generate prompt for Vision AI to extract NF data from scanned images.
 
         Use this prompt with Gemini Vision to extract NF data from scanned
         paper documents (DANFE images, photographed invoices, etc.).
@@ -620,9 +620,9 @@ JSON:"""
         Returns:
             Prompt string for Vision model
         """
-        return """Voce e um especialista em extracao de dados de Notas Fiscais Eletronicas (NF-e) brasileiras.
+        return """Voce e um especialista em extracao de dados de Notas Fiscais Eletronicas (NF) brasileiras.
 
-Analise a imagem da NF-e/DANFE escaneada e extraia TODOS os dados disponiveis.
+Analise a imagem da NF/DANFE escaneada e extraia TODOS os dados disponiveis.
 
 ## CAMPOS OBRIGATORIOS
 

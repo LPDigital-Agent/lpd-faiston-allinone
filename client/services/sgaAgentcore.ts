@@ -6,7 +6,7 @@
 //
 // This service handles all AI features for inventory management:
 // - Asset search and tracking
-// - NF-e processing (intake)
+// - NF processing (intake)
 // - Reservations and expeditions
 // - Transfers and returns (reversa)
 // - Inventory counting campaigns
@@ -28,7 +28,12 @@ import {
 import type {
   SmartImportUploadRequest,
   SmartImportUploadResponse,
+  SmartImportPreview,
 } from '@/lib/ativos/smartImportTypes';
+import type {
+  NexoObservation,
+  GenerateObservationsRequest,
+} from '@/lib/ativos/nexoObservationTypes';
 import type {
   SGASearchAssetsRequest,
   SGASearchAssetsResponse,
@@ -171,11 +176,11 @@ export async function whereIsSerial(
 }
 
 // =============================================================================
-// NF-e Processing (Intake)
+// NF Processing (Intake)
 // =============================================================================
 
 /**
- * Process NF-e upload (XML or PDF) and extract items.
+ * Process NF upload (XML or PDF) and extract items.
  */
 export async function processNFUpload(
   params: SGAProcessNFUploadRequest
@@ -187,7 +192,7 @@ export async function processNFUpload(
 }
 
 /**
- * Confirm NF-e entry with item mappings.
+ * Confirm NF entry with item mappings.
  */
 export async function confirmNFEntry(
   params: SGAConfirmNFEntryRequest
@@ -199,7 +204,7 @@ export async function confirmNFEntry(
 }
 
 /**
- * Get presigned URL for NF-e upload.
+ * Get presigned URL for NF upload.
  */
 export async function getNFUploadUrl(
   params: SGAGetUploadUrlRequest
@@ -211,7 +216,7 @@ export async function getNFUploadUrl(
 }
 
 /**
- * Get pending NF-e entries awaiting confirmation.
+ * Get pending NF entries awaiting confirmation.
  */
 export async function getPendingNFEntries(): Promise<AgentCoreResponse<{ entries: PendingNFEntry[] }>> {
   return invokeSGAAgentCore<{ entries: PendingNFEntry[] }>({
@@ -648,7 +653,7 @@ export async function confirmSeparation(
 }
 
 /**
- * Complete expedition after NF-e emission.
+ * Complete expedition after NF emission.
  */
 export async function completeExpedition(
   params: SGACompleteExpeditionPayload
@@ -794,7 +799,7 @@ export async function applyReconciliationAction(
 
 /**
  * Process an image (scanned NF, mobile photo) with OCR via Gemini Vision.
- * Returns extracted data similar to NF-e processing.
+ * Returns extracted data similar to NF processing.
  */
 export async function processImageOCR(params: {
   s3_key: string;
@@ -959,7 +964,7 @@ export async function createManualEntry(
  * - ACT: Returns preview with extraction results
  *
  * Supported file types:
- * - XML/PDF/Image -> IntakeAgent (NF-e processing)
+ * - XML/PDF/Image -> IntakeAgent (NF processing)
  * - CSV/XLSX -> ImportAgent (spreadsheet processing)
  * - TXT -> ImportAgent (Gemini AI text interpretation)
  *
@@ -980,5 +985,46 @@ export async function invokeSmartImport(
     content_type: params.content_type,
     project_id: params.project_id,
     destination_location_id: params.destination_location_id,
+  });
+}
+
+// =============================================================================
+// NEXO AI Observations
+// =============================================================================
+
+/**
+ * Generate NEXO AI observations for import preview data.
+ *
+ * Called before user confirms import to display AI commentary
+ * in the confirmation modal. NEXO analyzes the data following
+ * the "Observe -> Learn -> Act" pattern.
+ *
+ * @param preview - Import preview data to analyze
+ * @param context - Optional context (project_id, location_id, user_notes)
+ * @returns NexoObservation with confidence, patterns, suggestions, and commentary
+ */
+export async function generateImportObservations(
+  preview: SmartImportPreview,
+  context?: GenerateObservationsRequest['context']
+): Promise<AgentCoreResponse<NexoObservation>> {
+  // Transform preview to request format
+  const previewData: GenerateObservationsRequest['preview'] = {
+    source_type: preview.source_type,
+    items_count: 'items' in preview && Array.isArray(preview.items) ? preview.items.length : 0,
+    total_value: 'total_value' in preview ? (preview as Record<string, unknown>).total_value as number | undefined : undefined,
+    supplier_name: 'supplier' in preview && typeof preview.supplier === 'object' && preview.supplier !== null
+      ? (preview.supplier as Record<string, unknown>).name as string | undefined
+      : undefined,
+    nf_number: 'nf_number' in preview ? (preview as Record<string, unknown>).nf_number as string | undefined : undefined,
+    validation_warnings: 'warnings' in preview && Array.isArray((preview as Record<string, unknown>).warnings)
+      ? (preview as Record<string, unknown>).warnings as string[]
+      : [],
+    hil_required: 'hil_required' in preview ? (preview as Record<string, unknown>).hil_required as boolean | undefined : undefined,
+  };
+
+  return invokeSGAAgentCore<NexoObservation>({
+    action: 'generate_import_observations',
+    preview: previewData,
+    context,
   });
 }

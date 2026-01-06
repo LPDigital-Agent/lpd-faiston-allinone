@@ -147,7 +147,7 @@ def classify_query_domain(query: str) -> str:
     # Inventory keywords (Portuguese and English)
     inventory_keywords = [
         "estoque", "ativo", "material", "entrada", "saida", "transferencia",
-        "inventario", "nf-e", "nota fiscal", "expedicao", "reversa",
+        "inventario", "nf", "nota fiscal", "expedicao", "reversa",
         "stock", "asset", "material", "inventory", "warehouse", "shipping"
     ]
 

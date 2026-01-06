@@ -1,9 +1,9 @@
 'use client';
 
 // =============================================================================
-// EntradaNFTab - NF-e Upload Tab Component
+// EntradaNFTab - NF Upload Tab Component
 // =============================================================================
-// Handles NF-e (Nota Fiscal Eletronica) file upload and processing.
+// Handles NF (Nota Fiscal Eletronica) file upload and processing.
 // Supports XML and PDF formats.
 // =============================================================================
 

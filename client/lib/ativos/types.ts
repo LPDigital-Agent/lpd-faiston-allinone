@@ -293,7 +293,7 @@ export interface AssetNavModule {
  * Fiscal document type
  */
 export type FiscalDocType =
-  | "nfe"           // NF-e (Nota Fiscal Eletrônica)
+  | "nfe"           // NF (Nota Fiscal Eletrônica)
   | "nfse"          // NFS-e (Nota Fiscal de Serviço)
   | "cte";          // CT-e (Conhecimento de Transporte)
 
@@ -413,7 +413,7 @@ export interface PaginatedResponse<T> {
  * SGA Movement types (event sourcing pattern).
  */
 export type SGAMovementType =
-  | 'ENTRY'           // Inbound from NF-e
+  | 'ENTRY'           // Inbound from NF
   | 'EXIT'            // Outbound expedition
   | 'TRANSFER'        // Internal location transfer
   | 'ADJUSTMENT_IN'   // Inventory adjustment (+)
@@ -484,7 +484,7 @@ export type NotificationPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type NotificationChannel = 'SYSTEM' | 'EMAIL' | 'WHATSAPP';
 
 /**
- * NF-e entry status.
+ * NF entry status.
  */
 export type NFEntryStatus =
   | 'PENDING_UPLOAD'        // Awaiting file upload
@@ -686,11 +686,11 @@ export interface HILTask {
 }
 
 // =============================================================================
-// NF-e Processing Types
+// NF Processing Types
 // =============================================================================
 
 /**
- * NF-e item extracted from XML/PDF.
+ * NF item extracted from XML/PDF.
  */
 export interface NFItem {
   item_number: number;
@@ -706,7 +706,7 @@ export interface NFItem {
 }
 
 /**
- * NF-e extraction result.
+ * NF extraction result.
  */
 export interface NFExtraction {
   nf_number: string;
@@ -723,7 +723,7 @@ export interface NFExtraction {
 }
 
 /**
- * Pending NF-e entry awaiting confirmation.
+ * Pending NF entry awaiting confirmation.
  */
 export interface PendingNFEntry {
   id: string;
@@ -1364,7 +1364,7 @@ export interface SGAExpeditionItem {
 export type SGAExpeditionUrgency = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 
 /**
- * Natureza da operação for NF-e.
+ * Natureza da operação for NF.
  */
 export type SGAExpeditionNature =
   | 'USO_CONSUMO'      // REMESSA PARA USO E CONSUMO
@@ -1388,7 +1388,7 @@ export interface SGAExpeditionRequestPayload {
 }
 
 /**
- * SAP-ready data for NF-e copy/paste.
+ * SAP-ready data for NF copy/paste.
  */
 export interface SGASAPFormatData {
   cliente: string;

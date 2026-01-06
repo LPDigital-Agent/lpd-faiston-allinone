@@ -3,7 +3,7 @@
 // =============================================================================
 // Fiscal Page - Tax Documents and Accounting
 // =============================================================================
-// Displays NF-e documents, tax obligations, and fiscal calendar.
+// Displays NF documents, tax obligations, and fiscal calendar.
 // NOW SHOWS REAL DATA OR EMPTY STATE - No more mock data!
 // =============================================================================
 
@@ -35,7 +35,7 @@ import { motion } from "framer-motion";
 /**
  * Fiscal Page - Tax Documents and Accounting
  *
- * Displays NF-e documents, tax obligations, and fiscal calendar.
+ * Displays NF documents, tax obligations, and fiscal calendar.
  * NOW USES REAL DATA - Empty state when no documents exist.
  */
 
@@ -47,7 +47,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.E
 };
 
 const tipoLabels: Record<string, string> = {
-  nfe: "NF-e",
+  nfe: "NF",
   nfse: "NFS-e",
   cte: "CT-e",
 };

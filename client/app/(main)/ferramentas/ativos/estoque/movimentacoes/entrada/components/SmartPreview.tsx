@@ -5,6 +5,8 @@
 // =============================================================================
 // Routes to the appropriate preview component based on source_type.
 // This is the entry point for displaying smart import results.
+//
+// FLOW: Preview Confirm → Confirmation Modal → NEXO AI Analysis → Final Confirm → DB Commit
 // =============================================================================
 
 import { useState } from 'react';
@@ -17,6 +19,7 @@ import {
 import { NFPreview } from './previews/NFPreview';
 import { SpreadsheetPreview } from './previews/SpreadsheetPreview';
 import { TextPreview } from './previews/TextPreview';
+import { SmartImportConfirmationModal } from '@/components/ferramentas/ativos/estoque/SmartImportConfirmationModal';
 import {
   GlassCard,
   GlassCardHeader,
@@ -45,10 +48,19 @@ export function SmartPreview({
   onConfirm,
   onCancel,
 }: SmartPreviewProps) {
+  // Modal state - shows Apple TV frosted glass confirmation before DB commit
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
 
-  // Handle confirm with loading state
-  const handleConfirm = async () => {
+  // Pre-confirm: Opens confirmation modal instead of directly committing
+  // The modal will fetch NEXO AI observations and require explicit user confirmation
+  const handlePreConfirm = async () => {
+    setShowConfirmModal(true);
+  };
+
+  // Final confirm: Called when user confirms in the modal
+  // This actually commits the assets to DynamoDB
+  const handleFinalConfirm = async () => {
     setIsConfirming(true);
     try {
       await onConfirm();
@@ -57,48 +69,67 @@ export function SmartPreview({
     }
   };
 
-  // Route to appropriate preview based on source_type
-  if (isNFImportResult(preview)) {
+  // Render the appropriate preview component based on source_type
+  // All previews now trigger handlePreConfirm which opens the modal
+  const renderPreview = () => {
+    if (isNFImportResult(preview)) {
+      return (
+        <NFPreview
+          preview={preview}
+          onConfirm={handlePreConfirm}
+          onCancel={onCancel}
+          isConfirming={isConfirming}
+        />
+      );
+    }
+
+    if (isSpreadsheetImportResult(preview)) {
+      return (
+        <SpreadsheetPreview
+          preview={preview}
+          onConfirm={handlePreConfirm}
+          onCancel={onCancel}
+          isConfirming={isConfirming}
+        />
+      );
+    }
+
+    if (isTextImportResult(preview)) {
+      return (
+        <TextPreview
+          preview={preview}
+          onConfirm={handlePreConfirm}
+          onCancel={onCancel}
+          isConfirming={isConfirming}
+        />
+      );
+    }
+
+    // Fallback for unknown preview types (this shouldn't happen with proper typing)
+    const unknownPreview = preview as SmartImportPreview;
     return (
-      <NFPreview
-        preview={preview}
-        onConfirm={handleConfirm}
+      <UnknownPreview
+        sourceType={unknownPreview.source_type}
         onCancel={onCancel}
-        isConfirming={isConfirming}
       />
     );
-  }
+  };
 
-  if (isSpreadsheetImportResult(preview)) {
-    return (
-      <SpreadsheetPreview
-        preview={preview}
-        onConfirm={handleConfirm}
-        onCancel={onCancel}
-        isConfirming={isConfirming}
-      />
-    );
-  }
-
-  if (isTextImportResult(preview)) {
-    return (
-      <TextPreview
-        preview={preview}
-        onConfirm={handleConfirm}
-        onCancel={onCancel}
-        isConfirming={isConfirming}
-      />
-    );
-  }
-
-  // Fallback for unknown preview types (this shouldn't happen with proper typing)
-  // Cast to SmartImportPreview to access source_type for the error display
-  const unknownPreview = preview as SmartImportPreview;
   return (
-    <UnknownPreview
-      sourceType={unknownPreview.source_type}
-      onCancel={onCancel}
-    />
+    <>
+      {/* Preview Component (NF, Spreadsheet, Text, or Unknown) */}
+      {renderPreview()}
+
+      {/* Apple TV Frosted Glass Confirmation Modal */}
+      {/* Shows import summary and NEXO AI observations before final DB commit */}
+      <SmartImportConfirmationModal
+        open={showConfirmModal}
+        onOpenChange={setShowConfirmModal}
+        preview={preview}
+        onConfirm={handleFinalConfirm}
+        isConfirming={isConfirming}
+      />
+    </>
   );
 }
 

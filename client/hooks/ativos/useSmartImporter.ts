@@ -216,7 +216,7 @@ export function useSmartImporter(): UseSmartImporterReturn {
 
     // Confirm based on source type
     if (isNFImportResult(preview)) {
-      // NF-e confirmation
+      // NF confirmation
       const result = await confirmNFEntry({
         entry_id: preview.entry_id,
         item_mappings: preview.suggested_mappings,

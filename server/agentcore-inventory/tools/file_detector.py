@@ -79,7 +79,7 @@ def _detect_by_magic_bytes(file_data: bytes) -> FileType:
         return "xml"
 
     # Also check for XML without declaration but with root element
-    # Common in NF-e: <nfeProc or <NFe
+    # Common in NF: <nfeProc or <NFe
     stripped = file_data.lstrip()
     if stripped[:1] == b"<" and b"nfe" in stripped[:100].lower():
         return "xml"

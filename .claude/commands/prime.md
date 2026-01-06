@@ -311,7 +311,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ Audit: ADK/AgentCore compliance (95% - lxml fixed)
 - ✅ SGA 2.0 Phases 1-3: Expedição, Cotação, Reversa, Analytics, Reconciliação SAP
 - ✅ Wiki: 14 sections documenting all SGA features
-- ✅ Unified Entry: Multi-source tabs (NF-e, Image OCR, SAP Export, Manual)
+- ✅ Unified Entry: Multi-source tabs (NF, Image OCR, SAP Export, Manual)
 - ✅ **Estoque Page Refactor (January 2026)**: Unified navigation into single ModuleNavigation (8 items), removed KPIs (already in Dashboard)
 - ✅ **Smart Import**: Universal file importer - auto-detects XML/PDF/CSV/XLSX/JPG/PNG/TXT
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure

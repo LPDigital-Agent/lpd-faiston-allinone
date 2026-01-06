@@ -27,7 +27,7 @@ import type {
  * Matches backend `FileType` in `tools/file_detector.py`.
  */
 export type SmartFileType =
-  | 'xml'       // XML files (NF-e)
+  | 'xml'       // XML files (NF)
   | 'pdf'       // PDF documents
   | 'image'     // JPG, PNG, GIF, WebP
   | 'csv'       // CSV spreadsheets
@@ -40,9 +40,9 @@ export type SmartFileType =
  * More specific than SmartFileType as it indicates the processing path.
  */
 export type SmartSourceType =
-  | 'nf_xml'        // NF-e processed from XML
-  | 'nf_pdf'        // NF-e processed from PDF (text extraction)
-  | 'nf_image'      // NF-e processed from image (Vision OCR)
+  | 'nf_xml'        // NF processed from XML
+  | 'nf_pdf'        // NF processed from PDF (text extraction)
+  | 'nf_image'      // NF processed from image (Vision OCR)
   | 'spreadsheet'   // CSV/XLSX processed by ImportAgent
   | 'text'          // TXT processed by ImportAgent + Gemini AI
   | 'unknown';
@@ -161,11 +161,11 @@ export interface SpreadsheetImportResult {
 }
 
 // =============================================================================
-// NF-e Import Types (XML/PDF/Image)
+// NF Import Types (XML/PDF/Image)
 // =============================================================================
 
 /**
- * Result from NF-e processing (XML, PDF, or Image via Vision OCR).
+ * Result from NF processing (XML, PDF, or Image via Vision OCR).
  */
 export interface NFImportResult {
   success: boolean;
@@ -197,7 +197,7 @@ export type SmartImportPreview =
   | TextImportResult;
 
 /**
- * Type guard for NF-e import result.
+ * Type guard for NF import result.
  */
 export function isNFImportResult(preview: SmartImportPreview): preview is NFImportResult {
   return ['nf_xml', 'nf_pdf', 'nf_image'].includes(preview.source_type);

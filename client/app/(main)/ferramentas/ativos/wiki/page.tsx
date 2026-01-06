@@ -78,7 +78,7 @@ O **SGA (Sistema de Gestao de Ativos)** e uma plataforma completa para gerenciam
 ### Principais Funcionalidades
 
 - **Gestao de Inventario**: Controle de saldos por localizacao e projeto
-- **Entrada via NF-e**: Upload automatico de notas fiscais com extracao por IA
+- **Entrada via NF**: Upload automatico de notas fiscais com extracao por IA
 - **Movimentacoes**: Reservas, expedicoes, transferencias e ajustes
 - **Contagem Fisica**: Campanhas de inventario com deteccao de divergencias
 - **Aprovacoes (HIL)**: Workflow de aprovacao para operacoes sensiveis
@@ -182,14 +182,14 @@ Associa materiais a clientes ou contratos:
 
 O sistema suporta diversos tipos de movimentacao de materiais.
 
-### Entrada (NF-e)
+### Entrada (NF)
 
 Internalizacao de materiais via Nota Fiscal Eletronica:
 
 **Passo a passo:**
 1. Acesse **Movimentacoes > Entrada**
 2. Selecione o **Local de destino** e **Projeto**
-3. Faca upload do arquivo **XML** ou **PDF** da NF-e
+3. Faca upload do arquivo **XML** ou **PDF** da NF
 4. O sistema extrai automaticamente os itens usando IA
 5. Revise o **mapeamento** dos itens com os Part Numbers
 6. Confirme a entrada
@@ -612,7 +612,7 @@ A caixa de tarefas mostra todas as aprovacoes pendentes:
 | Tipo | Descricao | Quando Ocorre |
 |------|-----------|---------------|
 | **ADJUSTMENT_APPROVAL** | Aprovacao de ajuste | Sempre que houver ajuste |
-| **ENTRY_REVIEW** | Revisao de entrada | NF-e com baixa confianca |
+| **ENTRY_REVIEW** | Revisao de entrada | NF com baixa confianca |
 | **TRANSFER_APPROVAL** | Aprovacao de transferencia | Transferencia p/ local restrito |
 | **DISPOSAL_APPROVAL** | Aprovacao de baixa | Descarte de material |
 | **NEW_PN_APPROVAL** | Aprovacao de novo PN | Criacao de Part Number |
@@ -625,8 +625,8 @@ A caixa de tarefas mostra todas as aprovacoes pendentes:
 | Reserva cross-project | - | Sim |
 | Transferencia normal | Sim | - |
 | Transferencia p/ COFRE | - | Sim |
-| Entrada NF-e (>= 80%) | Sim | - |
-| Entrada NF-e (< 80%) | - | Sim |
+| Entrada NF (>= 80%) | Sim | - |
+| Entrada NF (< 80%) | - | Sim |
 | Ajuste de inventario | - | **SEMPRE** |
 | Descarte/Perda | - | **SEMPRE** |
 
@@ -783,14 +783,14 @@ O modulo de **Analytics** apresenta KPIs de desempenho e confiabilidade do siste
 
 | Metrica | Descricao | Meta |
 |---------|-----------|------|
-| **Acuracia de Extracao** | % de NF-e processadas com sucesso | >= 95% |
+| **Acuracia de Extracao** | % de NF processadas com sucesso | >= 95% |
 | **Taxa de Sucesso** | % de entradas sem rejeicao | >= 90% |
 | **Tempo Medio HIL** | Tempo de resposta para tarefas humanas | < 4h |
 | **Taxa de Divergencia** | % de discrepancias em inventario | < 2% |
 
 ### Acuracia de Extracao
 
-Mede o sucesso da extracao automatica de dados de NF-e:
+Mede o sucesso da extracao automatica de dados de NF:
 
 - **100%**: Todos os campos extraidos corretamente
 - **80-99%**: Extracao parcial, alguns campos manuais
