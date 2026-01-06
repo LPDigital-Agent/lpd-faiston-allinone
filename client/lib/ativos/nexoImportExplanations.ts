@@ -30,7 +30,7 @@ export interface NexoExplanation {
 export interface DynamicExplanation {
   getSummary: (params: Record<string, unknown>) => string;
   getDetails?: (params: Record<string, unknown>) => string;
-  getAction?: (params: Record<string, unknown>) => string;
+  getAction?: (params: Record<string, unknown>) => string | undefined;
 }
 
 // =============================================================================
@@ -55,7 +55,7 @@ Se meu raciocínio parece errado em algum ponto, use as perguntas abaixo para me
 
 export const SHEET_ANALYSIS_EXPLANATION: DynamicExplanation = {
   getSummary: (params) => {
-    const count = params.sheetCount ?? 0;
+    const count = Number(params.sheetCount) || 0;
     if (count === 0) return "Não encontrei abas válidas. Verifique se o arquivo está correto.";
     if (count === 1) return "Arquivo simples! Vou processar todos os dados desta única aba.";
 
@@ -71,7 +71,7 @@ export const SHEET_ANALYSIS_EXPLANATION: DynamicExplanation = {
 
 ⚠️ Se eu errar a aba principal, vou processar os dados errados!`,
   getAction: (params) => {
-    const count = params.sheetCount ?? 0;
+    const count = Number(params.sheetCount) || 0;
     if (count > 1) {
       return "Confira se a aba marcada como 'Itens' é realmente a principal!";
     }
@@ -85,9 +85,10 @@ export const SHEET_ANALYSIS_EXPLANATION: DynamicExplanation = {
 
 export const COLUMN_MAPPINGS_EXPLANATION: DynamicExplanation = {
   getSummary: (params) => {
-    const total = params.total ?? 0;
-    const high = params.high ?? 0;
-    const low = params.low ?? 0;
+    const total = Number(params.total) || 0;
+    const high = Number(params.high) || 0;
+    const low = Number(params.low) || 0;
+    const medium = Number(params.medium) || 0;
 
     if (total === 0) return "Ainda analisando as colunas...";
 
@@ -98,7 +99,7 @@ export const COLUMN_MAPPINGS_EXPLANATION: DynamicExplanation = {
     if (high === total) {
       return `✅ Tenho alta confiança em todos os ${total} mapeamentos. Pode prosseguir!`;
     }
-    return `A maioria está ok, mas verifique os ${params.medium ?? 0} mapeamentos de média confiança.`;
+    return `A maioria está ok, mas verifique os ${medium} mapeamentos de média confiança.`;
   },
   getDetails: () => `O que os níveis de confiança significam:
 
@@ -109,7 +110,7 @@ export const COLUMN_MAPPINGS_EXPLANATION: DynamicExplanation = {
 ⚠️ IMPORTANTE: Se eu mapear errado, os dados vão para o campo errado no sistema!
 Exemplo: Se "EQUIPAMENTO" virar "quantidade" em vez de "part_number", você não vai encontrar os itens depois.`,
   getAction: (params) => {
-    const low = params.low ?? 0;
+    const low = Number(params.low) || 0;
     if (low > 0) {
       return `Responda as ${low} perguntas abaixo para corrigir meus mapeamentos!`;
     }
