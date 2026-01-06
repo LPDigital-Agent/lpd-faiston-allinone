@@ -175,12 +175,19 @@ class BaseInventoryAgent:
 
         try:
             # Create session service and runner
-            # Note: session_id and user_id are passed to run_async(), not Runner()
             session_service = InMemorySessionService()
             runner = Runner(
                 agent=self.agent,
                 app_name=APP_NAME,
                 session_service=session_service,
+            )
+
+            # CRITICAL: Create session BEFORE run_async (Google ADK requirement)
+            # InMemorySessionService starts empty - sessions must be created first
+            session = await session_service.create_session(
+                app_name=APP_NAME,
+                user_id=user_id,
+                session_id=session_id,
             )
 
             # Build content
@@ -189,11 +196,11 @@ class BaseInventoryAgent:
                 parts=[types.Part(text=prompt)],
             )
 
-            # Run agent
+            # Run agent with created session
             response = ""
             async for event in runner.run_async(
                 user_id=user_id,
-                session_id=session_id,
+                session_id=session.id,
                 new_message=content,
             ):
                 if hasattr(event, "content") and event.content:
