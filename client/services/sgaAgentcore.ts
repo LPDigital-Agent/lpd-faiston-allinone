@@ -1093,6 +1093,7 @@ export interface NexoReasoningStep {
 
 /**
  * Response from NEXO file analysis.
+ * STATELESS ARCHITECTURE: Returns full session state for frontend storage.
  */
 export interface NexoAnalyzeFileResponse {
   success: boolean;
@@ -1112,6 +1113,8 @@ export interface NexoAnalyzeFileResponse {
   reasoning_trace: NexoReasoningStep[];
   user_id?: string;
   session_id?: string;
+  // STATELESS: Full session state returned for frontend storage
+  session_state?: NexoSessionState;
 }
 
 /**
@@ -1123,13 +1126,49 @@ export interface NexoGetQuestionsResponse {
   questions: NexoQuestion[];
   questions_answered: number;
   questions_remaining: number;
+  session?: NexoSessionState;  // STATELESS: Updated session state
 }
 
 /**
- * Request for submitting answers.
+ * Request for getting questions (STATELESS architecture).
+ */
+export interface NexoGetQuestionsRequest {
+  session_state: NexoSessionState;  // Full session state from frontend
+}
+
+/**
+ * Request for preparing processing (STATELESS architecture).
+ */
+export interface NexoPrepareProcessingRequest {
+  session_state: NexoSessionState;  // Full session state from frontend
+}
+
+/**
+ * Full session state for stateless architecture.
+ * Frontend maintains this state and passes it with each request.
+ */
+export interface NexoSessionState {
+  session_id: string;
+  filename: string;
+  s3_key: string;
+  stage: string;
+  file_analysis?: Record<string, unknown>;
+  reasoning_trace: Array<{ type: string; content: string; tool?: string; result?: string; timestamp?: string }>;
+  questions: Array<{ id: string; question: string; context?: string; options: unknown[]; importance: string; topic: string; column?: string }>;
+  answers: Record<string, string>;
+  learned_mappings: Record<string, string>;
+  column_mappings?: Record<string, string>;
+  confidence?: { level: string; score: number; reason: string } | null;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Request for submitting answers (STATELESS architecture).
  */
 export interface NexoSubmitAnswersRequest {
-  import_session_id: string;
+  session_state: NexoSessionState;  // Full session state from frontend
   answers: Record<string, string>;
 }
 
@@ -1139,18 +1178,17 @@ export interface NexoSubmitAnswersRequest {
 export interface NexoSubmitAnswersResponse {
   success: boolean;
   error?: string;  // Error message when success is false
-  import_session_id: string;
-  updated_mappings: NexoColumnMapping[];
-  updated_confidence: number;
-  remaining_questions: NexoQuestion[];
+  session: NexoSessionState;  // Updated session state
+  applied_mappings: Record<string, string>;
   ready_for_processing: boolean;
+  remaining_questions?: NexoQuestion[];  // If more questions remain
 }
 
 /**
- * Request for learning from import.
+ * Request for learning from import (STATELESS architecture).
  */
 export interface NexoLearnFromImportRequest {
-  import_session_id: string;
+  session_state: NexoSessionState;  // Full session state from frontend
   import_result: Record<string, unknown>;
   user_corrections?: Record<string, unknown>;
 }
@@ -1209,48 +1247,51 @@ export async function nexoAnalyzeFile(
 
 /**
  * Get clarification questions for current import session (ASK phase).
+ * STATELESS ARCHITECTURE: Receives full session state from frontend.
  *
  * Returns questions generated during analysis that require user input.
  *
- * @param importSessionId - Import session ID from analyze_file
+ * @param params.session_state - Full session state from frontend
  * @returns List of questions with options and importance levels
  */
 export async function nexoGetQuestions(
-  importSessionId: string
+  params: NexoGetQuestionsRequest
 ): Promise<AgentCoreResponse<NexoGetQuestionsResponse>> {
   return invokeSGAAgentCore<NexoGetQuestionsResponse>({
     action: 'nexo_get_questions',
-    import_session_id: importSessionId,
+    session_state: params.session_state,  // STATELESS: Pass full state
   });
 }
 
 /**
  * Submit user answers to clarification questions (ASK → LEARN phases).
+ * STATELESS ARCHITECTURE: Receives full session state from frontend.
  *
  * Processes user's answers and refines the analysis.
  * Stores answers for learning and future improvement.
  *
- * @param params.import_session_id - Import session ID
+ * @param params.session_state - Full session state from frontend
  * @param params.answers - Dict mapping question IDs to selected answers
- * @returns Updated analysis with refined mappings
+ * @returns Updated analysis with refined mappings and new session state
  */
 export async function nexoSubmitAnswers(
   params: NexoSubmitAnswersRequest
 ): Promise<AgentCoreResponse<NexoSubmitAnswersResponse>> {
   return invokeSGAAgentCore<NexoSubmitAnswersResponse>({
     action: 'nexo_submit_answers',
-    import_session_id: params.import_session_id,
+    session_state: params.session_state,  // STATELESS: Pass full state
     answers: params.answers,
   });
 }
 
 /**
  * Store learned patterns from successful import (LEARN phase).
+ * STATELESS ARCHITECTURE: Receives full session state from frontend.
  *
  * Called after import confirmation to build knowledge base.
  * Uses AgentCore Episodic Memory for cross-session learning.
  *
- * @param params.import_session_id - Import session ID
+ * @param params.session_state - Full session state from frontend
  * @param params.import_result - Result of the executed import
  * @param params.user_corrections - Any manual corrections made by user
  * @returns Learning confirmation with patterns stored
@@ -1260,7 +1301,7 @@ export async function nexoLearnFromImport(
 ): Promise<AgentCoreResponse<NexoLearnFromImportResponse>> {
   return invokeSGAAgentCore<NexoLearnFromImportResponse>({
     action: 'nexo_learn_from_import',
-    import_session_id: params.import_session_id,
+    session_state: params.session_state,  // STATELESS: Pass full state
     import_result: params.import_result,
     user_corrections: params.user_corrections,
   });
@@ -1268,6 +1309,7 @@ export async function nexoLearnFromImport(
 
 /**
  * Prepare final processing after questions answered (ACT phase).
+ * STATELESS ARCHITECTURE: Receives full session state from frontend.
  *
  * Generates the final processing configuration with:
  * - Confirmed column mappings
@@ -1275,15 +1317,15 @@ export async function nexoLearnFromImport(
  * - Movement type
  * - Any special handling
  *
- * @param importSessionId - Import session ID
+ * @param params.session_state - Full session state from frontend
  * @returns Processing configuration ready for execute_import
  */
 export async function nexoPrepareProcessing(
-  importSessionId: string
+  params: NexoPrepareProcessingRequest
 ): Promise<AgentCoreResponse<NexoProcessingConfig>> {
   return invokeSGAAgentCore<NexoProcessingConfig>({
     action: 'nexo_prepare_processing',
-    import_session_id: importSessionId,
+    session_state: params.session_state,  // STATELESS: Pass full state
   });
 }
 

@@ -79,6 +79,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - AWS Security: https://aws.amazon.com/security/
   - AWS Well-Architected Security Pillar: https://aws.amazon.com/architecture/well-architected/security/
   - Microsoft SDL: https://www.microsoft.com/security/sdl
+- INVENTORY DATASTORE (CRITICAL – DO NOT MISUNDERSTAND): The **Inventory table (Inventory)** MUST be stored in **AWS Aurora PostgreSQL (RDS)**.  
+  **DO NOT USE DynamoDB** for Inventory data.  
+  This is **NOT OPTIONAL**, **NOT A DESIGN CHOICE**, and **NOT SUBJECT TO INTERPRETATION**.  
+  Any design, schema, query, agent, or service that assumes Inventory lives in DynamoDB is **WRONG** and MUST be corrected immediately.
 
 ---
 ## Project Overview
@@ -461,6 +465,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ Unified Entry: Multi-source material entry (NF, Image OCR, SAP Export, Manual)
 - ✅ **Smart Import (January 2026)**: Universal file importer with auto-detect (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
 - ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
+- ✅ **NEXO Stateless Architecture (January 2026)**: Frontend-stateful + backend-stateless pattern for AgentCore serverless compatibility
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
   - Aurora Serverless v2 cluster with RDS Proxy
   - 13 tables, 110 indexes, 8 materialized views
@@ -731,19 +736,43 @@ client.update_agent_runtime(**update_params)
 ```
 **Affected workflows**: All 3 AgentCore deploy workflows (academy, inventory, portal)
 
-### 12. NEXO Import Session Persistence (January 2026)
+### 12. NEXO Import Stateless Architecture (January 2026)
 **Issue**: "Falha ao processar respostas" error in Smart Import - sessions stored in Lambda in-memory dict were lost across cold starts or multiple instances
-**Root Cause**: `NexoImportAgent` used `self._sessions = {}` (process memory) which doesn't persist across Lambda invocations
-**Fix**: Implemented DynamoDB persistence with in-memory cache:
-```python
-# Sessions now stored in DynamoDB
-PK: NEXO_SESSION#{session_id}
-SK: METADATA
-TTL: 24 hours (auto-cleanup)
+**Root Cause**: AgentCore serverless creates new instances each invocation; `self._sessions = {}` doesn't persist
+**Original Fix (DEPRECATED)**: DynamoDB persistence with TTL
+**Final Fix**: **Frontend Stateful + Backend Stateless** architecture:
+```typescript
+// Frontend maintains full session state in React
+interface NexoSessionState {
+  session_id: string;
+  filename: string;
+  s3_key: string;
+  stage: string;
+  file_analysis?: Record<string, unknown>;
+  reasoning_trace: Array<ReasoningStep>;
+  questions: Array<NexoQuestion>;
+  answers: Record<string, string>;
+  learned_mappings: Record<string, string>;
+  // ... timestamps
+}
 
-# In-memory cache for hot sessions (reduces reads)
-self._sessions_cache: Dict[str, ImportSession] = {}
-
-# Methods: _save_session(), _load_session()
+// Each API call receives/returns full state
+const result = await nexoSubmitAnswers({
+  session_state: updatedSessionState,  // Full state
+  answers: state.answers,
+});
 ```
-**Also Fixed**: Error responses now include `"success": False` for consistent frontend handling
+```python
+# Backend serializes/deserializes via session_to_dict() / _restore_session()
+def session_to_dict(self, session: ImportSession) -> Dict:
+    """Serialize session for frontend persistence."""
+    return {
+        "session_id": session.session_id,
+        "filename": session.filename,
+        "s3_key": session.s3_key,
+        "stage": session.stage,
+        # ... full state
+    }
+```
+**Benefits**: No DynamoDB dependency, complies with "inventory table for inventory items only" rule, scales infinitely
+**Files Updated**: `sgaAgentcore.ts`, `useSmartImportNexo.ts`, `useSmartImporter.ts`, `nexo_import_agent.py`, `main.py`

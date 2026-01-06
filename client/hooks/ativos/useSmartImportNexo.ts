@@ -34,6 +34,7 @@ import {
   type NexoSheetAnalysis,
   type NexoProcessingConfig,
   type NexoPriorKnowledge,
+  type NexoSessionState,  // STATELESS: Full session state type
 } from '@/services/sgaAgentcore';
 
 // =============================================================================
@@ -98,11 +99,13 @@ export interface NexoReviewSummary {
 
 /**
  * State of the NEXO intelligent import.
+ * STATELESS ARCHITECTURE: Stores full session state for passing to backend.
  */
 export interface NexoImportState {
   stage: NexoImportStage;
   progress: NexoImportProgress;
   analysis: NexoAnalysisResult | null;
+  sessionState: NexoSessionState | null;  // STATELESS: Full session state
   questions: NexoQuestion[];
   answers: Record<string, string>;
   processingConfig: NexoProcessingConfig | null;
@@ -162,6 +165,7 @@ const INITIAL_STATE: NexoImportState = {
   stage: 'idle',
   progress: INITIAL_PROGRESS,
   analysis: null,
+  sessionState: null,  // STATELESS: Full session state
   questions: [],
   answers: {},
   processingConfig: null,
@@ -337,6 +341,37 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         reasoningTrace: data.reasoning_trace,
       };
 
+      // STATELESS: Build session state from response (or use returned session_state)
+      const sessionState: NexoSessionState = data.session_state || {
+        session_id: data.import_session_id,
+        filename: data.filename,
+        s3_key: urlResult.data.s3_key,
+        stage: 'analysis_complete',
+        file_analysis: {
+          sheets: data.analysis.sheets,
+          sheet_count: data.analysis.sheet_count,
+          total_rows: data.analysis.total_rows,
+          detected_type: data.detected_file_type,
+          recommended_strategy: data.analysis.recommended_strategy,
+        },
+        reasoning_trace: data.reasoning_trace,
+        questions: data.questions,
+        answers: {},
+        learned_mappings: {},
+        column_mappings: data.column_mappings.reduce((acc, m) => {
+          acc[m.file_column] = m.target_field;
+          return acc;
+        }, {} as Record<string, string>),
+        confidence: {
+          level: data.overall_confidence >= 0.8 ? 'high' : data.overall_confidence >= 0.5 ? 'medium' : 'low',
+          score: data.overall_confidence,
+          reason: data.analysis.recommended_strategy,
+        },
+        error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
       // Check if we have questions
       const hasQuestionsToAsk = data.questions && data.questions.length > 0;
 
@@ -346,6 +381,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
           ...prev,
           stage: 'questioning',
           analysis,
+          sessionState,  // STATELESS: Store full session state
           questions: data.questions,
           progress: { stage: 'questioning', percent: 70, message: 'Aguardando suas respostas...', currentStep: 'ask' },
         }));
@@ -356,6 +392,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
           ...prev,
           stage: 'processing',
           analysis,
+          sessionState,  // STATELESS: Store full session state
           questions: [],
           progress: { stage: 'processing', percent: 80, message: 'Pronto para processar', currentStep: 'act' },
         }));
@@ -390,15 +427,22 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   // ==========================================================================
 
   const submitAllAnswers = useCallback(async (userFeedback?: string) => {
-    if (!state.analysis?.sessionId) {
+    if (!state.sessionState) {
       throw new Error('Nenhuma sessão de importação ativa');
     }
 
     updateProgress('processing', 75, 'Processando respostas...', 'learn');
 
     try {
+      // STATELESS: Merge current answers into session state before sending
+      const updatedSessionState: NexoSessionState = {
+        ...state.sessionState,
+        answers: { ...state.sessionState.answers, ...state.answers },
+        updated_at: new Date().toISOString(),
+      };
+
       const result = await nexoSubmitAnswers({
-        import_session_id: state.analysis.sessionId,
+        session_state: updatedSessionState,  // STATELESS: Pass full state
         answers: state.answers,
       });
 
@@ -409,24 +453,28 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         throw new Error(errorMsg);
       }
 
+      // STATELESS: Update session state from backend response
+      const newSessionState = result.data.session || updatedSessionState;
+
       // Check if more questions remain
       if (result.data.remaining_questions && result.data.remaining_questions.length > 0) {
         setState(prev => ({
           ...prev,
-          questions: result.data!.remaining_questions,
+          sessionState: newSessionState,  // STATELESS: Store updated state
+          questions: result.data!.remaining_questions!,
           progress: { stage: 'questioning', percent: 75, message: 'Mais perguntas...', currentStep: 'ask' },
         }));
       } else {
         // Generate client-side review summary for HIL approval
-        const mainSheet = state.analysis.sheets.find(s => s.purpose === 'items') || state.analysis.sheets[0];
+        const mainSheet = state.analysis!.sheets.find(s => s.purpose === 'items') || state.analysis!.sheets[0];
         const projectAnswer = state.answers['project'] || state.answers['projeto'] || null;
 
         // Count high confidence mappings as validations
-        const highConfMappings = state.analysis.columnMappings.filter(m => m.confidence >= 0.8);
-        const lowConfMappings = state.analysis.columnMappings.filter(m => m.confidence < 0.5);
+        const highConfMappings = state.analysis!.columnMappings.filter(m => m.confidence >= 0.8);
+        const lowConfMappings = state.analysis!.columnMappings.filter(m => m.confidence < 0.5);
 
         const reviewSummary: NexoReviewSummary = {
-          filename: state.analysis.filename,
+          filename: state.analysis!.filename,
           mainSheet: mainSheet?.name || 'Desconhecida',
           totalItems: mainSheet?.row_count || 0,
           projectName: projectAnswer,
@@ -449,6 +497,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         setState(prev => ({
           ...prev,
           stage: 'reviewing',
+          sessionState: newSessionState,  // STATELESS: Store updated state
           questions: [],
           reviewSummary,
           userFeedback: userFeedback || null,
@@ -459,14 +508,14 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       setState(prev => ({ ...prev, error: message }));
       throw err;
     }
-  }, [state.analysis, state.answers, updateProgress]);
+  }, [state.analysis, state.sessionState, state.answers, updateProgress]);
 
   // ==========================================================================
   // Action: Skip Questions (use default answers)
   // ==========================================================================
 
   const skipQuestions = useCallback(async () => {
-    if (!state.analysis?.sessionId) {
+    if (!state.sessionState) {
       throw new Error('Nenhuma sessão de importação ativa');
     }
 
@@ -484,7 +533,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
     // Submit with defaults
     await submitAllAnswers();
-  }, [state.analysis?.sessionId, state.questions, submitAllAnswers]);
+  }, [state.sessionState, state.questions, submitAllAnswers]);
 
   // ==========================================================================
   // Action: Back to Questions (from review screen)
@@ -506,14 +555,16 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   // ==========================================================================
 
   const prepareProcessing = useCallback(async (): Promise<NexoProcessingConfig> => {
-    if (!state.analysis?.sessionId) {
+    if (!state.sessionState) {
       throw new Error('Nenhuma sessão de importação ativa');
     }
 
     updateProgress('processing', 85, 'Preparando configuração final...', 'act');
 
     try {
-      const result = await nexoPrepareProcessing(state.analysis.sessionId);
+      const result = await nexoPrepareProcessing({
+        session_state: state.sessionState,  // STATELESS: Pass full state
+      });
 
       if (!result.data?.success || !result.data?.ready) {
         throw new Error('Configuração não está pronta');
@@ -531,7 +582,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       setState(prev => ({ ...prev, error: message }));
       throw err;
     }
-  }, [state.analysis?.sessionId, updateProgress]);
+  }, [state.sessionState, updateProgress]);
 
   // ==========================================================================
   // Action: Execute NEXO Import
@@ -541,7 +592,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     projectId?: string,
     locationId?: string
   ): Promise<void> => {
-    if (!state.analysis?.sessionId || !state.processingConfig) {
+    if (!state.sessionState || !state.processingConfig) {
       throw new Error('Preparação não concluída');
     }
 
@@ -549,9 +600,9 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
     try {
       const result = await executeImport({
-        import_id: state.analysis.sessionId,
+        import_id: state.sessionState.session_id,  // STATELESS: Use session_id from state
         file_content_base64: '', // Already uploaded to S3
-        filename: state.analysis.filename,
+        filename: state.sessionState.filename,
         column_mappings: state.processingConfig.column_mappings,
         project_id: projectId,
         destination_location_id: locationId,
@@ -580,7 +631,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       }));
       throw err;
     }
-  }, [state.analysis, state.processingConfig, updateProgress]);
+  }, [state.sessionState, state.processingConfig, updateProgress]);
 
   // ==========================================================================
   // Action: Learn From Result (LEARN)
@@ -590,7 +641,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     result: Record<string, unknown>,
     corrections?: Record<string, unknown>
   ): Promise<void> => {
-    if (!state.analysis?.sessionId) {
+    if (!state.sessionState) {
       return; // Silent return if no session
     }
 
@@ -598,7 +649,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
     try {
       await nexoLearnFromImport({
-        import_session_id: state.analysis.sessionId,
+        session_state: state.sessionState,  // STATELESS: Pass full state
         import_result: result,
         user_corrections: corrections,
       });
@@ -608,14 +659,14 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       // Learning failure is not critical - just log it
       console.warn('[NEXO] Falha ao aprender:', err);
     }
-  }, [state.analysis?.sessionId, updateProgress]);
+  }, [state.sessionState, updateProgress]);
 
   // ==========================================================================
   // Action: Approve and Import (HIL - Human-in-the-Loop approval)
   // ==========================================================================
 
   const approveAndImport = useCallback(async (): Promise<void> => {
-    if (!state.analysis?.sessionId || !state.reviewSummary) {
+    if (!state.sessionState || !state.reviewSummary) {
       throw new Error('Nenhuma sessão de revisão ativa');
     }
 
@@ -641,7 +692,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       state.userFeedback ? { user_feedback: state.userFeedback } : undefined
     );
   }, [
-    state.analysis?.sessionId,
+    state.sessionState,
     state.reviewSummary,
     state.answers,
     state.userFeedback,
@@ -707,4 +758,5 @@ export type {
   NexoSheetAnalysis,
   NexoProcessingConfig,
   NexoPriorKnowledge,
+  NexoSessionState,  // STATELESS: Export session state type
 };

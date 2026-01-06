@@ -315,7 +315,8 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ Unified Entry: Multi-source tabs (NF, Image OCR, SAP Export, Manual)
 - ✅ **Estoque Page Refactor (January 2026)**: Unified navigation into single ModuleNavigation (8 items), removed KPIs (already in Dashboard)
 - ✅ **Smart Import**: Universal file importer - auto-detects XML/PDF/CSV/XLSX/JPG/PNG/TXT
-- ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT), DynamoDB session persistence
+- ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
+- ✅ **NEXO Stateless Architecture (January 2026)**: Frontend-stateful + backend-stateless pattern (session_state passed in each API call)
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
   - Aurora Serverless v2 cluster with RDS Proxy (connection pooling)
   - 13 tables, 110 indexes, 8 materialized views
@@ -327,7 +328,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 ### SGA Key Components
 | Category | Components |
 |----------|------------|
-| **Backend Agents (11)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, **nexo_import**, base |
+| **Backend Agents (11)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, **nexo_import** (stateless), base |
 | **Backend Tools (5)** | dynamodb_client, s3_client, nf_parser, hil_workflow, **sheet_analyzer** |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
 | **Hooks (17)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, useSmartImporter, **useSmartImportNexo** |

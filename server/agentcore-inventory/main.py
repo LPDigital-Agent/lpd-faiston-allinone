@@ -2610,48 +2610,50 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
 
 async def _nexo_get_questions(payload: dict, session_id: str) -> dict:
     """
-    Get clarification questions for current import session (ASK phase).
+    Get clarification questions for current import session (ASK phase) - STATELESS.
 
     Returns questions generated during analysis that require user input.
 
     Payload:
-        import_session_id: Import session ID from analyze_file
+        session_state: Full session state from frontend (from previous analyze call)
 
     Returns:
-        List of questions with options and importance levels
+        List of questions with options and importance levels, plus updated session state
     """
-    import_session_id = payload.get("import_session_id", "")
+    session_state = payload.get("session_state")
 
-    if not import_session_id:
-        return {"success": False, "error": "import_session_id is required"}
+    if not session_state:
+        return {"success": False, "error": "session_state is required (stateless architecture)"}
 
     from agents.nexo_import_agent import NexoImportAgent
 
     agent = NexoImportAgent()
-    result = await agent.get_questions(session_id=import_session_id)
+    # Restore session from frontend state
+    session = agent._restore_session(session_state)
+    result = await agent.get_questions(session=session)
 
     return result
 
 
 async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
     """
-    Submit user answers to clarification questions (ASK → LEARN phases).
+    Submit user answers to clarification questions (ASK → LEARN phases) - STATELESS.
 
     Processes user's answers and refines the analysis.
     Stores answers for learning and future improvement.
 
     Payload:
-        import_session_id: Import session ID
+        session_state: Full session state from frontend
         answers: Dict mapping question IDs to selected answers
 
     Returns:
-        Updated analysis with refined mappings based on answers
+        Updated session state with refined mappings based on answers
     """
-    import_session_id = payload.get("import_session_id", "")
+    session_state = payload.get("session_state")
     answers = payload.get("answers", {})
 
-    if not import_session_id:
-        return {"success": False, "error": "import_session_id is required"}
+    if not session_state:
+        return {"success": False, "error": "session_state is required (stateless architecture)"}
 
     if not answers:
         return {"success": False, "error": "answers is required"}
@@ -2659,8 +2661,10 @@ async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
     from agents.nexo_import_agent import NexoImportAgent
 
     agent = NexoImportAgent()
+    # Restore session from frontend state
+    session = agent._restore_session(session_state)
     result = await agent.submit_answers(
-        session_id=import_session_id,
+        session=session,
         answers=answers,
     )
 
@@ -2669,13 +2673,13 @@ async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
 
 async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
     """
-    Store learned patterns from successful import (LEARN phase).
+    Store learned patterns from successful import (LEARN phase) - STATELESS.
 
     Called after import confirmation to build knowledge base.
     Uses AgentCore Episodic Memory via LearningAgent for cross-session learning.
 
     Payload:
-        import_session_id: Import session ID
+        session_state: Full session state from frontend
         import_result: Result of the executed import
         user_corrections: Any manual corrections made by user
         user_id: User performing the import
@@ -2683,19 +2687,21 @@ async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
     Returns:
         Learning confirmation with episode_id and patterns stored
     """
-    import_session_id = payload.get("import_session_id", "")
+    session_state = payload.get("session_state")
     import_result = payload.get("import_result", {})
     user_corrections = payload.get("user_corrections", {})
     user_id = payload.get("user_id", "anonymous")
 
-    if not import_session_id:
-        return {"success": False, "error": "import_session_id is required"}
+    if not session_state:
+        return {"success": False, "error": "session_state is required (stateless architecture)"}
 
     from agents.nexo_import_agent import NexoImportAgent
 
     agent = NexoImportAgent()
+    # Restore session from frontend state
+    session = agent._restore_session(session_state)
     result = await agent.learn_from_import(
-        session_id=import_session_id,
+        session=session,
         import_result=import_result,
         user_id=user_id,
         user_corrections=user_corrections,
@@ -2783,7 +2789,7 @@ async def _nexo_get_adaptive_threshold(payload: dict, user_id: str) -> dict:
 
 async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
     """
-    Prepare final processing after questions answered (ACT phase).
+    Prepare final processing after questions answered (ACT phase) - STATELESS.
 
     Generates the final processing configuration with:
     - Confirmed column mappings
@@ -2792,20 +2798,22 @@ async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
     - Any special handling
 
     Payload:
-        import_session_id: Import session ID
+        session_state: Full session state from frontend
 
     Returns:
-        Processing configuration ready for execute_import
+        Processing configuration ready for execute_import, plus updated session state
     """
-    import_session_id = payload.get("import_session_id", "")
+    session_state = payload.get("session_state")
 
-    if not import_session_id:
-        return {"success": False, "error": "import_session_id is required"}
+    if not session_state:
+        return {"success": False, "error": "session_state is required (stateless architecture)"}
 
     from agents.nexo_import_agent import NexoImportAgent
 
     agent = NexoImportAgent()
-    result = await agent.prepare_for_processing(session_id=import_session_id)
+    # Restore session from frontend state
+    session = agent._restore_session(session_state)
+    result = await agent.prepare_for_processing(session=session)
 
     return result
 

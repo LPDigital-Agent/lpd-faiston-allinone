@@ -37,6 +37,7 @@ import {
   type NexoColumnMapping,
   type NexoReasoningStep,
   type NexoSheetAnalysis,
+  type NexoSessionState,  // STATELESS: Full session state type
 } from '@/services/sgaAgentcore';
 import type {
   SmartFileType,
@@ -77,6 +78,7 @@ const PENDING_ENTRIES_KEY = 'sga-pending-nf-entries';
 
 export interface NexoAnalysisState {
   sessionId: string | null;
+  sessionState: NexoSessionState | null;  // STATELESS: Full session state
   isAnalyzing: boolean;
   sheets: NexoSheetAnalysis[];
   columnMappings: NexoColumnMapping[];
@@ -89,6 +91,7 @@ export interface NexoAnalysisState {
 
 const INITIAL_NEXO_STATE: NexoAnalysisState = {
   sessionId: null,
+  sessionState: null,  // STATELESS: Full session state
   isAnalyzing: false,
   sheets: [],
   columnMappings: [],
@@ -414,9 +417,41 @@ export function useSmartImporter(): UseSmartImporterReturn & {
 
       const data = analysisResult.data as NexoAnalyzeFileResponse;
 
+      // STATELESS: Build session state from response (or use returned session_state)
+      const sessionState: NexoSessionState = data.session_state || {
+        session_id: data.import_session_id,
+        filename: file.name,
+        s3_key: urlResult.data.s3_key,
+        stage: 'analysis_complete',
+        file_analysis: {
+          sheets: data.analysis.sheets,
+          sheet_count: data.analysis.sheet_count,
+          total_rows: data.analysis.total_rows,
+          detected_type: data.detected_file_type,
+          recommended_strategy: data.analysis.recommended_strategy,
+        },
+        reasoning_trace: data.reasoning_trace || [],
+        questions: data.questions || [],
+        answers: {},
+        learned_mappings: {},
+        column_mappings: data.column_mappings.reduce((acc, m) => {
+          acc[m.file_column] = m.target_field;
+          return acc;
+        }, {} as Record<string, string>),
+        confidence: {
+          level: data.overall_confidence >= 0.8 ? 'high' : data.overall_confidence >= 0.5 ? 'medium' : 'low',
+          score: data.overall_confidence,
+          reason: data.analysis.recommended_strategy,
+        },
+        error: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
       // Update NEXO state
       const newNexoState: NexoAnalysisState = {
         sessionId: data.import_session_id,
+        sessionState,  // STATELESS: Store full session state
         isAnalyzing: false,
         sheets: data.analysis.sheets,
         columnMappings: data.column_mappings,
@@ -454,17 +489,25 @@ export function useSmartImporter(): UseSmartImporterReturn & {
 
   /**
    * Submit all NEXO answers and get updated analysis.
+   * STATELESS ARCHITECTURE: Passes full session state to backend.
    */
   const submitNexoAnswers = useCallback(async () => {
-    if (!nexoState.sessionId) {
+    if (!nexoState.sessionState) {
       throw new Error('Nenhuma sessão NEXO ativa');
     }
 
     setNexoState(prev => ({ ...prev, isAnalyzing: true }));
 
     try {
+      // STATELESS: Merge current answers into session state before sending
+      const updatedSessionState: NexoSessionState = {
+        ...nexoState.sessionState,
+        answers: { ...nexoState.sessionState.answers, ...nexoState.answers },
+        updated_at: new Date().toISOString(),
+      };
+
       const result = await nexoSubmitAnswers({
-        import_session_id: nexoState.sessionId,
+        session_state: updatedSessionState,  // STATELESS: Pass full state
         answers: nexoState.answers,
       });
 
@@ -472,19 +515,21 @@ export function useSmartImporter(): UseSmartImporterReturn & {
         throw new Error('Falha ao processar respostas');
       }
 
+      // STATELESS: Update session state from backend response
+      const newSessionState = result.data.session || updatedSessionState;
+
       setNexoState(prev => ({
         ...prev,
         isAnalyzing: false,
-        columnMappings: result.data!.updated_mappings,
+        sessionState: newSessionState,  // STATELESS: Store updated state
         questions: result.data!.remaining_questions || [],
-        overallConfidence: result.data!.updated_confidence,
       }));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro ao processar respostas';
       setNexoState(prev => ({ ...prev, isAnalyzing: false, error: message }));
       throw err;
     }
-  }, [nexoState.sessionId, nexoState.answers]);
+  }, [nexoState.sessionState, nexoState.answers]);
 
   /**
    * Check if NEXO has unanswered questions.
