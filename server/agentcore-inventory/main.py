@@ -1687,13 +1687,21 @@ async def _smart_import_upload(payload: dict, user_id: str) -> dict:
         result["file_type_label"] = get_file_type_label(file_type)
         result["requires_hil"] = True  # Text imports always require review
 
-    # Add common fields
+    # Add common fields to preview
     if result:
         result["smart_import"] = True
         result["filename"] = filename
         result["s3_key"] = s3_key
 
-    return result
+    # Return structured response matching SmartImportUploadResponse TypeScript type
+    # Frontend expects: { success, detected_type, source_type, preview: {...} }
+    return {
+        "success": True,
+        "detected_type": file_type,
+        "detected_type_label": get_file_type_label(file_type),
+        "source_type": result.get("source_type", "unknown") if result else "unknown",
+        "preview": result,  # Preview data wrapped correctly for frontend
+    }
 
 
 async def _generate_import_observations(payload: dict) -> dict:
