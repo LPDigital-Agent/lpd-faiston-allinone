@@ -176,6 +176,9 @@ def invoke(payload: dict, context) -> dict:
         # =================================================================
         # NF-e Processing (IntakeAgent)
         # =================================================================
+        elif action == "get_nf_upload_url":
+            return asyncio.run(_get_nf_upload_url(payload))
+
         elif action == "process_nf_upload":
             return asyncio.run(_process_nf_upload(payload, user_id))
 
@@ -535,6 +538,37 @@ async def _nexo_estoque_chat(payload: dict, user_id: str, session_id: str) -> di
 # =============================================================================
 # NF-e Processing Handlers
 # =============================================================================
+
+
+async def _get_nf_upload_url(payload: dict) -> dict:
+    """
+    Get presigned URL for NF-e/document upload.
+
+    Used by Smart Import to get S3 presigned URL before file upload.
+
+    Payload:
+        filename: Original filename
+        content_type: MIME type of the file
+
+    Returns:
+        Dict with upload_url, s3_key, and expires_in
+    """
+    filename = payload.get("filename", "")
+    content_type = payload.get("content_type", "application/octet-stream")
+
+    if not filename:
+        return {"success": False, "error": "filename is required"}
+
+    from agents.intake_agent import IntakeAgent
+
+    agent = IntakeAgent()
+    result = agent.get_upload_url(filename=filename, content_type=content_type)
+
+    # Map 'key' to 's3_key' for frontend compatibility
+    if result.get("success") and "key" in result:
+        result["s3_key"] = result.pop("key")
+
+    return result
 
 
 async def _process_nf_upload(payload: dict, user_id: str) -> dict:

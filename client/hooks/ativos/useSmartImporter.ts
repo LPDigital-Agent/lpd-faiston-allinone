@@ -135,6 +135,12 @@ export function useSmartImporter(): UseSmartImporterReturn {
         content_type: contentType,
       });
 
+      // Defensive validation - ensure we got a valid response
+      if (!urlResult.data || !urlResult.data.upload_url || !urlResult.data.s3_key) {
+        const errorMsg = (urlResult.data as { error?: string })?.error || 'Falha ao obter URL de upload';
+        throw new Error(errorMsg);
+      }
+
       // =======================================================================
       // LEARN: Upload file to S3
       // =======================================================================
