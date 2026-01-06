@@ -204,6 +204,9 @@ jobs:
           # Step 3: Build update payload with JWT authorizer
           discovery_url = f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_POOL_ID}/.well-known/openid-configuration"
 
+          # IMPORTANT: Cognito Access Tokens have "client_id" claim, NOT "aud" claim
+          # The "aud" claim only exists if a Resource Server binding is configured.
+          # We use allowedClients to validate "client_id" and omit allowedAudiences.
           update_body = {
               "agentRuntimeArtifact": current_config.get("agentRuntimeArtifact"),
               "networkConfiguration": current_config.get("networkConfiguration"),
@@ -211,8 +214,7 @@ jobs:
               "authorizerConfiguration": {
                   "customJWTAuthorizer": {
                       "discoveryUrl": discovery_url,
-                      "allowedClients": [COGNITO_CLIENT_ID],
-                      "allowedAudiences": [COGNITO_CLIENT_ID]
+                      "allowedClients": [COGNITO_CLIENT_ID]
                   }
               }
           }
