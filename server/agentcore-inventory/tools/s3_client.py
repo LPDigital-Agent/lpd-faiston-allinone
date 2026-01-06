@@ -24,13 +24,29 @@ def _get_s3_client():
     """
     Get S3 client with lazy initialization.
 
+    CRITICAL: Must use signature_version='s3v4' for presigned URLs.
+    S3 buckets in us-east-2 require SigV4 - SigV2 URLs return 400 Bad Request.
+
     Returns:
-        boto3 S3 client
+        boto3 S3 client configured for us-east-2 with SigV4
     """
     global _s3_client
     if _s3_client is None:
         import boto3
-        _s3_client = boto3.client("s3")
+        from botocore.config import Config
+
+        # CRITICAL: Configure S3 client for SigV4 presigned URLs
+        # Without this, presigned URLs use SigV2 which fails with 400 Bad Request
+        # See CLAUDE.md "S3 Presigned URL Issues - CORS 307 Redirect (CRITICAL)"
+        config = Config(
+            signature_version='s3v4',
+            s3={'addressing_style': 'virtual'}
+        )
+        _s3_client = boto3.client(
+            's3',
+            region_name='us-east-2',
+            config=config
+        )
     return _s3_client
 
 
