@@ -77,7 +77,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ---
 ## Project Overview
 
-**Faiston NEXO** - AI-First All-in-One Intranet Portal for Faiston employees. The platform is commanded by the AI assistant **NEXO** which orchestrates all interactions, integrations, and automations.
+**Faiston One** - AI-First All-in-One Intranet Portal for Faiston employees. The platform is commanded by the AI assistant **NEXO** which orchestrates all interactions, integrations, and automations.
+
+> **Nomenclatura:** "Faiston One" = plataforma/portal, "NEXO" = assistente de IA
 
 **Status**: Phase 1 (Foundation) - Building core infrastructure and UI/UX
 
@@ -154,17 +156,22 @@ lpd-faiston-allinone/
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
 │   └── services/          # API clients
-│       ├── academyAgentcore.ts  # Academy AgentCore
-│       └── sgaAgentcore.ts      # SGA AgentCore
+│       ├── agentcoreBase.ts     # Factory base for all AgentCore services
+│       ├── academyAgentcore.ts  # Academy AgentCore (uses base)
+│       ├── sgaAgentcore.ts      # SGA AgentCore (uses base)
+│       └── portalAgentcore.ts   # Portal AgentCore (uses base)
 ├── server/                 # Python backend
 │   ├── agentcore-academy/ # Faiston Academy AgentCore agents
 │   │   ├── main.py        # BedrockAgentCoreApp entrypoint (19 actions)
 │   │   ├── agents/        # Google ADK Agents (NEXO, flashcards, etc.)
 │   │   └── tools/         # Agent tools (elevenlabs, heygen, youtube)
-│   └── agentcore-inventory/ # SGA Inventory AgentCore agents
-│       ├── main.py        # BedrockAgentCoreApp entrypoint (30+ actions)
-│       ├── agents/        # 5 Google ADK Agents
-│       └── tools/         # 4 tools (dynamodb, s3, nf_parser, hil)
+│   ├── agentcore-inventory/ # SGA Inventory AgentCore agents
+│   │   ├── main.py        # BedrockAgentCoreApp entrypoint (30+ actions)
+│   │   ├── agents/        # 10 Google ADK Agents
+│   │   └── tools/         # 4 tools (dynamodb, s3, nf_parser, hil)
+│   └── agentcore-portal/  # Portal NEXO Orchestrator agents
+│       ├── main.py        # BedrockAgentCoreApp entrypoint
+│       └── agents/        # News, NEXO orchestrator agents
 └── terraform/             # AWS Infrastructure as Code
     └── main/              # All AWS resources
         ├── Cognito, CloudFront, IAM
@@ -178,8 +185,9 @@ lpd-faiston-allinone/
 |----------|---------|---------|
 | `terraform.yml` | Push to `terraform/**` or manual | Plan on PR, Apply on merge to main |
 | `deploy-frontend.yml` | Push to `client/**` | Build Next.js and sync to S3 + CloudFront |
-| `deploy-agentcore-academy.yml` | Manual dispatch | Deploy Academy agents to Bedrock AgentCore |
-| `deploy-agentcore-inventory.yml` | Manual dispatch | Deploy SGA Inventory agents to Bedrock AgentCore |
+| `deploy-agentcore-academy.yml` | Push to `server/agentcore-academy/**` or manual | Deploy Academy agents to Bedrock AgentCore |
+| `deploy-agentcore-inventory.yml` | Push to `server/agentcore-inventory/**` or manual | Deploy SGA Inventory agents to Bedrock AgentCore |
+| `deploy-agentcore-portal.yml` | Push to `server/agentcore-portal/**` or manual | Deploy Portal NEXO agents to Bedrock AgentCore |
 
 ## Available Commands
 
@@ -375,9 +383,10 @@ Migrated from Hive Academy to `/ferramentas/academy/`. Educational platform with
 ### Academy Hooks (12)
 `client/hooks/academy/`: useNexoAI, useFlashcards, useMindMap, useAudioClass, useSlideDeck, useReflection, useFloatingPanel, useExtraClass, useVideoClass, useYouTubeRecommendations, useLibrary, index
 
-### Academy Services (2)
-- `academyAgentcore.ts` - AgentCore Runtime invocation with JWT auth
-- `academyCognito.ts` - Cognito token management
+### Academy Services (1)
+- `academyAgentcore.ts` - AgentCore Runtime invocation with JWT auth (uses agentcoreBase.ts factory)
+
+> **Note**: `academyCognito.ts` was **removed** (January 2026) as dead code - all auth uses `authService.ts`
 
 ### Academy Contexts (3)
 - `AcademyClassroomContext` - Panel state, current episode
@@ -637,3 +646,29 @@ const newsCount = newsData?.total_articles || 2;
 - KPIs removed (already in Gestão de Ativos Dashboard)
 - Grid: 2 cols mobile → 3 cols sm → 4 cols lg
 - Compact cards with icon + label + description
+
+### 9. AgentCore Service Factory Pattern (January 2026)
+**Issue**: ~450 lines of duplicated code across 3 AgentCore services (retry, session, error handling, SSE parsing)
+**Fix**: Created `agentcoreBase.ts` with factory function `createAgentCoreService(config)`:
+```typescript
+// Factory pattern eliminates duplication
+const academyService = createAgentCoreService({
+  arn: ACADEMY_AGENTCORE_ARN,
+  sessionStorageKey: 'faiston_academy_session',
+  logPrefix: '[Academy AgentCore]',
+  sessionPrefix: 'session',
+});
+export const invokeAgentCore = academyService.invoke;
+```
+**Benefits**:
+- Unified retry logic with exponential backoff (502, 503, 504)
+- Session management using browser sessionStorage
+- SSE (Server-Sent Events) response parsing
+- JWT Bearer token authentication via `getAccessToken()`
+
+### 10. JWT Authorizer GitHub Secrets (January 2026)
+**Issue**: Cognito credentials hardcoded in GitHub workflow files
+**Fix**: Moved to GitHub Secrets:
+- `COGNITO_USER_POOL_ID` → `us-east-2_lkBXr4kjy` (faiston-users-prod)
+- `COGNITO_CLIENT_ID` → `7ovjm09dr94e52mpejvbu9v1cg` (faiston-client-prod)
+All 3 AgentCore deploy workflows now use `${{ secrets.COGNITO_USER_POOL_ID }}` and `${{ secrets.COGNITO_CLIENT_ID }}`

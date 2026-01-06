@@ -56,7 +56,8 @@ cat CLAUDE.md
 | DynamoDB | `faiston-one-sga-{feature}-{env}` | `faiston-one-sga-inventory-prod` |
 | SSM Parameter | `/faiston-nexo/{param}` | `/faiston-nexo/ms-graph-secret` |
 | AgentCore Academy | `faiston_academy_agents` | `faiston_academy_agents-ODNvP6HxCD` |
-| AgentCore Inventory | `faiston_asset_management` | `faiston_asset_management` |
+| AgentCore Inventory | `faiston_asset_management` | `faiston_asset_management-uSuLPsFQNH` |
+| AgentCore Portal | `faiston_portal_agents` | `faiston_portal_agents-*` |
 | CloudFront Function | `faiston-one-{name}` | `faiston-one-url-rewriter` |
 
 ### AWS Profile (Local Development)
@@ -76,8 +77,9 @@ aws sts get-caller-identity --profile faiston-aio
 |----------|---------|---------|
 | `terraform.yml` | Push to `terraform/**` | Plan on PR, Apply on merge |
 | `deploy-frontend.yml` | Push to `client/**` | Build & deploy to S3/CloudFront |
-| `deploy-agentcore-academy.yml` | Manual | Deploy Academy agents |
-| `deploy-agentcore-inventory.yml` | Manual | Deploy SGA agents |
+| `deploy-agentcore-academy.yml` | Push/Manual | Deploy Academy agents (JWT Auth via secrets) |
+| `deploy-agentcore-inventory.yml` | Push/Manual | Deploy SGA agents (JWT Auth via secrets) |
+| `deploy-agentcore-portal.yml` | Push/Manual | Deploy Portal NEXO agents (JWT Auth via secrets) |
 | `deploy-sga-postgres-lambda.yml` | Push/Manual | Deploy PostgreSQL MCP tools Lambda |
 | `migrate-sga-schema.yml` | Manual | Apply PostgreSQL schema via Lambda bridge |
 
@@ -237,13 +239,16 @@ lpd-faiston-allinone/
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
 │   └── services/          # API clients
-│       ├── academyAgentcore.ts  # Academy AgentCore
-│       └── sgaAgentcore.ts      # SGA AgentCore
+│       ├── agentcoreBase.ts     # Factory base (unified retry/session/SSE)
+│       ├── academyAgentcore.ts  # Academy AgentCore (uses base)
+│       ├── sgaAgentcore.ts      # SGA AgentCore (uses base)
+│       └── portalAgentcore.ts   # Portal AgentCore (uses base)
 ├── server/                 # Python backend
 │   ├── agentcore-academy/ # Faiston Academy AgentCore (19 actions)
-│   └── agentcore-inventory/ # SGA Inventory AgentCore (30+ actions)
-│       ├── agents/        # 5 Google ADK Agents
-│       └── tools/         # dynamodb, s3, nf_parser, hil
+│   ├── agentcore-inventory/ # SGA Inventory AgentCore (30+ actions)
+│   │   ├── agents/        # 10 Google ADK Agents
+│   │   └── tools/         # dynamodb, s3, nf_parser, hil
+│   └── agentcore-portal/  # Portal NEXO Orchestrator (news, A2A delegation)
 ├── terraform/             # AWS Infrastructure as Code
 │   └── main/              # All AWS resources (28+ .tf files)
 │       ├── main.tf        # S3 backend, providers
@@ -284,6 +289,7 @@ New hooks: `useLibrary.ts`
 New types: `types/zoom-videosdk.d.ts`
 **Pattern**: All Academy hooks use object-based parameters (not positional)
 **TypeScript Fixes**: Discriminated union types in `portalAgentcore.ts` for `DailySummarySectionData`
+**Service Factory (January 2026)**: Created `agentcoreBase.ts` - unified retry/session/SSE across all 3 services (~450 lines deduped)
 
 ### Key Adaptations (Hive → Faiston)
 - "Sasha" → "NEXO" (AI tutor)
@@ -319,7 +325,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 ### SGA Key Components
 | Category | Components |
 |----------|------------|
-| **Backend Agents (10)** | EstoqueControl, Intake, Reconciliacao, Compliance, Comunicacao, Expedition, Carrier, Reverse, Import, Base |
+| **Backend Agents (10)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, base |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
 | **Hooks (16)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, **useSmartImporter** |
 | **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch |
