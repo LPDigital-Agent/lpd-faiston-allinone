@@ -580,9 +580,18 @@ async def _get_nf_upload_url(payload: dict) -> dict:
     if not filename:
         return {"success": False, "error": "filename is required"}
 
+    # CRITICAL: Force reset S3 client to ensure SigV4 config is applied
+    # This is needed because warm instances cache the old client
+    # See: CLAUDE.md "S3 Presigned URL Issues - CORS 307 Redirect (CRITICAL)"
+    import tools.s3_client as s3_module
+    s3_module._s3_client = None  # Force recreation with SigV4 config
+    print(f"[get_nf_upload_url] Reset S3 client - version {s3_module._MODULE_VERSION}")
+
     from agents.intake_agent import IntakeAgent
 
     agent = IntakeAgent()
+    # Force reset agent's cached S3 client too
+    agent._s3_client = None
     result = agent.get_upload_url(filename=filename, content_type=content_type)
 
     # Map 'key' to 's3_key' for frontend compatibility

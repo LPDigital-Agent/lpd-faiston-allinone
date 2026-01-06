@@ -10,13 +10,21 @@
 # - Content type detection
 #
 # CRITICAL: Lazy imports for cold start optimization (<30s limit)
+#
+# VERSION: 2026-01-06T04:00:00Z - SigV4 fix for presigned URLs
+# MUST use signature_version='s3v4' - S3 in us-east-2 rejects SigV2
 # =============================================================================
 
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import os
 
+# Module version for deployment tracking
+_MODULE_VERSION = "2026-01-06T04:00:00Z"
+print(f"[S3Client] Module loaded - version {_MODULE_VERSION}")
+
 # Lazy imports - boto3 imported only when needed
+# CRITICAL: Reset to None on each cold start to ensure SigV4 config is applied
 _s3_client = None
 
 
