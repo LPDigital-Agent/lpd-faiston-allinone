@@ -195,8 +195,9 @@ export function useSmartImporter(): UseSmartImporterReturn {
       setResponse(smartResult.data);
 
       // Update detected type from backend (more reliable)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const detectedType = smartResult.data?.detected_type ||
-        (previewResult as Record<string, unknown>)?.detected_file_type as SmartFileType | undefined;
+        (previewResult as unknown as Record<string, unknown>)?.detected_file_type as SmartFileType | undefined;
       setDetectedType(detectedType || null);
 
       return previewResult;
