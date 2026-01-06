@@ -91,7 +91,7 @@ const AGENTCORE_ENDPOINT =
 
 const AGENTCORE_ARN =
   process.env.NEXT_PUBLIC_SGA_AGENTCORE_ARN ||
-  'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_sga_inventory-PENDING';
+  'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_asset_management-uSuLPsFQNH';
 
 // =============================================================================
 // Types
