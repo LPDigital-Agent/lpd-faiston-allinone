@@ -36,3 +36,8 @@ mcp>=0.1.0
 # Used by postgres_tools_lambda.py to connect to Aurora via RDS Proxy
 # Note: psycopg[binary] includes compiled C libraries for performance
 psycopg[binary]>=3.1.0
+
+# Excel XLSX file parsing for ImportAgent
+# Pure Python library (~3MB), safe for cold start
+# Used by tools/csv_parser.py for spreadsheet imports
+openpyxl>=3.1.0
