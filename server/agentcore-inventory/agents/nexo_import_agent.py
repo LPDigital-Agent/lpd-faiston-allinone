@@ -523,9 +523,18 @@ class NexoImportAgent(BaseInventoryAgent):
                         content=obs,
                     ))
 
-                # Store suggested mappings
+                # Store suggested mappings (defensive: Gemini may return string instead of dict)
                 suggested = result.get("suggested_mappings", {})
-                session.learned_mappings.update(suggested)
+                if isinstance(suggested, dict):
+                    session.learned_mappings.update(suggested)
+                elif isinstance(suggested, str):
+                    # Gemini returned JSON string instead of dict - try to parse
+                    try:
+                        parsed = json.loads(suggested)
+                        if isinstance(parsed, dict):
+                            session.learned_mappings.update(parsed)
+                    except (json.JSONDecodeError, TypeError):
+                        print(f"[NEXO] WARNING: suggested_mappings is string, failed to parse: {suggested[:100]}")
 
                 # Calculate confidence
                 raw_confidence = result.get("confidence", 0.5)
@@ -539,7 +548,13 @@ class NexoImportAgent(BaseInventoryAgent):
                 if result.get("needs_clarification", False):
                     session.stage = ImportStage.QUESTIONING
                     questions = result.get("questions", [])
+                    # Defensive: ensure questions is a list
+                    if not isinstance(questions, list):
+                        questions = []
                     for q in questions:
+                        # Defensive: skip non-dict items
+                        if not isinstance(q, dict):
+                            continue
                         session.questions.append(NexoQuestion(
                             id=generate_id("Q"),
                             question=q.get("question", ""),
