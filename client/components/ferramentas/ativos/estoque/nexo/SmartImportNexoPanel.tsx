@@ -38,6 +38,7 @@ import {
   GlassCardContent,
 } from '@/components/shared/glass-card';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
@@ -876,6 +877,31 @@ export function SmartImportNexoPanel({
   } = useSmartImportNexo();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
+  // Rotating loading messages for better UX during ~30s Gemini processing
+  const LOADING_MESSAGES = [
+    { text: 'Analisando estrutura do arquivo...', emoji: '🔍' },
+    { text: 'Identificando colunas e campos...', emoji: '📋' },
+    { text: 'Consultando base de conhecimento...', emoji: '🧠' },
+    { text: 'Processando com IA generativa...', emoji: '✨' },
+    { text: 'Mapeando dados para o sistema...', emoji: '🗺️' },
+    { text: 'Verificando padrões anteriores...', emoji: '📊' },
+    { text: 'Preparando perguntas de validação...', emoji: '❓' },
+    { text: 'Quase lá, finalizando análise...', emoji: '🎯' },
+  ];
+
+  // Rotate messages every 4 seconds during loading
+  useEffect(() => {
+    if (!isAnalyzing && !isRecalling) {
+      setLoadingMessageIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setLoadingMessageIndex(prev => (prev + 1) % LOADING_MESSAGES.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isAnalyzing, isRecalling, LOADING_MESSAGES.length]);
 
   // Start analysis when file changes (CRITICAL: useEffect for side effects, NOT useMemo)
   useEffect(() => {
@@ -942,55 +968,125 @@ export function SmartImportNexoPanel({
     }
   };
 
-  // Loading state (uploading, recalling, or analyzing)
+  // Loading state (uploading, recalling, or analyzing) - COMBO COMPLETO
   if (state.stage === 'uploading' || isRecalling || isAnalyzing) {
     const stageInfo = {
-      uploading: { icon: FileSpreadsheet, title: 'Enviando Arquivo', color: 'text-cyan-400' },
-      recalling: { icon: Brain, title: 'NEXO Consultando Memória', color: 'text-purple-400' },
-      analyzing: { icon: Brain, title: 'NEXO Analisando', color: 'text-purple-400' },
+      uploading: { title: 'Enviando Arquivo', gradient: 'from-cyan-500 to-blue-500' },
+      recalling: { title: 'NEXO Consultando Memória', gradient: 'from-purple-500 to-pink-500' },
+      analyzing: { title: 'NEXO Analisando com IA', gradient: 'from-purple-500 to-pink-500' },
     };
     const currentStageKey = state.stage as 'uploading' | 'recalling' | 'analyzing';
-    const { icon: StageIcon, title, color } = stageInfo[currentStageKey] || stageInfo.analyzing;
+    const { title, gradient } = stageInfo[currentStageKey] || stageInfo.analyzing;
+    const currentMessage = LOADING_MESSAGES[loadingMessageIndex];
 
     return (
       <GlassCard>
         <GlassCardHeader>
           <div className="flex items-center gap-2">
-            <StageIcon className={`w-5 h-5 ${color} animate-pulse`} />
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+              className={`p-1.5 rounded-lg bg-gradient-to-br ${gradient}`}
+            >
+              <Brain className="w-5 h-5 text-white" />
+            </motion.div>
             <GlassCardTitle>{title}</GlassCardTitle>
           </div>
         </GlassCardHeader>
         <GlassCardContent>
-          <div className="space-y-4">
-            <Progress value={state.progress.percent} className="h-2" />
-            <p className="text-sm text-text-secondary text-center">
-              {state.progress.message}
-            </p>
-
-            {/* Show recall phase indicator */}
-            {isRecalling && (
+          <div className="space-y-6">
+            {/* Main pulsing icon with file name */}
+            <div className="flex flex-col items-center gap-4 py-4">
               <motion.div
+                animate={{
+                  scale: [1, 1.1, 1],
+                  opacity: [0.7, 1, 0.7],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+                className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg shadow-purple-500/25`}
+              >
+                <Brain className="w-10 h-10 text-white" />
+              </motion.div>
+
+              <div className="text-center">
+                <p className="text-sm font-medium text-text-primary truncate max-w-[200px]">
+                  {file?.name}
+                </p>
+                <p className="text-xs text-text-muted">
+                  {file?.size ? `${(file.size / 1024).toFixed(1)} KB` : ''}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="space-y-2">
+              <Progress value={state.progress.percent} className="h-2" />
+              <p className="text-xs text-text-muted text-center">
+                {state.progress.percent}% concluído
+              </p>
+            </div>
+
+            {/* Rotating messages with AnimatePresence */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={loadingMessageIndex}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-start gap-2 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20"
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3 }}
+                className="flex items-center justify-center gap-2 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20"
               >
-                <Brain className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5 animate-pulse" />
-                <p className="text-sm text-text-secondary">
-                  Buscando padrões de importações anteriores...
-                </p>
+                <span className="text-lg">{currentMessage.emoji}</span>
+                <p className="text-sm text-text-secondary">{currentMessage.text}</p>
               </motion.div>
-            )}
+            </AnimatePresence>
 
+            {/* Current thought from agent (if available) */}
             {currentThought && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-start gap-2 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20"
+                className="flex items-start gap-2 p-3 bg-cyan-500/10 rounded-lg border border-cyan-500/20"
               >
-                <Lightbulb className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                <Lightbulb className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-text-secondary">{currentThought}</p>
               </motion.div>
             )}
+
+            {/* Skeleton preview of expected result */}
+            <div className="space-y-3 pt-2">
+              <p className="text-xs text-text-muted font-medium uppercase tracking-wide">
+                Prévia do resultado
+              </p>
+              <div className="p-3 bg-white/5 rounded-lg border border-white/10 space-y-3">
+                {/* Sheet skeleton */}
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-4 w-4 rounded" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-16 ml-auto" />
+                </div>
+                {/* Column skeletons */}
+                <div className="grid grid-cols-3 gap-2">
+                  <Skeleton className="h-8 rounded" />
+                  <Skeleton className="h-8 rounded" />
+                  <Skeleton className="h-8 rounded" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Skeleton className="h-8 rounded" />
+                  <Skeleton className="h-8 rounded" />
+                  <Skeleton className="h-8 rounded" />
+                </div>
+                {/* Actions skeleton */}
+                <div className="flex gap-2 pt-2">
+                  <Skeleton className="h-9 flex-1 rounded-lg" />
+                  <Skeleton className="h-9 w-24 rounded-lg" />
+                </div>
+              </div>
+            </div>
           </div>
         </GlassCardContent>
       </GlassCard>
