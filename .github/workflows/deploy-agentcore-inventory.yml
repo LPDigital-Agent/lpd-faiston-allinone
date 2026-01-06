@@ -125,6 +125,8 @@ jobs:
           # Environment variables for agents
           # PostgreSQL MCP Gateway (Sprint 4 migration - currently disabled)
           # Set USE_POSTGRES_MCP=true to enable PostgreSQL via Gateway
+          # GIT_COMMIT_SHA and DEPLOYED_AT for version tracking in health_check
+          DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           echo "y" | agentcore deploy --agent ${{ env.AGENT_NAME }} \
             --auto-update-on-conflict \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
@@ -134,7 +136,9 @@ jobs:
             --env DOCUMENTS_BUCKET=faiston-one-sga-documents-prod \
             --env USE_POSTGRES_MCP=false \
             --env AGENTCORE_GATEWAY_ID=faiston-one-sga-gateway-prod-qbnlm3ao63 \
-            --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp 2>&1 || {
+            --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp \
+            --env GIT_COMMIT_SHA=${{ github.sha }} \
+            --env DEPLOYED_AT=$DEPLOY_TIMESTAMP 2>&1 || {
             echo "::warning::Deploy command returned non-zero exit code. Checking status..."
           }
 

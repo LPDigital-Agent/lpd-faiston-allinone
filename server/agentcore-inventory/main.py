@@ -144,6 +144,9 @@ def invoke(payload: dict, context) -> dict:
     user_id = payload.get("user_id", "anonymous")
     session_id = getattr(context, "session_id", "default-session")
 
+    # Debug logging to trace action routing
+    print(f"[SGA Invoke] action={action}, user_id={user_id}, session_id={session_id}")
+
     # Route to appropriate handler
     try:
         # =================================================================
@@ -151,6 +154,18 @@ def invoke(payload: dict, context) -> dict:
         # =================================================================
         if action == "health_check":
             return _health_check()
+
+        elif action == "debug_version":
+            # Debug action to verify deployed code version
+            # Added: 2026-01-06T03:30:00Z - UNIQUE MARKER FOR THIS DEPLOY
+            return {
+                "success": True,
+                "code_marker": "2026-01-06T03:30:00Z",
+                "git_commit": os.environ.get("GIT_COMMIT_SHA", "unknown"),
+                "deployed_at": os.environ.get("DEPLOYED_AT", "unknown"),
+                "action_received": action,
+                "has_get_nf_upload_url": True,  # Confirms handler exists in code
+            }
 
         # =================================================================
         # Asset Search & Query
@@ -367,6 +382,7 @@ def _health_check() -> dict:
     Return system health status.
 
     Used by monitoring and deployment verification.
+    Includes git commit SHA for verifying deployed code version.
     """
     from agents.utils import AGENT_VERSION, MODEL_GEMINI
 
@@ -374,6 +390,8 @@ def _health_check() -> dict:
         "success": True,
         "status": "healthy",
         "version": AGENT_VERSION,
+        "git_commit": os.environ.get("GIT_COMMIT_SHA", "unknown"),
+        "deployed_at": os.environ.get("DEPLOYED_AT", "unknown"),
         "model": MODEL_GEMINI,
         "module": "Gestao de Ativos - Estoque",
         "agents": [

@@ -120,6 +120,8 @@ jobs:
           echo "=== Deploying AgentCore Agent ==="
           # Note: GOOGLE_API_KEY is passed via --env at deploy time (not runtime SSM lookup)
           # This follows AWS official example pattern for AgentCore ADK deployments
+          # GIT_COMMIT_SHA and DEPLOYED_AT for version tracking in health_check
+          DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           echo "y" | agentcore deploy --agent ${{ env.AGENT_NAME }} \
             --auto-update-on-conflict \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
@@ -130,7 +132,9 @@ jobs:
             --env SLIDES_BUCKET=faiston-one-academy-slides-prod \
             --env VIDEOS_BUCKET=faiston-one-academy-videos-prod \
             --env TRAININGS_BUCKET=faiston-one-academy-trainings-prod \
-            --env TRAININGS_TABLE=faiston-one-academy-trainings 2>&1 || {
+            --env TRAININGS_TABLE=faiston-one-academy-trainings \
+            --env GIT_COMMIT_SHA=${{ github.sha }} \
+            --env DEPLOYED_AT=$DEPLOY_TIMESTAMP 2>&1 || {
             echo "::warning::Deploy command returned non-zero exit code. Checking status..."
           }
 
