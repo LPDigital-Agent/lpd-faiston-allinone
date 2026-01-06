@@ -53,6 +53,8 @@ import {
   REASONING_TRACE_EXPLANATION,
   QUESTIONS_CRITICAL_EXPLANATION,
   QUESTIONS_OPTIONAL_EXPLANATION,
+  FREE_TEXT_EXPLANATION,
+  REVIEW_SUMMARY_EXPLANATION,
   ERROR_EXPLANATION,
   SUCCESS_EXPLANATION,
   LOADING_EXPLANATIONS,
@@ -369,12 +371,14 @@ function QuestionPanel({
   questions: NexoQuestion[];
   answers: Record<string, string>;
   onAnswer: (questionId: string, answer: string) => void;
-  onSubmit: () => void;
+  onSubmit: (freeText: string) => void;
   onSkip: () => void;
   isSubmitting: boolean;
 }) {
   // State for "Outros" text input per question
   const [otherTexts, setOtherTexts] = useState<Record<string, string>>({});
+  // State for free text feedback field
+  const [freeText, setFreeText] = useState('');
 
   const criticalQuestions = questions.filter(q => q.importance === 'critical');
   const optionalQuestions = questions.filter(q => q.importance !== 'critical');
@@ -402,7 +406,7 @@ function QuestionPanel({
         onAnswer(questionId, `Outros: ${otherTexts[questionId].trim()}`);
       }
     });
-    onSubmit();
+    onSubmit(freeText.trim());
   };
 
   const getImportanceBadge = (importance: NexoQuestion['importance']) => {
@@ -491,6 +495,24 @@ function QuestionPanel({
           ))}
         </div>
       )}
+
+      {/* Free text feedback field */}
+      <div className="space-y-3 pt-4 border-t border-white/10">
+        <NexoExplanation
+          summary={FREE_TEXT_EXPLANATION.summary}
+          details={FREE_TEXT_EXPLANATION.details}
+          action={FREE_TEXT_EXPLANATION.action}
+          variant="tip"
+          compact
+        />
+        <textarea
+          value={freeText}
+          onChange={(e) => setFreeText(e.target.value)}
+          placeholder="Ex: A coluna 'EQUIP' na verdade é o Part Number, não o nome do equipamento..."
+          className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-sm text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-2 focus:ring-faiston-magenta-light/50 focus:border-transparent resize-none"
+          rows={3}
+        />
+      </div>
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-4">
@@ -688,10 +710,15 @@ export function SmartImportNexoPanel({
     }
   }, [file, state.stage, startAnalysis]);
 
-  // Handle submit answers
-  const handleSubmitAnswers = async () => {
+  // Handle submit answers (with optional free text feedback)
+  const handleSubmitAnswers = async (freeText: string = '') => {
     setIsSubmitting(true);
     try {
+      // Store free text for later use in review/import
+      if (freeText) {
+        console.log('[NEXO] User feedback received:', freeText);
+        // TODO: Pass freeText to submitAllAnswers when backend supports it
+      }
       await submitAllAnswers();
     } finally {
       setIsSubmitting(false);

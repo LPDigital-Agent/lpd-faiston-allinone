@@ -235,6 +235,39 @@ export const LOADING_EXPLANATIONS: Record<string, NexoExplanation> = {
 };
 
 // =============================================================================
+// Free Text Field - User feedback and corrections
+// =============================================================================
+
+export const FREE_TEXT_EXPLANATION: NexoExplanation = {
+  summary: "Quer me dizer mais alguma coisa? Qualquer observação ajuda a melhorar minha análise!",
+  details: `Use este campo para:
+
+• Corrigir algo que errei nas perguntas acima
+• Explicar algo específico sobre este arquivo
+• Dar contexto que pode me ajudar agora e no futuro
+
+Exemplo: "A coluna EQUIP é o Part Number, não o nome do equipamento"`,
+  action: "Opcional: escreva se tiver algo a adicionar.",
+};
+
+// =============================================================================
+// Review Summary - Final confirmation before import
+// =============================================================================
+
+export const REVIEW_SUMMARY_EXPLANATION: NexoExplanation = {
+  summary: "Analisei suas respostas e preparei um resumo. Revise antes de confirmar a importação!",
+  details: `O que verifico antes de importar:
+
+• Todas as colunas obrigatórias mapeadas
+• Nenhum dado duplicado ou inconsistente
+• Quantidades e valores dentro do esperado
+• Part Numbers existentes ou que serão criados
+
+Só vou importar após sua aprovação explícita.`,
+  action: "Revise o resumo e aprove se estiver tudo certo!",
+};
+
+// =============================================================================
 // Error State - MUST give ACTIONABLE solutions
 // =============================================================================
 
