@@ -499,7 +499,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `TaskInboxContext` - HIL approval tasks
 - `OfflineSyncContext` - PWA offline queue
 
-### SGA Hooks (16)
+### SGA Hooks (17)
 `client/hooks/ativos/`:
 - `useAssets`, `useAssetDetail` - Asset queries
 - `useMovements`, `useMovementMutations`, `useMovementValidation` - Movement operations
@@ -510,7 +510,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `useManualEntry` - Manual entry without source document
 - `useBulkImport` - Bulk CSV/Excel import processing
 - `useSmartImporter` - Universal auto-detect importer (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
-- `useSmartImportNexo` - **NEXO Intelligent Import** hook (5-phase flow: upload → analyze → question → process → learn)
+- `useSmartImportNexo` - **NEXO Intelligent Import** hook (5-phase flow: upload → analyze → question → review → import)
 
 ### SGA Frontend Pages (25+)
 `client/app/(main)/ferramentas/ativos/estoque/`:
@@ -730,3 +730,20 @@ current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
 client.update_agent_runtime(**update_params)
 ```
 **Affected workflows**: All 3 AgentCore deploy workflows (academy, inventory, portal)
+
+### 12. NEXO Import Session Persistence (January 2026)
+**Issue**: "Falha ao processar respostas" error in Smart Import - sessions stored in Lambda in-memory dict were lost across cold starts or multiple instances
+**Root Cause**: `NexoImportAgent` used `self._sessions = {}` (process memory) which doesn't persist across Lambda invocations
+**Fix**: Implemented DynamoDB persistence with in-memory cache:
+```python
+# Sessions now stored in DynamoDB
+PK: NEXO_SESSION#{session_id}
+SK: METADATA
+TTL: 24 hours (auto-cleanup)
+
+# In-memory cache for hot sessions (reduces reads)
+self._sessions_cache: Dict[str, ImportSession] = {}
+
+# Methods: _save_session(), _load_session()
+```
+**Also Fixed**: Error responses now include `"success": False` for consistent frontend handling

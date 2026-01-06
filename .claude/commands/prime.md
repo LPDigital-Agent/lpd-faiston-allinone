@@ -234,7 +234,7 @@ lpd-faiston-allinone/
 │   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
 │   │   ├── academy/      # 12 Academy-specific hooks
-│   │   └── ativos/       # 16 SGA-specific hooks
+│   │   └── ativos/       # 17 SGA-specific hooks
 │   ├── lib/               # Utilities
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
@@ -315,7 +315,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ Unified Entry: Multi-source tabs (NF, Image OCR, SAP Export, Manual)
 - ✅ **Estoque Page Refactor (January 2026)**: Unified navigation into single ModuleNavigation (8 items), removed KPIs (already in Dashboard)
 - ✅ **Smart Import**: Universal file importer - auto-detects XML/PDF/CSV/XLSX/JPG/PNG/TXT
-- ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
+- ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT), DynamoDB session persistence
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
   - Aurora Serverless v2 cluster with RDS Proxy (connection pooling)
   - 13 tables, 110 indexes, 8 materialized views
