@@ -249,13 +249,24 @@ class NexoImportAgent(BaseInventoryAgent):
         try:
             session.updated_at = now_iso()
             item = self._session_to_dict(session)
+            print(f"[NEXO] _save_session: Saving session {session.session_id} to DynamoDB...")
             success = self._get_db().put_item(item)
+            print(f"[NEXO] _save_session: DynamoDB put_item result: {success}")
             if success:
                 # Update cache
                 self._sessions_cache[session.session_id] = session
+                print(f"[NEXO] _save_session: Session cached successfully")
+            else:
+                # Still cache even if DB fails (for single-instance scenarios)
+                # But log the failure prominently
+                print(f"[NEXO] _save_session: WARNING - DynamoDB save failed, caching locally only")
+                self._sessions_cache[session.session_id] = session
             return success
         except Exception as e:
+            print(f"[NEXO] _save_session: EXCEPTION - {type(e).__name__}: {e}")
             log_agent_action(self.name, "_save_session", status="error", details=str(e))
+            # Still cache even on exception (for single-instance scenarios)
+            self._sessions_cache[session.session_id] = session
             return False
 
     def _load_session(self, session_id: str) -> Optional[ImportSession]:
