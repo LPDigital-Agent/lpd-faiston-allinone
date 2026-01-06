@@ -78,6 +78,8 @@ jobs:
         working-directory: server/agentcore-inventory
         run: |
           # Update paths in config to use CI/CD workspace
+          # Use Terraform-managed IAM role with S3, DynamoDB, SSM permissions
+          # See: terraform/main/iam_sga_agentcore.tf
           cat > .bedrock_agentcore.yaml << 'EOF'
           default_agent: faiston_asset_management
           agents:
@@ -92,7 +94,7 @@ jobs:
               aws:
                 account: '377311924364'
                 region: us-east-2
-                execution_role_auto_create: true
+                execution_role_arn: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
                 network_configuration:
                   network_mode: PUBLIC
                   network_mode_config: null
