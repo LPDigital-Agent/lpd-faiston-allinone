@@ -196,11 +196,17 @@ jobs:
           current_config = get_response.json()
           print(f"  Current status: {current_config.get('status')}")
 
-          # Check if already configured
+          # Check current authorizer config
           existing_auth = current_config.get("authorizerConfiguration", {})
-          if existing_auth.get("customJWTAuthorizer"):
-              print("  JWT Authorizer already configured - skipping update")
-              exit(0)
+          existing_jwt = existing_auth.get("customJWTAuthorizer", {})
+          if existing_jwt:
+              existing_clients = existing_jwt.get("allowedClients", [])
+              print(f"  Existing allowedClients: {existing_clients}")
+              # ALWAYS update to ensure correct values
+              if COGNITO_CLIENT_ID in existing_clients:
+                  print("  ✅ JWT Authorizer already has correct client ID")
+              else:
+                  print("  ⚠️  Updating JWT Authorizer with correct client ID...")
 
           # Step 3: Build update payload with JWT authorizer
           discovery_url = f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_POOL_ID}/.well-known/openid-configuration"
