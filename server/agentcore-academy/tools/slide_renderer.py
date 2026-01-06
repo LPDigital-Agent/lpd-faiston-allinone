@@ -3,6 +3,10 @@
 # =============================================================================
 # Generates educational slide images from structured data using Pillow.
 #
+# ⚠️ DEPRECATED: This tool requires Pillow which is NOT in requirements.txt
+# to respect the 30-second cold start limit. Use slidedeck_agent.py instead
+# which uses Gemini Image API for native text rendering.
+#
 # Design System:
 # - Background: Gradient (brand colors)
 # - Font: Poppins (fallback to DejaVu Sans)
@@ -14,12 +18,36 @@
 # - bullets: Title + bullet points
 # - diagram: Title + flow elements
 # - summary: Title + key takeaways
+#
+# TODO: Migrate video_agent.py and video_composer.py to use Gemini Image
+#       like slidedeck_agent.py does (no Pillow required).
 # =============================================================================
 
-from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, Any, List, Optional, Tuple
 import io
 import os
+
+# Lazy import for Pillow (may not be available in AgentCore Runtime)
+_PIL_AVAILABLE = None
+_Image = None
+_ImageDraw = None
+_ImageFont = None
+
+
+def _check_pillow():
+    """Check if Pillow is available and load it lazily."""
+    global _PIL_AVAILABLE, _Image, _ImageDraw, _ImageFont
+    if _PIL_AVAILABLE is None:
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            _Image = Image
+            _ImageDraw = ImageDraw
+            _ImageFont = ImageFont
+            _PIL_AVAILABLE = True
+        except ImportError:
+            _PIL_AVAILABLE = False
+            print("[SlideRenderer] WARNING: Pillow not available. Slide rendering disabled.")
+    return _PIL_AVAILABLE
 
 # =============================================================================
 # Configuration
@@ -80,7 +108,7 @@ def interpolate_color(
     )
 
 
-def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+def get_font(size: int, bold: bool = False):
     """
     Get a font with fallback support.
 
@@ -89,19 +117,22 @@ def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
         bold: Whether to use bold variant
 
     Returns:
-        PIL FreeTypeFont object
+        PIL FreeTypeFont object or None if Pillow not available
     """
+    if not _check_pillow():
+        return None
+
     # Try each font path
     for font_path in FONT_PATHS:
         if os.path.exists(font_path):
             try:
-                return ImageFont.truetype(font_path, size)
+                return _ImageFont.truetype(font_path, size)
             except (IOError, OSError):
                 continue
 
     # Final fallback: default PIL font (very basic)
     print("[SlideRenderer] Warning: Using default PIL font (no TrueType found)")
-    return ImageFont.load_default()
+    return _ImageFont.load_default()
 
 
 def draw_gradient_background(
@@ -571,12 +602,22 @@ def render_slide(slide: Dict[str, Any], gradient: str = DEFAULT_GRADIENT) -> byt
     Returns:
         PNG image as bytes
 
+    Raises:
+        RuntimeError: If Pillow is not available
+
     Example slide formats:
         {"type": "title", "title": "Welcome", "subtitle": "Introduction"}
         {"type": "bullets", "title": "Key Points", "bullets": ["Point 1", "Point 2"]}
         {"type": "diagram", "title": "Flow", "elements": ["A", "→", "B"]}
         {"type": "summary", "title": "Summary", "key_points": ["Take 1", "Take 2"]}
     """
+    if not _check_pillow():
+        raise RuntimeError(
+            "Pillow not available. This feature requires Pillow which is not installed "
+            "to respect the 30-second cold start limit. Use slidedeck_agent.py with "
+            "Gemini Image API instead."
+        )
+
     slide_type = slide.get("type", "bullets")
 
     if slide_type == "title":
@@ -629,5 +670,14 @@ def render_slides(
 
     Returns:
         List of PNG images as bytes
+
+    Raises:
+        RuntimeError: If Pillow is not available
     """
+    if not _check_pillow():
+        raise RuntimeError(
+            "Pillow not available. This feature requires Pillow which is not installed "
+            "to respect the 30-second cold start limit. Use slidedeck_agent.py with "
+            "Gemini Image API instead."
+        )
     return [render_slide(slide, gradient) for slide in slides]

@@ -129,10 +129,11 @@ MODEL_DESIGN = "gemini-3-pro-preview"
 # Using Gemini Image models (NOT Imagen - Imagen doesn't render text well)
 # Docs: https://ai.google.dev/gemini-api/docs/image-generation
 #
+# MANDATORY: Only Gemini 3 family models allowed (per CLAUDE.md)
 # gemini-3-pro-image-preview = "Nano Banana Pro" - state-of-the-art, advanced text rendering, 4K
-# gemini-2.5-flash-image = "Nano Banana" - fast, efficient fallback
+# gemini-3-flash-image-preview = "Nano Banana Flash" - fast, efficient fallback (Gemini 3)
 MODEL_RENDER_PRIMARY = "gemini-3-pro-image-preview"
-MODEL_RENDER_FALLBACK = "gemini-2.5-flash-image"
+MODEL_RENDER_FALLBACK = "gemini-3-flash-image-preview"
 
 # Slide dimensions (16:9 widescreen)
 SLIDE_WIDTH = 1920

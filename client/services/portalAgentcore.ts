@@ -10,22 +10,20 @@
 // - Tech News aggregation (RSS feeds)
 // - A2A delegation to Academy and SGA agents
 //
-// Agent ARN: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_portal_agents-PENDING
+// Configuration: See @/lib/config/agentcore.ts for ARN configuration
 // =============================================================================
 
 import { getAccessToken } from './authService';
+import {
+  AGENTCORE_ENDPOINT,
+  PORTAL_AGENTCORE_ARN,
+} from '@/lib/config/agentcore';
 
 // =============================================================================
-// Configuration
+// Local Alias (for compatibility)
 // =============================================================================
 
-const AGENTCORE_ENDPOINT =
-  process.env.NEXT_PUBLIC_PORTAL_AGENTCORE_ENDPOINT ||
-  'https://bedrock-agentcore.us-east-2.amazonaws.com';
-
-const AGENTCORE_ARN =
-  process.env.NEXT_PUBLIC_PORTAL_AGENTCORE_ARN ||
-  'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_portal_agents-PENDING';
+const AGENTCORE_ARN = PORTAL_AGENTCORE_ARN;
 
 // Session storage key
 const PORTAL_SESSION_KEY = 'faiston_portal_agentcore_session';

@@ -14,11 +14,15 @@
 // - Compliance validation
 // - NEXO AI chat for inventory queries
 //
-// Agent ARN: Configured via NEXT_PUBLIC_SGA_AGENTCORE_ARN env variable
+// Configuration: See @/lib/config/agentcore.ts for ARN configuration
 // =============================================================================
 
 import { getAccessToken } from './authService';
 import { SGA_STORAGE_KEYS } from '@/lib/ativos/constants';
+import {
+  AGENTCORE_ENDPOINT,
+  SGA_AGENTCORE_ARN,
+} from '@/lib/config/agentcore';
 import type {
   SmartImportUploadRequest,
   SmartImportUploadResponse,
@@ -81,17 +85,10 @@ import type {
 } from '@/lib/ativos/types';
 
 // =============================================================================
-// Configuration
+// Local Alias (for compatibility)
 // =============================================================================
 
-const AGENTCORE_ENDPOINT =
-  process.env.NEXT_PUBLIC_SGA_AGENTCORE_ENDPOINT ||
-  process.env.NEXT_PUBLIC_ACADEMY_AGENTCORE_ENDPOINT ||
-  'https://bedrock-agentcore.us-east-2.amazonaws.com';
-
-const AGENTCORE_ARN =
-  process.env.NEXT_PUBLIC_SGA_AGENTCORE_ARN ||
-  'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_asset_management-uSuLPsFQNH';
+const AGENTCORE_ARN = SGA_AGENTCORE_ARN;
 
 // =============================================================================
 // Types
