@@ -145,9 +145,12 @@ function ReasoningTrace({ steps }: { steps: NexoReasoningStep[] }) {
 
 /**
  * Displays sheet analysis with purpose detection.
+ * Handles both backend field name variations:
+ * - Frontend expects: purpose, confidence
+ * - Backend may send: detected_purpose, purpose_confidence
  */
 function SheetAnalysis({ sheets }: { sheets: NexoSheetAnalysis[] }) {
-  const getPurposeLabel = (purpose: NexoSheetAnalysis['purpose']) => {
+  const getPurposeLabel = (purpose: NexoSheetAnalysis['purpose'] | undefined) => {
     const labels: Record<NexoSheetAnalysis['purpose'], string> = {
       items: 'Itens',
       serials: 'Seriais',
@@ -156,10 +159,10 @@ function SheetAnalysis({ sheets }: { sheets: NexoSheetAnalysis[] }) {
       config: 'Configuração',
       unknown: 'Desconhecido',
     };
-    return labels[purpose];
+    return labels[purpose ?? 'unknown'] ?? 'Desconhecido';
   };
 
-  const getPurposeColor = (purpose: NexoSheetAnalysis['purpose']) => {
+  const getPurposeColor = (purpose: NexoSheetAnalysis['purpose'] | undefined) => {
     const colors: Record<NexoSheetAnalysis['purpose'], string> = {
       items: 'bg-cyan-500/20 text-cyan-400',
       serials: 'bg-purple-500/20 text-purple-400',
@@ -168,7 +171,23 @@ function SheetAnalysis({ sheets }: { sheets: NexoSheetAnalysis[] }) {
       config: 'bg-blue-500/20 text-blue-400',
       unknown: 'bg-gray-500/20 text-gray-400',
     };
-    return colors[purpose];
+    return colors[purpose ?? 'unknown'] ?? 'bg-gray-500/20 text-gray-400';
+  };
+
+  // Helper to get purpose from either field name
+  const getSheetPurpose = (sheet: NexoSheetAnalysis): NexoSheetAnalysis['purpose'] => {
+    // Try standard field first, fallback to backend's detected_purpose
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return sheet.purpose ?? (sheet as any).detected_purpose ?? 'unknown';
+  };
+
+  // Helper to get confidence from either field name
+  const getSheetConfidence = (sheet: NexoSheetAnalysis): number => {
+    // Try standard field first, fallback to backend's purpose_confidence
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const confidence = sheet.confidence ?? (sheet as any).purpose_confidence ?? 0;
+    // Guard against NaN
+    return isNaN(confidence) ? 0 : confidence;
   };
 
   return (
@@ -180,33 +199,38 @@ function SheetAnalysis({ sheets }: { sheets: NexoSheetAnalysis[] }) {
       </div>
 
       <div className="grid gap-2">
-        {sheets.map((sheet, index) => (
-          <div
-            key={index}
-            className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-sm font-medium">
-                {index + 1}
-              </div>
-              <div>
-                <p className="text-sm font-medium">{sheet.name}</p>
-                <p className="text-xs text-text-muted">
-                  {sheet.row_count.toLocaleString()} linhas · {sheet.column_count} colunas
-                </p>
-              </div>
-            </div>
+        {sheets.map((sheet, index) => {
+          const purpose = getSheetPurpose(sheet);
+          const confidence = getSheetConfidence(sheet);
 
-            <div className="flex items-center gap-2">
-              <Badge className={getPurposeColor(sheet.purpose)}>
-                {getPurposeLabel(sheet.purpose)}
-              </Badge>
-              <Badge variant="outline">
-                {Math.round(sheet.confidence * 100)}%
-              </Badge>
+          return (
+            <div
+              key={index}
+              className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded bg-white/10 flex items-center justify-center text-sm font-medium">
+                  {index + 1}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">{sheet.name}</p>
+                  <p className="text-xs text-text-muted">
+                    {sheet.row_count.toLocaleString()} linhas · {sheet.column_count} colunas
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Badge className={getPurposeColor(purpose)}>
+                  {getPurposeLabel(purpose)}
+                </Badge>
+                <Badge variant="outline">
+                  {Math.round(confidence * 100)}%
+                </Badge>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

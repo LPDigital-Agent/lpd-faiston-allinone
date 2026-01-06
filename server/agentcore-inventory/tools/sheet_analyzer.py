@@ -781,8 +781,8 @@ def analysis_to_dict(analysis: WorkbookAnalysis) -> Dict[str, Any]:
                     }
                     for c in s.columns
                 ],
-                "detected_purpose": s.detected_purpose.value,
-                "purpose_confidence": s.purpose_confidence,
+                "purpose": s.detected_purpose.value,
+                "confidence": s.purpose_confidence,
                 "has_headers": s.has_headers,
                 "suggested_action": s.suggested_action,
                 "merge_target": s.merge_target,
