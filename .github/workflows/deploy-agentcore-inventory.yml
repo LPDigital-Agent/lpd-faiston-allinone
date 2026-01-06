@@ -186,7 +186,7 @@ jobs:
           # Step 2: Get current runtime configuration
           get_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com/runtimes/{agent_runtime_id}/"
           get_request = AWSRequest(method="GET", url=get_url)
-          SigV4Auth(credentials, "bedrock-agentcore", REGION).add_auth(get_request)
+          SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(get_request)
 
           get_response = requests.get(get_url, headers=dict(get_request.headers))
           if get_response.status_code != 200:
@@ -242,7 +242,7 @@ jobs:
               data=json.dumps(update_body),
               headers={"Content-Type": "application/json"}
           )
-          SigV4Auth(credentials, "bedrock-agentcore", REGION).add_auth(update_request)
+          SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(update_request)
 
           update_response = requests.put(
               update_url,
