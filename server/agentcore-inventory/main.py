@@ -327,6 +327,25 @@ def invoke(payload: dict, context) -> dict:
             return asyncio.run(_generate_import_observations(payload))
 
         # =================================================================
+        # NEXO Intelligent Import (Agentic AI-First)
+        # =================================================================
+        # ReAct Pattern: OBSERVE → THINK → ASK → LEARN → ACT
+        elif action == "nexo_analyze_file":
+            return asyncio.run(_nexo_analyze_file(payload, user_id, session_id))
+
+        elif action == "nexo_get_questions":
+            return asyncio.run(_nexo_get_questions(payload, session_id))
+
+        elif action == "nexo_submit_answers":
+            return asyncio.run(_nexo_submit_answers(payload, session_id))
+
+        elif action == "nexo_learn_from_import":
+            return asyncio.run(_nexo_learn_from_import(payload, session_id))
+
+        elif action == "nexo_prepare_processing":
+            return asyncio.run(_nexo_prepare_processing(payload, session_id))
+
+        # =================================================================
         # Expedition (ExpeditionAgent)
         # =================================================================
         elif action == "process_expedition_request":
@@ -400,6 +419,7 @@ def _health_check() -> dict:
             "ReconciliacaoAgent",
             "ComplianceAgent",
             "ComunicacaoAgent",
+            "NexoImportAgent",  # Agentic AI-First intelligent import
         ],
         "tables": {
             "inventory": os.environ.get("INVENTORY_TABLE", ""),
@@ -2410,6 +2430,201 @@ async def _apply_reconciliation_action(payload: dict, user_id: str) -> dict:
         result["message"] = "Delta ignorado após investigação"
     else:
         result["message"] = "Delta marcado para investigação manual"
+
+    return result
+
+
+# =============================================================================
+# NEXO Intelligent Import Handlers (Agentic AI-First)
+# =============================================================================
+# ReAct Pattern: OBSERVE → THINK → ASK → LEARN → ACT
+#
+# Philosophy: NEXO guides user through import with intelligent analysis
+# - Multi-sheet XLSX analysis with purpose detection
+# - Clarification questions when uncertain
+# - Learning from user answers for future imports
+# - Explicit reasoning trace for transparency
+
+
+async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> dict:
+    """
+    NEXO intelligent file analysis (OBSERVE + THINK phases).
+
+    Uses ReAct pattern to:
+    1. OBSERVE: Analyze file structure (sheets, columns, rows)
+    2. THINK: Reason about column mappings with Gemini AI
+    3. Prepare questions for user when uncertain
+
+    Payload:
+        s3_key: S3 key of uploaded file
+        filename: Original filename
+        content_type: Optional MIME type
+        prior_knowledge: Optional context from previous imports
+
+    Returns:
+        Analysis result with:
+        - sheets: Multi-sheet analysis with detected purposes
+        - column_mappings: Suggested mappings with confidence
+        - reasoning_trace: Explicit thinking steps (transparency)
+        - questions: Clarification questions for user
+        - session_id: Import session ID for subsequent calls
+    """
+    s3_key = payload.get("s3_key", "")
+    filename = payload.get("filename", "")
+    content_type = payload.get("content_type", "")
+    prior_knowledge = payload.get("prior_knowledge")
+
+    if not s3_key:
+        return {"success": False, "error": "s3_key is required"}
+
+    if not filename:
+        return {"success": False, "error": "filename is required"}
+
+    # Download file from S3
+    from tools.s3_client import SGAS3Client
+
+    s3_client = SGAS3Client()
+    try:
+        file_data = s3_client.download_file(s3_key)
+    except Exception as e:
+        return {"success": False, "error": f"Failed to download file from S3: {e}"}
+
+    # Lazy import to respect AgentCore cold start limit
+    from agents.nexo_import_agent import NexoImportAgent
+
+    agent = NexoImportAgent()
+    result = await agent.analyze_file_intelligently(
+        filename=filename,
+        s3_key=s3_key,
+        file_content=file_data,
+        prior_knowledge=prior_knowledge,
+    )
+
+    # Add session tracking
+    result["user_id"] = user_id
+    result["session_id"] = session_id
+
+    return result
+
+
+async def _nexo_get_questions(payload: dict, session_id: str) -> dict:
+    """
+    Get clarification questions for current import session (ASK phase).
+
+    Returns questions generated during analysis that require user input.
+
+    Payload:
+        import_session_id: Import session ID from analyze_file
+
+    Returns:
+        List of questions with options and importance levels
+    """
+    import_session_id = payload.get("import_session_id", "")
+
+    if not import_session_id:
+        return {"success": False, "error": "import_session_id is required"}
+
+    from agents.nexo_import_agent import NexoImportAgent
+
+    agent = NexoImportAgent()
+    result = await agent.get_questions(session_id=import_session_id)
+
+    return result
+
+
+async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
+    """
+    Submit user answers to clarification questions (ASK → LEARN phases).
+
+    Processes user's answers and refines the analysis.
+    Stores answers for learning and future improvement.
+
+    Payload:
+        import_session_id: Import session ID
+        answers: Dict mapping question IDs to selected answers
+
+    Returns:
+        Updated analysis with refined mappings based on answers
+    """
+    import_session_id = payload.get("import_session_id", "")
+    answers = payload.get("answers", {})
+
+    if not import_session_id:
+        return {"success": False, "error": "import_session_id is required"}
+
+    if not answers:
+        return {"success": False, "error": "answers is required"}
+
+    from agents.nexo_import_agent import NexoImportAgent
+
+    agent = NexoImportAgent()
+    result = await agent.submit_answers(
+        session_id=import_session_id,
+        answers=answers,
+    )
+
+    return result
+
+
+async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
+    """
+    Store learned patterns from successful import (LEARN phase).
+
+    Called after import confirmation to build knowledge base.
+    Uses AgentCore Episodic Memory for cross-session learning.
+
+    Payload:
+        import_session_id: Import session ID
+        import_result: Result of the executed import
+        user_corrections: Any manual corrections made by user
+
+    Returns:
+        Learning confirmation with patterns stored
+    """
+    import_session_id = payload.get("import_session_id", "")
+    import_result = payload.get("import_result", {})
+    user_corrections = payload.get("user_corrections", {})
+
+    if not import_session_id:
+        return {"success": False, "error": "import_session_id is required"}
+
+    from agents.nexo_import_agent import NexoImportAgent
+
+    agent = NexoImportAgent()
+    result = await agent.learn_from_import(
+        session_id=import_session_id,
+        import_result=import_result,
+        user_corrections=user_corrections,
+    )
+
+    return result
+
+
+async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
+    """
+    Prepare final processing after questions answered (ACT phase).
+
+    Generates the final processing configuration with:
+    - Confirmed column mappings
+    - Sheet selection
+    - Movement type
+    - Any special handling
+
+    Payload:
+        import_session_id: Import session ID
+
+    Returns:
+        Processing configuration ready for execute_import
+    """
+    import_session_id = payload.get("import_session_id", "")
+
+    if not import_session_id:
+        return {"success": False, "error": "import_session_id is required"}
+
+    from agents.nexo_import_agent import NexoImportAgent
+
+    agent = NexoImportAgent()
+    result = await agent.prepare_for_processing(session_id=import_session_id)
 
     return result
 

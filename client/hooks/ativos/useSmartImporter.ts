@@ -7,11 +7,18 @@
 // Philosophy: Observe -> Think -> Learn -> Act
 // The hook OBSERVES the file, THINKS about its type, LEARNS from detection,
 // and ACTS by routing to the appropriate backend agent.
+//
+// NEXO Integration (Agentic AI-First):
+// Optionally uses the NEXO intelligent import flow with:
+// - Multi-sheet XLSX analysis
+// - Clarification questions when uncertain
+// - Learning from user answers for future imports
+// - Explicit reasoning trace for transparency
 // =============================================================================
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getNFUploadUrl,
@@ -20,6 +27,16 @@ import {
   getPendingNFEntries,
   assignProjectToEntry,
   clearSGASession,
+  // NEXO Intelligent Import
+  nexoAnalyzeFile,
+  nexoSubmitAnswers,
+  nexoLearnFromImport,
+  nexoPrepareProcessing,
+  type NexoAnalyzeFileResponse,
+  type NexoQuestion,
+  type NexoColumnMapping,
+  type NexoReasoningStep,
+  type NexoSheetAnalysis,
 } from '@/services/sgaAgentcore';
 import type {
   SmartFileType,
@@ -55,14 +72,56 @@ const INITIAL_PROGRESS: SmartImportProgress = {
 const PENDING_ENTRIES_KEY = 'sga-pending-nf-entries';
 
 // =============================================================================
+// NEXO Analysis State Types
+// =============================================================================
+
+export interface NexoAnalysisState {
+  sessionId: string | null;
+  isAnalyzing: boolean;
+  sheets: NexoSheetAnalysis[];
+  columnMappings: NexoColumnMapping[];
+  questions: NexoQuestion[];
+  answers: Record<string, string>;
+  reasoningTrace: NexoReasoningStep[];
+  overallConfidence: number;
+  error: string | null;
+}
+
+const INITIAL_NEXO_STATE: NexoAnalysisState = {
+  sessionId: null,
+  isAnalyzing: false,
+  sheets: [],
+  columnMappings: [],
+  questions: [],
+  answers: {},
+  reasoningTrace: [],
+  overallConfidence: 0,
+  error: null,
+};
+
+// =============================================================================
 // Hook
 // =============================================================================
 
-export function useSmartImporter(): UseSmartImporterReturn {
+export function useSmartImporter(): UseSmartImporterReturn & {
+  // NEXO Intelligent Import (Agentic AI-First)
+  nexoState: NexoAnalysisState;
+  useNexoFlow: boolean;
+  setUseNexoFlow: (enabled: boolean) => void;
+  uploadWithNexoAnalysis: (file: File) => Promise<NexoAnalysisState>;
+  answerNexoQuestion: (questionId: string, answer: string) => void;
+  submitNexoAnswers: () => Promise<void>;
+  hasNexoQuestions: boolean;
+  isNexoReady: boolean;
+} {
   const queryClient = useQueryClient();
 
   // Detection state
   const [detectedType, setDetectedType] = useState<SmartFileType | null>(null);
+
+  // NEXO Intelligent Import state
+  const [useNexoFlow, setUseNexoFlow] = useState(false);
+  const [nexoState, setNexoState] = useState<NexoAnalysisState>(INITIAL_NEXO_STATE);
 
   // Fetch pending entries (reuse same key as useNFReader for cache sharing)
   const {
@@ -290,6 +349,164 @@ export function useSmartImporter(): UseSmartImporterReturn {
     }
   }, [queryClient]);
 
+  // ===========================================================================
+  // NEXO Intelligent Import Functions (Agentic AI-First)
+  // ===========================================================================
+
+  /**
+   * Upload file with NEXO intelligent analysis.
+   * Uses ReAct pattern: OBSERVE → THINK → ASK → LEARN → ACT
+   */
+  const uploadWithNexoAnalysis = useCallback(async (file: File): Promise<NexoAnalysisState> => {
+    setNexoState(prev => ({ ...prev, isAnalyzing: true, error: null }));
+    setIsProcessing(true);
+    setError(null);
+    setProgress({ stage: 'detecting', percent: 5, message: 'NEXO analisando arquivo...' });
+
+    clearSGASession();
+
+    try {
+      // Validate file
+      const validationError = validateSmartImportFile(file);
+      if (validationError) {
+        throw new Error(validationError);
+      }
+
+      const fileType = detectFileTypeFromFile(file);
+      setDetectedType(fileType);
+      setProgress({ stage: 'uploading', percent: 20, message: 'Obtendo URL de upload...' });
+
+      // Get presigned URL
+      const contentType = file.type || getContentTypeForFileType(fileType);
+      const urlResult = await getNFUploadUrl({
+        filename: file.name,
+        content_type: contentType,
+      });
+
+      if (!urlResult.data?.upload_url || !urlResult.data?.s3_key) {
+        throw new Error('Falha ao obter URL de upload');
+      }
+
+      // Upload to S3
+      setProgress({ stage: 'uploading', percent: 40, message: 'Enviando arquivo...' });
+      const uploadResponse = await fetch(urlResult.data.upload_url, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': contentType },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error('Falha no upload do arquivo');
+      }
+
+      // NEXO Analysis (OBSERVE + THINK)
+      setProgress({ stage: 'processing', percent: 60, message: 'NEXO analisando estrutura...' });
+
+      const analysisResult = await nexoAnalyzeFile({
+        s3_key: urlResult.data.s3_key,
+        filename: file.name,
+        content_type: contentType,
+      });
+
+      if (!analysisResult.data?.success) {
+        throw new Error('Falha na análise NEXO');
+      }
+
+      const data = analysisResult.data as NexoAnalyzeFileResponse;
+
+      // Update NEXO state
+      const newNexoState: NexoAnalysisState = {
+        sessionId: data.import_session_id,
+        isAnalyzing: false,
+        sheets: data.analysis.sheets,
+        columnMappings: data.column_mappings,
+        questions: data.questions || [],
+        answers: {},
+        reasoningTrace: data.reasoning_trace || [],
+        overallConfidence: data.overall_confidence,
+        error: null,
+      };
+
+      setNexoState(newNexoState);
+      setProgress({ stage: 'complete', percent: 100, message: 'Análise NEXO concluída!' });
+
+      return newNexoState;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro na análise NEXO';
+      setNexoState(prev => ({ ...prev, isAnalyzing: false, error: message }));
+      setError(message);
+      setProgress({ stage: 'error', percent: 0, message });
+      throw err;
+    } finally {
+      setIsProcessing(false);
+    }
+  }, []);
+
+  /**
+   * Answer a NEXO clarification question.
+   */
+  const answerNexoQuestion = useCallback((questionId: string, answer: string) => {
+    setNexoState(prev => ({
+      ...prev,
+      answers: { ...prev.answers, [questionId]: answer },
+    }));
+  }, []);
+
+  /**
+   * Submit all NEXO answers and get updated analysis.
+   */
+  const submitNexoAnswers = useCallback(async () => {
+    if (!nexoState.sessionId) {
+      throw new Error('Nenhuma sessão NEXO ativa');
+    }
+
+    setNexoState(prev => ({ ...prev, isAnalyzing: true }));
+
+    try {
+      const result = await nexoSubmitAnswers({
+        import_session_id: nexoState.sessionId,
+        answers: nexoState.answers,
+      });
+
+      if (!result.data?.success) {
+        throw new Error('Falha ao processar respostas');
+      }
+
+      setNexoState(prev => ({
+        ...prev,
+        isAnalyzing: false,
+        columnMappings: result.data!.updated_mappings,
+        questions: result.data!.remaining_questions || [],
+        overallConfidence: result.data!.updated_confidence,
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao processar respostas';
+      setNexoState(prev => ({ ...prev, isAnalyzing: false, error: message }));
+      throw err;
+    }
+  }, [nexoState.sessionId, nexoState.answers]);
+
+  /**
+   * Check if NEXO has unanswered questions.
+   */
+  const hasNexoQuestions = useMemo(() => {
+    const criticalQuestions = nexoState.questions.filter(q => q.importance === 'critical');
+    const unansweredCritical = criticalQuestions.filter(q => !nexoState.answers[q.id]);
+    return unansweredCritical.length > 0;
+  }, [nexoState.questions, nexoState.answers]);
+
+  /**
+   * Check if NEXO is ready to proceed with import.
+   */
+  const isNexoReady = useMemo(() => {
+    return (
+      nexoState.sessionId !== null &&
+      !nexoState.isAnalyzing &&
+      !hasNexoQuestions &&
+      nexoState.error === null
+    );
+  }, [nexoState.sessionId, nexoState.isAnalyzing, hasNexoQuestions, nexoState.error]);
+
   return {
     detectedType,
     isProcessing,
@@ -305,6 +522,15 @@ export function useSmartImporter(): UseSmartImporterReturn {
     pendingEntriesLoading,
     refreshPendingEntries,
     assignProject,
+    // NEXO Intelligent Import (Agentic AI-First)
+    nexoState,
+    useNexoFlow,
+    setUseNexoFlow,
+    uploadWithNexoAnalysis,
+    answerNexoQuestion,
+    submitNexoAnswers,
+    hasNexoQuestions,
+    isNexoReady,
   };
 }
 
@@ -352,3 +578,11 @@ export {
   getFileTypeLabel,
   SMART_IMPORT_FORMATS,
 } from '@/lib/ativos/smartImportTypes';
+
+// NEXO types re-export (from sgaAgentcore.ts)
+export type {
+  NexoQuestion,
+  NexoColumnMapping,
+  NexoReasoningStep,
+  NexoSheetAnalysis,
+};

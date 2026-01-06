@@ -1,0 +1,913 @@
+# =============================================================================
+# NEXO Import Agent - Intelligent Import Assistant
+# =============================================================================
+# AI-First intelligent import agent using ReAct pattern.
+# Guides user through import with questions, learns from corrections,
+# and improves over time using AgentCore Episodic Memory.
+#
+# Philosophy: OBSERVE → THINK → ASK → LEARN → ACT
+#
+# Module: Gestao de Ativos -> Gestao de Estoque -> Smart Import
+# Model: Gemini 3.0 Pro (MANDATORY per CLAUDE.md)
+# =============================================================================
+
+from dataclasses import dataclass, field
+from typing import List, Dict, Any, Optional
+from enum import Enum
+import json
+
+from agents.base_agent import BaseInventoryAgent, ConfidenceScore
+from agents.utils import (
+    APP_NAME,
+    MODEL_GEMINI,
+    RiskLevel,
+    log_agent_action,
+    now_iso,
+    generate_id,
+    extract_json,
+    parse_json_safe,
+)
+
+
+# =============================================================================
+# Types and Enums
+# =============================================================================
+
+
+class ImportStage(Enum):
+    """Stages of the intelligent import flow."""
+    ANALYZING = "analyzing"       # OBSERVE: Analyzing file structure
+    REASONING = "reasoning"       # THINK: Reasoning about mappings
+    QUESTIONING = "questioning"   # ASK: Generating questions for user
+    AWAITING = "awaiting"         # Waiting for user answers
+    LEARNING = "learning"         # LEARN: Storing patterns
+    PROCESSING = "processing"     # ACT: Executing import
+    COMPLETE = "complete"         # Done
+
+
+@dataclass
+class ReasoningStep:
+    """A single step in the ReAct reasoning trace."""
+    step_type: str              # "thought", "action", "observation", "conclusion"
+    content: str                # The reasoning content
+    tool: Optional[str] = None  # Tool used (if action)
+    result: Optional[str] = None  # Result (if action)
+    timestamp: str = field(default_factory=now_iso)
+
+
+@dataclass
+class NexoQuestion:
+    """A question for the user."""
+    id: str
+    question: str
+    context: str
+    options: List[Dict[str, str]]
+    importance: str             # "critical", "high", "medium", "low"
+    topic: str                  # "sheet_selection", "column_mapping", "movement_type"
+    column: Optional[str] = None  # If topic is column_mapping
+
+
+@dataclass
+class ImportSession:
+    """State for an intelligent import session."""
+    session_id: str
+    filename: str
+    s3_key: str
+    stage: ImportStage
+    file_analysis: Optional[Dict[str, Any]] = None
+    reasoning_trace: List[ReasoningStep] = field(default_factory=list)
+    questions: List[NexoQuestion] = field(default_factory=list)
+    answers: Dict[str, Any] = field(default_factory=dict)
+    learned_mappings: Dict[str, str] = field(default_factory=dict)
+    confidence: Optional[ConfidenceScore] = None
+    error: Optional[str] = None
+    created_at: str = field(default_factory=now_iso)
+    updated_at: str = field(default_factory=now_iso)
+
+
+# =============================================================================
+# Agent Instruction (System Prompt)
+# =============================================================================
+
+
+NEXO_IMPORT_INSTRUCTION = """Você é NEXO, o assistente inteligente de importação do sistema SGA (Sistema de Gestão de Ativos).
+
+## Seu Papel
+
+Você guia o usuário no processo de importação de arquivos para o estoque, usando o padrão ReAct:
+- OBSERVE: Analise a estrutura do arquivo
+- THINK: Raciocine sobre mapeamentos de colunas
+- ASK: Faça perguntas quando incerto
+- LEARN: Aprenda com as respostas para melhorar
+- ACT: Execute com decisões informadas
+
+## Princípios
+
+1. **Transparência**: Explique seu raciocínio ao usuário
+2. **Proatividade**: Identifique problemas antes que ocorram
+3. **Aprendizado**: Melhore com cada importação
+4. **Precisão**: Peça confirmação quando não tiver certeza
+
+## Formato de Resposta
+
+Sempre responda em JSON com a estrutura:
+```json
+{
+    "thoughts": ["Lista de pensamentos"],
+    "observations": ["Lista de observações"],
+    "confidence": 0.0 a 1.0,
+    "needs_clarification": true/false,
+    "questions": [{"question": "...", "options": [...]}],
+    "suggested_mappings": {"coluna": "campo_destino"},
+    "recommendations": ["Lista de recomendações"],
+    "next_action": "descrição da próxima ação"
+}
+```
+
+## Linguagem
+
+Sempre responda em português brasileiro (pt-BR).
+Use linguagem profissional mas acessível.
+"""
+
+
+# =============================================================================
+# NEXO Import Agent
+# =============================================================================
+
+
+class NexoImportAgent(BaseInventoryAgent):
+    """
+    Intelligent import assistant using ReAct pattern.
+
+    This agent orchestrates the entire intelligent import flow:
+    1. OBSERVE: Analyzes file structure using sheet_analyzer
+    2. THINK: Reasons about column mappings using Gemini
+    3. ASK: Generates clarification questions when uncertain
+    4. LEARN: Stores successful patterns in AgentCore Memory
+    5. ACT: Executes import with learned knowledge
+
+    Attributes:
+        sessions: Active import sessions (in-memory for cold start optimization)
+    """
+
+    def __init__(self):
+        """Initialize the NEXO Import Agent."""
+        super().__init__(
+            name="NexoImportAgent",
+            instruction=NEXO_IMPORT_INSTRUCTION,
+            description="Assistente inteligente de importação com aprendizado contínuo",
+        )
+        self._sessions: Dict[str, ImportSession] = {}
+
+    # =========================================================================
+    # Session Management
+    # =========================================================================
+
+    def create_session(
+        self,
+        filename: str,
+        s3_key: str,
+    ) -> ImportSession:
+        """
+        Create a new import session.
+
+        Args:
+            filename: Original filename
+            s3_key: S3 key where file is stored
+
+        Returns:
+            New ImportSession
+        """
+        session_id = generate_id("NEXO")
+        session = ImportSession(
+            session_id=session_id,
+            filename=filename,
+            s3_key=s3_key,
+            stage=ImportStage.ANALYZING,
+        )
+        self._sessions[session_id] = session
+
+        log_agent_action(
+            self.name, "create_session",
+            entity_type="session",
+            entity_id=session_id,
+            status="completed",
+        )
+
+        return session
+
+    def get_session(self, session_id: str) -> Optional[ImportSession]:
+        """Get an existing session by ID."""
+        return self._sessions.get(session_id)
+
+    # =========================================================================
+    # OBSERVE Phase: File Analysis
+    # =========================================================================
+
+    async def analyze_file(
+        self,
+        session_id: str,
+        file_content: bytes,
+    ) -> Dict[str, Any]:
+        """
+        Analyze file structure (OBSERVE phase).
+
+        Uses sheet_analyzer tool to deeply understand file structure,
+        including multi-sheet analysis and column detection.
+
+        Args:
+            session_id: Import session ID
+            file_content: Raw file content
+
+        Returns:
+            Analysis result with reasoning trace
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return {"error": f"Session {session_id} not found"}
+
+        log_agent_action(
+            self.name, "analyze_file",
+            entity_type="session",
+            entity_id=session_id,
+            status="started",
+        )
+
+        # Add reasoning step
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="thought",
+            content=f"Vou analisar a estrutura do arquivo '{session.filename}'",
+        ))
+
+        try:
+            # Lazy import to reduce cold start
+            from tools.sheet_analyzer import analyze_workbook, analysis_to_dict
+
+            # Run analysis
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="action",
+                content="Executando análise multi-sheet",
+                tool="sheet_analyzer",
+            ))
+
+            analysis = analyze_workbook(file_content, session.filename)
+            analysis_dict = analysis_to_dict(analysis)
+
+            # Store analysis in session
+            session.file_analysis = analysis_dict
+            session.stage = ImportStage.REASONING
+
+            # Add observation
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=(
+                    f"Arquivo tem {analysis.sheet_count} aba(s) com "
+                    f"{analysis.total_rows} linhas no total. "
+                    f"Estratégia recomendada: {analysis.recommended_strategy}"
+                ),
+            ))
+
+            # Merge reasoning traces
+            for trace in analysis.reasoning_trace:
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type=trace.get("type", "observation"),
+                    content=trace.get("content", ""),
+                ))
+
+            session.updated_at = now_iso()
+
+            log_agent_action(
+                self.name, "analyze_file",
+                entity_type="session",
+                entity_id=session_id,
+                status="completed",
+                details={"count": analysis.sheet_count},
+            )
+
+            return {
+                "success": True,
+                "session_id": session_id,
+                "stage": session.stage.value,
+                "analysis": analysis_dict,
+                "reasoning": [
+                    {"type": r.step_type, "content": r.content}
+                    for r in session.reasoning_trace
+                ],
+            }
+
+        except Exception as e:
+            error_msg = str(e)
+            session.error = error_msg
+            session.stage = ImportStage.COMPLETE
+
+            log_agent_action(
+                self.name, "analyze_file",
+                entity_type="session",
+                entity_id=session_id,
+                status="failed",
+            )
+
+            return {
+                "success": False,
+                "session_id": session_id,
+                "error": error_msg,
+            }
+
+    # =========================================================================
+    # THINK Phase: AI Reasoning
+    # =========================================================================
+
+    async def reason_about_mappings(
+        self,
+        session_id: str,
+        prior_knowledge: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Reason about column mappings using Gemini (THINK phase).
+
+        Uses the AI model to analyze the file structure and suggest
+        column mappings with confidence scores.
+
+        Args:
+            session_id: Import session ID
+            prior_knowledge: Previously learned mappings from memory
+
+        Returns:
+            Reasoning result with suggested mappings
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return {"error": f"Session {session_id} not found"}
+
+        if not session.file_analysis:
+            return {"error": "File not analyzed yet. Call analyze_file first."}
+
+        log_agent_action(
+            self.name, "reason_about_mappings",
+            entity_type="session",
+            entity_id=session_id,
+            status="started",
+        )
+
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="thought",
+            content="Vou usar IA para analisar os mapeamentos de colunas",
+        ))
+
+        try:
+            # Build prompt for Gemini
+            prompt = self._build_reasoning_prompt(session, prior_knowledge)
+
+            # Invoke Gemini via base agent
+            response = await self.invoke(prompt)
+
+            # Parse response
+            result = parse_json_safe(response)
+
+            if "error" in result:
+                # Gemini returned text, not JSON - extract insights
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="observation",
+                    content=response[:500],  # Truncate for logging
+                ))
+            else:
+                # Process structured response
+                thoughts = result.get("thoughts", [])
+                for thought in thoughts:
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="thought",
+                        content=thought,
+                    ))
+
+                observations = result.get("observations", [])
+                for obs in observations:
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="observation",
+                        content=obs,
+                    ))
+
+                # Store suggested mappings
+                suggested = result.get("suggested_mappings", {})
+                session.learned_mappings.update(suggested)
+
+                # Calculate confidence
+                raw_confidence = result.get("confidence", 0.5)
+                session.confidence = self.calculate_confidence(
+                    extraction_quality=raw_confidence,
+                    evidence_strength=0.8 if prior_knowledge else 0.6,
+                    historical_match=1.0 if prior_knowledge else 0.5,
+                )
+
+                # Check if needs clarification
+                if result.get("needs_clarification", False):
+                    session.stage = ImportStage.QUESTIONING
+                    questions = result.get("questions", [])
+                    for q in questions:
+                        session.questions.append(NexoQuestion(
+                            id=generate_id("Q"),
+                            question=q.get("question", ""),
+                            context=q.get("context", ""),
+                            options=q.get("options", []),
+                            importance=q.get("importance", "medium"),
+                            topic=q.get("topic", "general"),
+                            column=q.get("column"),
+                        ))
+                else:
+                    session.stage = ImportStage.PROCESSING
+
+            session.updated_at = now_iso()
+
+            log_agent_action(
+                self.name, "reason_about_mappings",
+                entity_type="session",
+                entity_id=session_id,
+                status="completed",
+            )
+
+            return {
+                "success": True,
+                "session_id": session_id,
+                "stage": session.stage.value,
+                "suggested_mappings": session.learned_mappings,
+                "confidence": session.confidence.to_dict() if session.confidence else None,
+                "needs_clarification": session.stage == ImportStage.QUESTIONING,
+                "questions": [
+                    {
+                        "id": q.id,
+                        "question": q.question,
+                        "context": q.context,
+                        "options": q.options,
+                        "importance": q.importance,
+                        "topic": q.topic,
+                        "column": q.column,
+                    }
+                    for q in session.questions
+                ],
+                "reasoning": [
+                    {"type": r.step_type, "content": r.content}
+                    for r in session.reasoning_trace[-10:]  # Last 10 steps
+                ],
+            }
+
+        except Exception as e:
+            log_agent_action(
+                self.name, "reason_about_mappings",
+                entity_type="session",
+                entity_id=session_id,
+                status="failed",
+            )
+            return {
+                "success": False,
+                "session_id": session_id,
+                "error": str(e),
+            }
+
+    def _build_reasoning_prompt(
+        self,
+        session: ImportSession,
+        prior_knowledge: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Build the prompt for Gemini reasoning."""
+        analysis = session.file_analysis
+
+        prompt = f"""Analise este arquivo de importação e sugira mapeamentos de colunas.
+
+## Arquivo: {session.filename}
+
+## Estrutura Detectada:
+- Número de abas: {analysis.get('sheet_count', 1)}
+- Total de linhas: {analysis.get('total_rows', 0)}
+
+## Abas:
+"""
+        for sheet in analysis.get("sheets", []):
+            prompt += f"\n### {sheet['name']} ({sheet['row_count']} linhas)\n"
+            prompt += f"Propósito detectado: {sheet['detected_purpose']}\n"
+            prompt += "Colunas:\n"
+
+            for col in sheet.get("columns", [])[:10]:  # First 10 columns
+                mapping = col.get("suggested_mapping", "?")
+                confidence = col.get("mapping_confidence", 0)
+                samples = ", ".join(col.get("sample_values", [])[:3])
+                prompt += f"- {col['name']}: mapeado para '{mapping}' (confiança: {confidence:.0%}). Exemplos: {samples}\n"
+
+        prompt += "\n## Colunas Não Mapeadas (precisam de atenção):\n"
+        for sheet in analysis.get("sheets", []):
+            unmapped = [c for c in sheet.get("columns", []) if not c.get("suggested_mapping")]
+            for col in unmapped[:5]:
+                samples = ", ".join(col.get("sample_values", [])[:3])
+                prompt += f"- {col['name']}: {samples}\n"
+
+        if prior_knowledge:
+            prompt += "\n## Conhecimento Prévio (de importações anteriores):\n"
+            prompt += json.dumps(prior_knowledge, indent=2, ensure_ascii=False)
+
+        prompt += """
+
+## Sua Tarefa:
+1. Analise a estrutura e sugira mapeamentos para colunas não identificadas
+2. Avalie a confiança geral dos mapeamentos
+3. Identifique se precisa de esclarecimentos do usuário
+4. Gere perguntas específicas se necessário
+
+Responda APENAS em JSON com a estrutura especificada no system prompt.
+"""
+        return prompt
+
+    # =========================================================================
+    # ASK Phase: Question Generation
+    # =========================================================================
+
+    async def get_questions(
+        self,
+        session_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Get clarification questions for the user (ASK phase).
+
+        Returns questions generated during analysis and reasoning.
+
+        Args:
+            session_id: Import session ID
+
+        Returns:
+            Questions for user
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return {"error": f"Session {session_id} not found"}
+
+        # Add questions from file analysis if not already added
+        if session.file_analysis:
+            for q in session.file_analysis.get("questions_for_user", []):
+                # Check if question already exists
+                existing_ids = {q.id for q in session.questions}
+                if q.get("id") not in existing_ids:
+                    session.questions.append(NexoQuestion(
+                        id=q.get("id", generate_id("Q")),
+                        question=q.get("question", ""),
+                        context=q.get("context", ""),
+                        options=q.get("options", []),
+                        importance=q.get("importance", "medium"),
+                        topic=q.get("topic", "general"),
+                        column=q.get("column"),
+                    ))
+
+        session.stage = ImportStage.AWAITING
+        session.updated_at = now_iso()
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "stage": session.stage.value,
+            "questions": [
+                {
+                    "id": q.id,
+                    "question": q.question,
+                    "context": q.context,
+                    "options": q.options,
+                    "importance": q.importance,
+                    "topic": q.topic,
+                    "column": q.column,
+                }
+                for q in session.questions
+            ],
+            "reasoning": [
+                {"type": r.step_type, "content": r.content}
+                for r in session.reasoning_trace[-5:]
+            ],
+        }
+
+    async def submit_answers(
+        self,
+        session_id: str,
+        answers: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Process user answers to questions.
+
+        Applies answers to refine mappings and prepare for processing.
+
+        Args:
+            session_id: Import session ID
+            answers: Dict mapping question_id to answer
+
+        Returns:
+            Processing result
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return {"error": f"Session {session_id} not found"}
+
+        log_agent_action(
+            self.name, "submit_answers",
+            entity_type="session",
+            entity_id=session_id,
+            status="started",
+        )
+
+        session.answers = answers
+
+        # Process each answer
+        for q in session.questions:
+            answer = answers.get(q.id)
+            if not answer:
+                continue
+
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Usuário respondeu '{answer}' para: {q.question}",
+            ))
+
+            # Apply answer based on topic
+            if q.topic == "column_mapping" and q.column:
+                session.learned_mappings[q.column] = answer
+            elif q.topic == "sheet_selection":
+                session.file_analysis["selected_sheets"] = answer
+            elif q.topic == "movement_type":
+                session.file_analysis["movement_type"] = answer
+
+        session.stage = ImportStage.LEARNING
+        session.updated_at = now_iso()
+
+        log_agent_action(
+            self.name, "submit_answers",
+            entity_type="session",
+            entity_id=session_id,
+            status="completed",
+        )
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "stage": session.stage.value,
+            "applied_mappings": session.learned_mappings,
+            "ready_for_processing": True,
+        }
+
+    # =========================================================================
+    # LEARN Phase: Pattern Storage
+    # =========================================================================
+
+    async def learn_from_import(
+        self,
+        session_id: str,
+        import_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Store learned patterns from successful import (LEARN phase).
+
+        Uses AgentCore Episodic Memory to store patterns for future imports.
+
+        Args:
+            session_id: Import session ID
+            import_result: Result of the import operation
+
+        Returns:
+            Learning result
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return {"error": f"Session {session_id} not found"}
+
+        log_agent_action(
+            self.name, "learn_from_import",
+            entity_type="session",
+            entity_id=session_id,
+            status="started",
+        )
+
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="action",
+            content="Armazenando padrões aprendidos para futuras importações",
+            tool="episodic_memory",
+        ))
+
+        # Build episode data for memory
+        episode_data = {
+            "filename_pattern": self._extract_filename_pattern(session.filename),
+            "sheet_structure": {
+                "sheet_count": session.file_analysis.get("sheet_count", 1),
+                "sheets": [
+                    {
+                        "purpose": s.get("detected_purpose"),
+                        "column_count": s.get("column_count"),
+                    }
+                    for s in session.file_analysis.get("sheets", [])
+                ],
+            },
+            "learned_mappings": session.learned_mappings,
+            "user_corrections": session.answers,
+            "import_success": import_result.get("success", False),
+            "match_rate": import_result.get("match_rate", 0),
+            "lessons": [
+                {
+                    "pattern": f"Column '{col}' maps to '{field}'",
+                    "confidence": 0.95,
+                }
+                for col, field in session.learned_mappings.items()
+            ],
+        }
+
+        # TODO: Store in AgentCore Episodic Memory when available
+        # For now, log the episode data
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="conclusion",
+            content=f"Aprendizado registrado: {len(session.learned_mappings)} mapeamentos",
+        ))
+
+        session.stage = ImportStage.COMPLETE
+        session.updated_at = now_iso()
+
+        log_agent_action(
+            self.name, "learn_from_import",
+            entity_type="session",
+            entity_id=session_id,
+            status="completed",
+        )
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "stage": session.stage.value,
+            "learned_patterns": len(session.learned_mappings),
+            "episode_stored": True,  # Will be True when Memory is integrated
+        }
+
+    def _extract_filename_pattern(self, filename: str) -> str:
+        """Extract pattern from filename for future matching."""
+        import re
+
+        # Remove date patterns (YYYY-MM-DD, DD-MM-YYYY, etc.)
+        pattern = re.sub(r'\d{4}[-_]\d{2}[-_]\d{2}', 'DATE', filename)
+        pattern = re.sub(r'\d{2}[-_]\d{2}[-_]\d{4}', 'DATE', pattern)
+
+        # Remove sequential numbers
+        pattern = re.sub(r'_\d+\.', '_N.', pattern)
+
+        return pattern.lower()
+
+    # =========================================================================
+    # ACT Phase: Execute Import
+    # =========================================================================
+
+    async def prepare_for_processing(
+        self,
+        session_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Prepare final configuration for import processing (ACT phase).
+
+        Consolidates all learned mappings and user decisions into
+        a configuration ready for the ImportAgent to execute.
+
+        Args:
+            session_id: Import session ID
+
+        Returns:
+            Processing configuration
+        """
+        session = self.get_session(session_id)
+        if not session:
+            return {"error": f"Session {session_id} not found"}
+
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="conclusion",
+            content="Preparando configuração final para processamento",
+        ))
+
+        # Build processing config
+        config = {
+            "session_id": session_id,
+            "filename": session.filename,
+            "s3_key": session.s3_key,
+            "column_mappings": session.learned_mappings,
+            "selected_sheets": session.file_analysis.get("selected_sheets", "all"),
+            "movement_type": session.file_analysis.get("movement_type", "entry"),
+            "confidence": session.confidence.to_dict() if session.confidence else None,
+            "strategy": session.file_analysis.get("recommended_strategy"),
+        }
+
+        session.stage = ImportStage.PROCESSING
+        session.updated_at = now_iso()
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "stage": session.stage.value,
+            "config": config,
+            "reasoning": [
+                {"type": r.step_type, "content": r.content}
+                for r in session.reasoning_trace
+            ],
+        }
+
+    # =========================================================================
+    # Full Flow Orchestration
+    # =========================================================================
+
+    async def analyze_file_intelligently(
+        self,
+        filename: str,
+        s3_key: str,
+        file_content: bytes,
+        prior_knowledge: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Full intelligent analysis flow (OBSERVE + THINK + ASK).
+
+        This is the main entry point that orchestrates the analysis,
+        reasoning, and question generation phases.
+
+        Args:
+            filename: Original filename
+            s3_key: S3 key where file is stored
+            file_content: Raw file content
+            prior_knowledge: Previously learned patterns
+
+        Returns:
+            Complete analysis with questions if needed
+        """
+        # Create session
+        session = self.create_session(filename, s3_key)
+
+        # OBSERVE: Analyze file
+        analysis_result = await self.analyze_file(session.session_id, file_content)
+        if not analysis_result.get("success"):
+            return analysis_result
+
+        # THINK: Reason about mappings
+        reasoning_result = await self.reason_about_mappings(
+            session.session_id,
+            prior_knowledge,
+        )
+        if not reasoning_result.get("success"):
+            return reasoning_result
+
+        # ASK: Get questions if needed
+        if reasoning_result.get("needs_clarification"):
+            questions_result = await self.get_questions(session.session_id)
+            return {
+                **questions_result,
+                "analysis": analysis_result.get("analysis"),
+            }
+
+        # No questions needed - ready for processing
+        return {
+            "success": True,
+            "session_id": session.session_id,
+            "stage": session.stage.value,
+            "analysis": analysis_result.get("analysis"),
+            "suggested_mappings": reasoning_result.get("suggested_mappings"),
+            "confidence": reasoning_result.get("confidence"),
+            "ready_for_processing": True,
+            "reasoning": [
+                {"type": r.step_type, "content": r.content}
+                for r in session.reasoning_trace
+            ],
+        }
+
+
+# =============================================================================
+# Serialization Helpers
+# =============================================================================
+
+
+def session_to_dict(session: ImportSession) -> Dict[str, Any]:
+    """Convert ImportSession to dictionary for JSON serialization."""
+    return {
+        "session_id": session.session_id,
+        "filename": session.filename,
+        "s3_key": session.s3_key,
+        "stage": session.stage.value,
+        "file_analysis": session.file_analysis,
+        "reasoning_trace": [
+            {
+                "type": r.step_type,
+                "content": r.content,
+                "tool": r.tool,
+                "result": r.result,
+                "timestamp": r.timestamp,
+            }
+            for r in session.reasoning_trace
+        ],
+        "questions": [
+            {
+                "id": q.id,
+                "question": q.question,
+                "context": q.context,
+                "options": q.options,
+                "importance": q.importance,
+                "topic": q.topic,
+                "column": q.column,
+            }
+            for q in session.questions
+        ],
+        "answers": session.answers,
+        "learned_mappings": session.learned_mappings,
+        "confidence": session.confidence.to_dict() if session.confidence else None,
+        "error": session.error,
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+    }

@@ -1011,6 +1011,279 @@ export async function invokeSmartImport(
 }
 
 // =============================================================================
+// NEXO Intelligent Import (Agentic AI-First)
+// =============================================================================
+// ReAct Pattern: OBSERVE → THINK → ASK → LEARN → ACT
+//
+// Philosophy: NEXO guides user through import with intelligent analysis
+// - Multi-sheet XLSX analysis with purpose detection
+// - Clarification questions when uncertain
+// - Learning from user answers for future imports
+// - Explicit reasoning trace for transparency
+
+/**
+ * Request for NEXO intelligent file analysis.
+ */
+export interface NexoAnalyzeFileRequest {
+  s3_key: string;
+  filename: string;
+  content_type?: string;
+  prior_knowledge?: Record<string, unknown>;
+}
+
+/**
+ * Sheet analysis result from NEXO.
+ */
+export interface NexoSheetAnalysis {
+  name: string;
+  purpose: 'items' | 'serials' | 'metadata' | 'summary' | 'config' | 'unknown';
+  row_count: number;
+  column_count: number;
+  columns: Array<{
+    name: string;
+    sample_values: string[];
+    detected_type: string;
+    suggested_mapping: string | null;
+    confidence: number;
+  }>;
+  confidence: number;
+}
+
+/**
+ * Column mapping suggestion from NEXO.
+ */
+export interface NexoColumnMapping {
+  file_column: string;
+  target_field: string;
+  confidence: number;
+  reasoning: string;
+  alternatives?: Array<{
+    field: string;
+    confidence: number;
+  }>;
+}
+
+/**
+ * Clarification question from NEXO.
+ */
+export interface NexoQuestion {
+  id: string;
+  question: string;
+  context?: string;
+  importance: 'critical' | 'high' | 'medium' | 'low';
+  topic: 'column_mapping' | 'sheet_selection' | 'movement_type' | 'data_validation' | 'other';
+  options: Array<{
+    value: string;
+    label: string;
+    description?: string;
+  }>;
+  default_value?: string;
+}
+
+/**
+ * Reasoning step in NEXO's thinking trace.
+ */
+export interface NexoReasoningStep {
+  type: 'thought' | 'action' | 'observation';
+  content: string;
+  timestamp?: string;
+}
+
+/**
+ * Response from NEXO file analysis.
+ */
+export interface NexoAnalyzeFileResponse {
+  success: boolean;
+  import_session_id: string;
+  filename: string;
+  detected_file_type: string;
+  analysis: {
+    sheet_count: number;
+    total_rows: number;
+    sheets: NexoSheetAnalysis[];
+    recommended_strategy: string;
+  };
+  column_mappings: NexoColumnMapping[];
+  overall_confidence: number;
+  questions: NexoQuestion[];
+  reasoning_trace: NexoReasoningStep[];
+  user_id?: string;
+  session_id?: string;
+}
+
+/**
+ * Response from getting questions.
+ */
+export interface NexoGetQuestionsResponse {
+  success: boolean;
+  import_session_id: string;
+  questions: NexoQuestion[];
+  questions_answered: number;
+  questions_remaining: number;
+}
+
+/**
+ * Request for submitting answers.
+ */
+export interface NexoSubmitAnswersRequest {
+  import_session_id: string;
+  answers: Record<string, string>;
+}
+
+/**
+ * Response after submitting answers.
+ */
+export interface NexoSubmitAnswersResponse {
+  success: boolean;
+  import_session_id: string;
+  updated_mappings: NexoColumnMapping[];
+  updated_confidence: number;
+  remaining_questions: NexoQuestion[];
+  ready_for_processing: boolean;
+}
+
+/**
+ * Request for learning from import.
+ */
+export interface NexoLearnFromImportRequest {
+  import_session_id: string;
+  import_result: Record<string, unknown>;
+  user_corrections?: Record<string, unknown>;
+}
+
+/**
+ * Response after learning.
+ */
+export interface NexoLearnFromImportResponse {
+  success: boolean;
+  patterns_stored: number;
+  message: string;
+}
+
+/**
+ * Processing configuration from NEXO.
+ */
+export interface NexoProcessingConfig {
+  success: boolean;
+  import_session_id: string;
+  ready: boolean;
+  column_mappings: Array<{
+    file_column: string;
+    target_field: string;
+  }>;
+  selected_sheets: string[];
+  movement_type: string;
+  special_handling: Record<string, unknown>;
+  final_confidence: number;
+}
+
+/**
+ * NEXO intelligent file analysis (OBSERVE + THINK phases).
+ *
+ * Uses ReAct pattern to:
+ * 1. OBSERVE: Analyze file structure (sheets, columns, rows)
+ * 2. THINK: Reason about column mappings with Gemini AI
+ * 3. Prepare questions for user when uncertain
+ *
+ * @param params.s3_key - S3 key of uploaded file
+ * @param params.filename - Original filename
+ * @param params.content_type - Optional MIME type
+ * @param params.prior_knowledge - Optional context from previous imports
+ * @returns Analysis with sheets, mappings, reasoning trace, and questions
+ */
+export async function nexoAnalyzeFile(
+  params: NexoAnalyzeFileRequest
+): Promise<AgentCoreResponse<NexoAnalyzeFileResponse>> {
+  return invokeSGAAgentCore<NexoAnalyzeFileResponse>({
+    action: 'nexo_analyze_file',
+    s3_key: params.s3_key,
+    filename: params.filename,
+    content_type: params.content_type,
+    prior_knowledge: params.prior_knowledge,
+  });
+}
+
+/**
+ * Get clarification questions for current import session (ASK phase).
+ *
+ * Returns questions generated during analysis that require user input.
+ *
+ * @param importSessionId - Import session ID from analyze_file
+ * @returns List of questions with options and importance levels
+ */
+export async function nexoGetQuestions(
+  importSessionId: string
+): Promise<AgentCoreResponse<NexoGetQuestionsResponse>> {
+  return invokeSGAAgentCore<NexoGetQuestionsResponse>({
+    action: 'nexo_get_questions',
+    import_session_id: importSessionId,
+  });
+}
+
+/**
+ * Submit user answers to clarification questions (ASK → LEARN phases).
+ *
+ * Processes user's answers and refines the analysis.
+ * Stores answers for learning and future improvement.
+ *
+ * @param params.import_session_id - Import session ID
+ * @param params.answers - Dict mapping question IDs to selected answers
+ * @returns Updated analysis with refined mappings
+ */
+export async function nexoSubmitAnswers(
+  params: NexoSubmitAnswersRequest
+): Promise<AgentCoreResponse<NexoSubmitAnswersResponse>> {
+  return invokeSGAAgentCore<NexoSubmitAnswersResponse>({
+    action: 'nexo_submit_answers',
+    import_session_id: params.import_session_id,
+    answers: params.answers,
+  });
+}
+
+/**
+ * Store learned patterns from successful import (LEARN phase).
+ *
+ * Called after import confirmation to build knowledge base.
+ * Uses AgentCore Episodic Memory for cross-session learning.
+ *
+ * @param params.import_session_id - Import session ID
+ * @param params.import_result - Result of the executed import
+ * @param params.user_corrections - Any manual corrections made by user
+ * @returns Learning confirmation with patterns stored
+ */
+export async function nexoLearnFromImport(
+  params: NexoLearnFromImportRequest
+): Promise<AgentCoreResponse<NexoLearnFromImportResponse>> {
+  return invokeSGAAgentCore<NexoLearnFromImportResponse>({
+    action: 'nexo_learn_from_import',
+    import_session_id: params.import_session_id,
+    import_result: params.import_result,
+    user_corrections: params.user_corrections,
+  });
+}
+
+/**
+ * Prepare final processing after questions answered (ACT phase).
+ *
+ * Generates the final processing configuration with:
+ * - Confirmed column mappings
+ * - Sheet selection
+ * - Movement type
+ * - Any special handling
+ *
+ * @param importSessionId - Import session ID
+ * @returns Processing configuration ready for execute_import
+ */
+export async function nexoPrepareProcessing(
+  importSessionId: string
+): Promise<AgentCoreResponse<NexoProcessingConfig>> {
+  return invokeSGAAgentCore<NexoProcessingConfig>({
+    action: 'nexo_prepare_processing',
+    import_session_id: importSessionId,
+  });
+}
+
+// =============================================================================
 // NEXO AI Observations
 // =============================================================================
 
