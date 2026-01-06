@@ -1138,6 +1138,7 @@ export interface NexoSubmitAnswersRequest {
  */
 export interface NexoSubmitAnswersResponse {
   success: boolean;
+  error?: string;  // Error message when success is false
   import_session_id: string;
   updated_mappings: NexoColumnMapping[];
   updated_confidence: number;

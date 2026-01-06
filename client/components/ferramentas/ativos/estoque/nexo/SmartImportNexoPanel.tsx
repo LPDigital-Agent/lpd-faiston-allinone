@@ -526,7 +526,7 @@ function QuestionPanel({
         <Button
           onClick={handleSubmit}
           disabled={!allCriticalAnswered || isSubmitting}
-          className="bg-gradient-to-r from-cyan-500 to-purple-500"
+          className="bg-gradient-to-r from-cyan-500 to-purple-500 text-white"
         >
           {isSubmitting ? (
             <>
@@ -673,6 +673,179 @@ function QuestionItem({
   );
 }
 
+/**
+ * Import Review Panel - HIL approval step before final import.
+ * Shows summary of what NEXO understood and asks for user confirmation.
+ */
+function ImportReviewPanel({
+  reviewSummary,
+  userFeedback,
+  onApprove,
+  onBack,
+  onCancel,
+  isSubmitting,
+}: {
+  reviewSummary: import('@/hooks/ativos/useSmartImportNexo').NexoReviewSummary;
+  userFeedback: string | null;
+  onApprove: () => void;
+  onBack: () => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <CheckCircle2 className="w-5 h-5 text-green-400" />
+        <h3 className="font-medium">Resumo da Importação</h3>
+      </div>
+
+      {/* NEXO Explanation */}
+      <NexoExplanation
+        summary={REVIEW_SUMMARY_EXPLANATION.summary}
+        details={REVIEW_SUMMARY_EXPLANATION.details}
+        action={REVIEW_SUMMARY_EXPLANATION.action}
+        variant="success"
+      />
+
+      {/* Summary card */}
+      <div className="p-4 bg-white/5 rounded-lg border border-white/10 space-y-4">
+        {/* File info */}
+        <div className="flex items-center gap-3">
+          <FileSpreadsheet className="w-5 h-5 text-cyan-400" />
+          <div>
+            <p className="font-medium">{reviewSummary.filename}</p>
+            <p className="text-sm text-text-muted">
+              Aba principal: {reviewSummary.mainSheet}
+            </p>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-4 pt-3 border-t border-white/10">
+          <div>
+            <p className="text-sm text-text-muted">Total de itens</p>
+            <p className="text-xl font-bold text-cyan-400">
+              {reviewSummary.totalItems.toLocaleString()}
+            </p>
+          </div>
+          {reviewSummary.projectName && (
+            <div>
+              <p className="text-sm text-text-muted">Projeto</p>
+              <p className="text-lg font-medium">{reviewSummary.projectName}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Validations */}
+        {reviewSummary.validations.length > 0 && (
+          <div className="pt-3 border-t border-white/10">
+            <p className="text-sm text-text-muted mb-2 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-400" />
+              Validações OK:
+            </p>
+            <ul className="space-y-1">
+              {reviewSummary.validations.map((validation, i) => (
+                <li key={i} className="text-sm text-text-secondary flex items-start gap-2">
+                  <span className="text-green-400">✓</span>
+                  {validation}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Warnings */}
+        {reviewSummary.warnings.length > 0 && (
+          <div className="pt-3 border-t border-white/10">
+            <p className="text-sm text-text-muted mb-2 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-400" />
+              Atenção:
+            </p>
+            <ul className="space-y-1">
+              {reviewSummary.warnings.map((warning, i) => (
+                <li key={i} className="text-sm text-yellow-400 flex items-start gap-2">
+                  <span>⚠</span>
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* User feedback if provided */}
+        {userFeedback && (
+          <div className="pt-3 border-t border-white/10">
+            <p className="text-sm text-text-muted mb-2 flex items-center gap-2">
+              <MessageCircleQuestion className="w-4 h-4 text-purple-400" />
+              Seu feedback:
+            </p>
+            <p className="text-sm text-text-secondary italic">
+              &ldquo;{userFeedback}&rdquo;
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* NEXO recommendation */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="p-4 bg-gradient-to-r from-green-500/10 to-cyan-500/10 rounded-lg border border-green-500/20"
+      >
+        <div className="flex items-start gap-3">
+          <Sparkles className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-green-400">Recomendação NEXO</p>
+            <p className="text-sm text-text-secondary mt-1">
+              {reviewSummary.recommendation}
+            </p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Actions */}
+      <div className="flex justify-between items-center pt-4 border-t border-white/10">
+        <Button
+          variant="ghost"
+          onClick={onBack}
+          disabled={isSubmitting}
+          className="text-text-muted hover:text-text-primary"
+        >
+          <ChevronUp className="w-4 h-4 mr-2" />
+          Voltar e editar respostas
+        </Button>
+
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={onApprove}
+            disabled={isSubmitting || !reviewSummary.readyToImport}
+            className="bg-gradient-to-r from-green-500 to-cyan-500 text-white"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Importando...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                Aprovar e Importar
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // =============================================================================
 // Main Component
 // =============================================================================
@@ -688,14 +861,18 @@ export function SmartImportNexoPanel({
     isRecalling,
     hasQuestions,
     isReadyToProcess,
+    isReviewing,
     startAnalysis,
     answerQuestion,
     submitAllAnswers,
     skipQuestions,
+    approveAndImport,
+    backToQuestions,
     prepareProcessing,
     reasoningTrace,
     currentThought,
     priorKnowledge,
+    reviewSummary,
   } = useSmartImportNexo();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -714,15 +891,32 @@ export function SmartImportNexoPanel({
   const handleSubmitAnswers = async (freeText: string = '') => {
     setIsSubmitting(true);
     try {
-      // Store free text for later use in review/import
+      // Pass freeText to submitAllAnswers for review/import
       if (freeText) {
         console.log('[NEXO] User feedback received:', freeText);
-        // TODO: Pass freeText to submitAllAnswers when backend supports it
       }
-      await submitAllAnswers();
+      await submitAllAnswers(freeText || undefined);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Handle approve and import (HIL approval)
+  const handleApproveAndImport = async () => {
+    setIsSubmitting(true);
+    try {
+      await approveAndImport();
+      onComplete(state.analysis!.sessionId);
+    } catch (err) {
+      console.error('[NEXO] Import failed:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle back to questions (from review screen)
+  const handleBackToQuestions = () => {
+    backToQuestions();
   };
 
   // Handle skip questions
@@ -974,8 +1168,20 @@ export function SmartImportNexoPanel({
               />
             )}
 
+            {/* Review section - HIL approval before import */}
+            {isReviewing && reviewSummary && (
+              <ImportReviewPanel
+                reviewSummary={reviewSummary}
+                userFeedback={state.userFeedback}
+                onApprove={handleApproveAndImport}
+                onBack={handleBackToQuestions}
+                onCancel={onCancel}
+                isSubmitting={isSubmitting}
+              />
+            )}
+
             {/* Ready to process */}
-            {isReadyToProcess && !hasQuestions && (
+            {isReadyToProcess && !hasQuestions && !isReviewing && (
               <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
                 <Button variant="outline" onClick={onCancel}>
                   Cancelar
@@ -983,7 +1189,7 @@ export function SmartImportNexoPanel({
                 <Button
                   onClick={handleContinue}
                   disabled={isSubmitting}
-                  className="bg-gradient-to-r from-cyan-500 to-purple-500"
+                  className="bg-gradient-to-r from-cyan-500 to-purple-500 text-white"
                 >
                   {isSubmitting ? (
                     <>

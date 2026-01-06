@@ -14,6 +14,7 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
+from datetime import datetime
 import json
 
 from agents.base_agent import BaseInventoryAgent, ConfidenceScore
@@ -148,7 +149,8 @@ class NexoImportAgent(BaseInventoryAgent):
     5. ACT: Executes import with learned knowledge
 
     Attributes:
-        sessions: Active import sessions (in-memory for cold start optimization)
+        _db: DynamoDB client for session persistence (lazy loaded)
+        _sessions_cache: In-memory cache for hot sessions
     """
 
     def __init__(self):
@@ -158,7 +160,125 @@ class NexoImportAgent(BaseInventoryAgent):
             instruction=NEXO_IMPORT_INSTRUCTION,
             description="Assistente inteligente de importação com aprendizado contínuo",
         )
-        self._sessions: Dict[str, ImportSession] = {}
+        # In-memory cache for hot sessions (reduces DynamoDB reads)
+        self._sessions_cache: Dict[str, ImportSession] = {}
+        # DynamoDB client (lazy loaded)
+        self._db = None
+
+    def _get_db(self):
+        """Get DynamoDB client with lazy initialization."""
+        if self._db is None:
+            from tools.dynamodb_client import SGADynamoDBClient
+            self._db = SGADynamoDBClient()
+        return self._db
+
+    def _session_to_dict(self, session: ImportSession) -> Dict[str, Any]:
+        """Serialize ImportSession to dict for DynamoDB storage."""
+        return {
+            "PK": f"NEXO_SESSION#{session.session_id}",
+            "SK": "METADATA",
+            "session_id": session.session_id,
+            "filename": session.filename,
+            "s3_key": session.s3_key,
+            "stage": session.stage.value,
+            "file_analysis": session.file_analysis,
+            "reasoning_trace": [
+                {"step_type": r.step_type, "content": r.content, "tool": r.tool, "result": r.result, "timestamp": r.timestamp}
+                for r in session.reasoning_trace
+            ],
+            "questions": [
+                {"id": q.id, "question": q.question, "context": q.context, "options": q.options, "importance": q.importance, "topic": q.topic, "column": q.column}
+                for q in session.questions
+            ],
+            "answers": session.answers,
+            "learned_mappings": session.learned_mappings,
+            "confidence": {"level": session.confidence.level, "score": session.confidence.score, "reason": session.confidence.reason} if session.confidence else None,
+            "error": session.error,
+            "created_at": session.created_at,
+            "updated_at": session.updated_at,
+            # TTL: Auto-delete after 24 hours (session shouldn't last longer)
+            "ttl": int((datetime.fromisoformat(session.created_at.replace("Z", "+00:00")).timestamp()) + 86400),
+        }
+
+    def _dict_to_session(self, data: Dict[str, Any]) -> ImportSession:
+        """Deserialize dict from DynamoDB to ImportSession."""
+        from datetime import datetime as dt
+        session = ImportSession(
+            session_id=data["session_id"],
+            filename=data["filename"],
+            s3_key=data["s3_key"],
+            stage=ImportStage(data["stage"]),
+            file_analysis=data.get("file_analysis"),
+            reasoning_trace=[
+                ReasoningStep(
+                    step_type=r["step_type"],
+                    content=r["content"],
+                    tool=r.get("tool"),
+                    result=r.get("result"),
+                    timestamp=r.get("timestamp", now_iso()),
+                )
+                for r in data.get("reasoning_trace", [])
+            ],
+            questions=[
+                NexoQuestion(
+                    id=q["id"],
+                    question=q["question"],
+                    context=q["context"],
+                    options=q["options"],
+                    importance=q["importance"],
+                    topic=q["topic"],
+                    column=q.get("column"),
+                )
+                for q in data.get("questions", [])
+            ],
+            answers=data.get("answers", {}),
+            learned_mappings=data.get("learned_mappings", {}),
+            confidence=ConfidenceScore(
+                level=data["confidence"]["level"],
+                score=data["confidence"]["score"],
+                reason=data["confidence"]["reason"],
+            ) if data.get("confidence") else None,
+            error=data.get("error"),
+            created_at=data.get("created_at", now_iso()),
+            updated_at=data.get("updated_at", now_iso()),
+        )
+        return session
+
+    def _save_session(self, session: ImportSession) -> bool:
+        """Persist session to DynamoDB."""
+        try:
+            session.updated_at = now_iso()
+            item = self._session_to_dict(session)
+            success = self._get_db().put_item(item)
+            if success:
+                # Update cache
+                self._sessions_cache[session.session_id] = session
+            return success
+        except Exception as e:
+            log_agent_action(self.name, "_save_session", status="error", details=str(e))
+            return False
+
+    def _load_session(self, session_id: str) -> Optional[ImportSession]:
+        """Load session from cache or DynamoDB."""
+        # Check cache first
+        if session_id in self._sessions_cache:
+            return self._sessions_cache[session_id]
+
+        # Load from DynamoDB
+        try:
+            item = self._get_db().get_item(
+                pk=f"NEXO_SESSION#{session_id}",
+                sk="METADATA"
+            )
+            if item:
+                session = self._dict_to_session(item)
+                # Populate cache
+                self._sessions_cache[session_id] = session
+                return session
+            return None
+        except Exception as e:
+            log_agent_action(self.name, "_load_session", status="error", details=str(e))
+            return None
 
     # =========================================================================
     # Session Management
@@ -170,7 +290,7 @@ class NexoImportAgent(BaseInventoryAgent):
         s3_key: str,
     ) -> ImportSession:
         """
-        Create a new import session.
+        Create a new import session and persist to DynamoDB.
 
         Args:
             filename: Original filename
@@ -186,7 +306,9 @@ class NexoImportAgent(BaseInventoryAgent):
             s3_key=s3_key,
             stage=ImportStage.ANALYZING,
         )
-        self._sessions[session_id] = session
+
+        # Persist to DynamoDB for cross-instance availability
+        self._save_session(session)
 
         log_agent_action(
             self.name, "create_session",
@@ -198,8 +320,8 @@ class NexoImportAgent(BaseInventoryAgent):
         return session
 
     def get_session(self, session_id: str) -> Optional[ImportSession]:
-        """Get an existing session by ID."""
-        return self._sessions.get(session_id)
+        """Get an existing session by ID from cache or DynamoDB."""
+        return self._load_session(session_id)
 
     # =========================================================================
     # OBSERVE Phase: File Analysis
@@ -225,7 +347,7 @@ class NexoImportAgent(BaseInventoryAgent):
         """
         session = self.get_session(session_id)
         if not session:
-            return {"error": f"Session {session_id} not found"}
+            return {"success": False, "error": f"Session {session_id} not found. Session may have expired."}
 
         log_agent_action(
             self.name, "analyze_file",
@@ -276,6 +398,9 @@ class NexoImportAgent(BaseInventoryAgent):
                 ))
 
             session.updated_at = now_iso()
+
+            # Persist session changes to DynamoDB
+            self._save_session(session)
 
             log_agent_action(
                 self.name, "analyze_file",
@@ -338,10 +463,10 @@ class NexoImportAgent(BaseInventoryAgent):
         """
         session = self.get_session(session_id)
         if not session:
-            return {"error": f"Session {session_id} not found"}
+            return {"success": False, "error": f"Session {session_id} not found. Session may have expired."}
 
         if not session.file_analysis:
-            return {"error": "File not analyzed yet. Call analyze_file first."}
+            return {"success": False, "error": "File not analyzed yet. Call analyze_file first."}
 
         log_agent_action(
             self.name, "reason_about_mappings",
@@ -417,6 +542,9 @@ class NexoImportAgent(BaseInventoryAgent):
                     session.stage = ImportStage.PROCESSING
 
             session.updated_at = now_iso()
+
+            # Persist session changes to DynamoDB
+            self._save_session(session)
 
             log_agent_action(
                 self.name, "reason_about_mappings",
@@ -538,7 +666,7 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
         """
         session = self.get_session(session_id)
         if not session:
-            return {"error": f"Session {session_id} not found"}
+            return {"success": False, "error": f"Session {session_id} not found. Session may have expired."}
 
         # Add questions from file analysis if not already added
         if session.file_analysis:
@@ -558,6 +686,9 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
 
         session.stage = ImportStage.AWAITING
         session.updated_at = now_iso()
+
+        # Persist session changes to DynamoDB
+        self._save_session(session)
 
         return {
             "success": True,
@@ -600,7 +731,7 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
         """
         session = self.get_session(session_id)
         if not session:
-            return {"error": f"Session {session_id} not found"}
+            return {"success": False, "error": f"Session {session_id} not found. Session may have expired."}
 
         log_agent_action(
             self.name, "submit_answers",
@@ -632,6 +763,9 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
 
         session.stage = ImportStage.LEARNING
         session.updated_at = now_iso()
+
+        # Persist session changes to DynamoDB
+        self._save_session(session)
 
         log_agent_action(
             self.name, "submit_answers",
@@ -677,7 +811,7 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
         """
         session = self.get_session(session_id)
         if not session:
-            return {"error": f"Session {session_id} not found"}
+            return {"success": False, "error": f"Session {session_id} not found. Session may have expired."}
 
         log_agent_action(
             self.name, "learn_from_import",
@@ -750,6 +884,9 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
 
         session.stage = ImportStage.COMPLETE
         session.updated_at = now_iso()
+
+        # Persist session changes to DynamoDB
+        self._save_session(session)
 
         log_agent_action(
             self.name, "learn_from_import",
@@ -946,7 +1083,7 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
         """
         session = self.get_session(session_id)
         if not session:
-            return {"error": f"Session {session_id} not found"}
+            return {"success": False, "error": f"Session {session_id} not found. Session may have expired."}
 
         session.reasoning_trace.append(ReasoningStep(
             step_type="conclusion",
@@ -967,6 +1104,9 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
 
         session.stage = ImportStage.PROCESSING
         session.updated_at = now_iso()
+
+        # Persist session changes to DynamoDB
+        self._save_session(session)
 
         return {
             "success": True,

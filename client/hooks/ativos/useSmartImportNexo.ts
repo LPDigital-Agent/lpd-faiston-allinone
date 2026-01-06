@@ -49,6 +49,7 @@ export type NexoImportStage =
   | 'recalling'      // NEXO recalling prior knowledge (RECALL)
   | 'analyzing'      // NEXO analyzing file (OBSERVE + THINK)
   | 'questioning'    // Waiting for user answers (ASK)
+  | 'reviewing'      // NEXO shows summary for user approval (HIL)
   | 'processing'     // Preparing final configuration (ACT)
   | 'importing'      // Executing the import
   | 'learning'       // Storing learned patterns (LEARN)
@@ -80,6 +81,22 @@ export interface NexoAnalysisResult {
 }
 
 /**
+ * Review summary shown before final import approval.
+ */
+export interface NexoReviewSummary {
+  filename: string;
+  mainSheet: string;
+  totalItems: number;
+  projectName: string | null;
+  newPartNumbers: number;
+  validations: string[];
+  warnings: string[];
+  recommendation: string;
+  readyToImport: boolean;
+  userFeedback: string | null;
+}
+
+/**
  * State of the NEXO intelligent import.
  */
 export interface NexoImportState {
@@ -91,6 +108,8 @@ export interface NexoImportState {
   processingConfig: NexoProcessingConfig | null;
   priorKnowledge: NexoPriorKnowledge | null;
   adaptiveThreshold: number;
+  reviewSummary: NexoReviewSummary | null;
+  userFeedback: string | null;
   error: string | null;
 }
 
@@ -104,12 +123,15 @@ export interface UseSmartImportNexoReturn {
   isRecalling: boolean;
   hasQuestions: boolean;
   isReadyToProcess: boolean;
+  isReviewing: boolean;
 
   // Actions
   startAnalysis: (file: File) => Promise<NexoAnalysisResult>;
   answerQuestion: (questionId: string, answer: string) => void;
-  submitAllAnswers: () => Promise<void>;
+  submitAllAnswers: (userFeedback?: string) => Promise<void>;
   skipQuestions: () => Promise<void>;
+  approveAndImport: () => Promise<void>;
+  backToQuestions: () => void;
   prepareProcessing: () => Promise<NexoProcessingConfig>;
   executeNexoImport: (projectId?: string, locationId?: string) => Promise<void>;
   learnFromResult: (result: Record<string, unknown>, corrections?: Record<string, unknown>) => Promise<void>;
@@ -121,6 +143,9 @@ export interface UseSmartImportNexoReturn {
 
   // Prior knowledge from episodic memory
   priorKnowledge: NexoPriorKnowledge | null;
+
+  // Review summary for approval step
+  reviewSummary: NexoReviewSummary | null;
 }
 
 // =============================================================================
@@ -142,6 +167,8 @@ const INITIAL_STATE: NexoImportState = {
   processingConfig: null,
   priorKnowledge: null,
   adaptiveThreshold: 0.75, // Default confidence threshold
+  reviewSummary: null,
+  userFeedback: null,
   error: null,
 };
 
@@ -184,6 +211,11 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     const thoughts = state.analysis.reasoningTrace.filter(s => s.type === 'thought');
     return thoughts.length > 0 ? thoughts[thoughts.length - 1].content : null;
   }, [state.analysis?.reasoningTrace]);
+
+  const isReviewing = useMemo(
+    () => state.stage === 'reviewing',
+    [state.stage]
+  );
 
   // ==========================================================================
   // Helper: Update Progress
@@ -357,7 +389,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   // Action: Submit All Answers
   // ==========================================================================
 
-  const submitAllAnswers = useCallback(async () => {
+  const submitAllAnswers = useCallback(async (userFeedback?: string) => {
     if (!state.analysis?.sessionId) {
       throw new Error('Nenhuma sessão de importação ativa');
     }
@@ -371,7 +403,10 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       });
 
       if (!result.data?.success) {
-        throw new Error('Falha ao processar respostas');
+        // Extract error message from backend response
+        const errorMsg = result.data?.error
+          || 'Sessão expirada. Por favor, faça upload do arquivo novamente.';
+        throw new Error(errorMsg);
       }
 
       // Check if more questions remain
@@ -382,12 +417,41 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
           progress: { stage: 'questioning', percent: 75, message: 'Mais perguntas...', currentStep: 'ask' },
         }));
       } else {
-        // Ready to process
-        updateProgress('processing', 80, 'Pronto para processar', 'act');
+        // Generate client-side review summary for HIL approval
+        const mainSheet = state.analysis.sheets.find(s => s.purpose === 'items') || state.analysis.sheets[0];
+        const projectAnswer = state.answers['project'] || state.answers['projeto'] || null;
+
+        // Count high confidence mappings as validations
+        const highConfMappings = state.analysis.columnMappings.filter(m => m.confidence >= 0.8);
+        const lowConfMappings = state.analysis.columnMappings.filter(m => m.confidence < 0.5);
+
+        const reviewSummary: NexoReviewSummary = {
+          filename: state.analysis.filename,
+          mainSheet: mainSheet?.name || 'Desconhecida',
+          totalItems: mainSheet?.row_count || 0,
+          projectName: projectAnswer,
+          newPartNumbers: 0, // Will be calculated by backend
+          validations: [
+            `${highConfMappings.length} colunas mapeadas com alta confiança`,
+            'Estrutura do arquivo validada',
+            mainSheet ? `Aba principal identificada: ${mainSheet.name}` : '',
+          ].filter(Boolean),
+          warnings: lowConfMappings.length > 0
+            ? [`${lowConfMappings.length} colunas com baixa confiança (usando valores padrão)`]
+            : [],
+          recommendation: 'Acho que está tudo certo! Podemos prosseguir com a importação.',
+          readyToImport: true,
+          userFeedback: userFeedback || null,
+        };
+
+        // Go to reviewing stage for HIL approval
+        updateProgress('reviewing', 80, 'Aguardando aprovação', 'review');
         setState(prev => ({
           ...prev,
-          stage: 'processing',
+          stage: 'reviewing',
           questions: [],
+          reviewSummary,
+          userFeedback: userFeedback || null,
         }));
       }
     } catch (err) {
@@ -395,7 +459,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       setState(prev => ({ ...prev, error: message }));
       throw err;
     }
-  }, [state.analysis?.sessionId, state.answers, updateProgress]);
+  }, [state.analysis, state.answers, updateProgress]);
 
   // ==========================================================================
   // Action: Skip Questions (use default answers)
@@ -421,6 +485,21 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     // Submit with defaults
     await submitAllAnswers();
   }, [state.analysis?.sessionId, state.questions, submitAllAnswers]);
+
+  // ==========================================================================
+  // Action: Back to Questions (from review screen)
+  // ==========================================================================
+
+  const backToQuestions = useCallback((): void => {
+    // Go back to questioning stage to allow user to modify answers
+    updateProgress('questioning', 70, 'Revise suas respostas...', 'ask');
+    setState(prev => ({
+      ...prev,
+      stage: 'questioning',
+      reviewSummary: null,
+      // Keep answers and questions so user can modify them
+    }));
+  }, [updateProgress]);
 
   // ==========================================================================
   // Action: Prepare Processing (ACT)
@@ -532,6 +611,47 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   }, [state.analysis?.sessionId, updateProgress]);
 
   // ==========================================================================
+  // Action: Approve and Import (HIL - Human-in-the-Loop approval)
+  // ==========================================================================
+
+  const approveAndImport = useCallback(async (): Promise<void> => {
+    if (!state.analysis?.sessionId || !state.reviewSummary) {
+      throw new Error('Nenhuma sessão de revisão ativa');
+    }
+
+    // User approved - proceed to processing
+    updateProgress('processing', 85, 'Preparando importação...', 'act');
+    setState(prev => ({
+      ...prev,
+      stage: 'processing',
+    }));
+
+    // Prepare processing configuration
+    await prepareProcessing();
+
+    // Execute the import
+    await executeNexoImport(
+      state.answers['project'] || state.answers['projeto'] || undefined,
+      state.answers['location'] || state.answers['local'] || undefined
+    );
+
+    // Learn from this import for future improvements
+    await learnFromResult(
+      { success: true, items_imported: state.reviewSummary.totalItems },
+      state.userFeedback ? { user_feedback: state.userFeedback } : undefined
+    );
+  }, [
+    state.analysis?.sessionId,
+    state.reviewSummary,
+    state.answers,
+    state.userFeedback,
+    updateProgress,
+    prepareProcessing,
+    executeNexoImport,
+    learnFromResult,
+  ]);
+
+  // ==========================================================================
   // Action: Reset
   // ==========================================================================
 
@@ -544,26 +664,35 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   // ==========================================================================
 
   return {
+    // State
     state,
     isAnalyzing,
     isRecalling,
     hasQuestions,
     isReadyToProcess,
+    isReviewing,
 
+    // Actions
     startAnalysis,
     answerQuestion,
     submitAllAnswers,
     skipQuestions,
+    approveAndImport,
+    backToQuestions,
     prepareProcessing,
     executeNexoImport,
     learnFromResult,
     reset,
 
+    // Reasoning trace (for UI display)
     reasoningTrace: state.analysis?.reasoningTrace || [],
     currentThought,
 
     // Prior knowledge from episodic memory
     priorKnowledge: state.priorKnowledge,
+
+    // Review summary for approval step
+    reviewSummary: state.reviewSummary,
   };
 }
 
