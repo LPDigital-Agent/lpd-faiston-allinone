@@ -151,7 +151,7 @@ lpd-faiston-allinone/
 │   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
 │   │   ├── academy/      # 12 Academy-specific hooks
-│   │   └── ativos/       # 17 SGA-specific hooks
+│   │   └── ativos/       # 16 SGA-specific hooks
 │   ├── lib/               # Utilities
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
@@ -454,6 +454,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ UI Refinement: QuickActions redesigned to compact full-width layout
 - ✅ Unified Entry: Multi-source material entry (NF, Image OCR, SAP Export, Manual)
 - ✅ **Smart Import (January 2026)**: Universal file importer with auto-detect (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
+- ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
   - Aurora Serverless v2 cluster with RDS Proxy
   - 13 tables, 110 indexes, 8 materialized views
@@ -472,7 +473,16 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `carrier_agent.py` - Freight quotation and carrier comparison
 - `reverse_agent.py` - Returns/reverse logistics management
 - `import_agent.py` - CSV/Excel bulk import processing
+- `nexo_import_agent.py` - **NEXO Intelligent Import** with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
 - `base_agent.py` - Base agent class with common utilities
+
+### SGA Tools (5)
+`server/agentcore-inventory/tools/`:
+- `dynamodb_client.py` - DynamoDB operations
+- `s3_client.py` - S3 presigned URLs with SigV4
+- `nf_parser.py` - NF XML/PDF parsing
+- `hil_workflow.py` - Human-in-the-Loop tasks
+- `sheet_analyzer.py` - **Multi-sheet XLSX analysis** for NEXO Intelligent Import
 
 ### SGA Contexts (6)
 `client/contexts/ativos/`:
@@ -493,7 +503,8 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `useSAPImport` - SAP CSV/XLSX import with full asset creation
 - `useManualEntry` - Manual entry without source document
 - `useBulkImport` - Bulk CSV/Excel import processing
-- `useSmartImporter` - **NEW** Universal auto-detect importer (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
+- `useSmartImporter` - Universal auto-detect importer (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
+- `useSmartImportNexo` - **NEXO Intelligent Import** hook (5-phase flow: upload → analyze → question → process → learn)
 
 ### SGA Frontend Pages (25+)
 `client/app/(main)/ferramentas/ativos/estoque/`:
@@ -510,10 +521,34 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `wiki/` - User guide with 14 sections (updated January 2026)
 
 ### SGA Components
-**NEXO AI (4):** `NexoCopilot`, `NexoSearchBar`, `UnifiedSearch`, index
+**NEXO AI (5):** `NexoCopilot`, `NexoSearchBar`, `UnifiedSearch`, `SmartImportNexoPanel`, index
 **Mobile/PWA (3):** `MobileScanner`, `MobileChecklist`, `ConfirmationButton`
 **Smart Import (7):** `SmartUploadZone`, `SmartPreview`, `NFPreview`, `SpreadsheetPreview`, `TextPreview`, `PendingEntriesList`, index
 **Legacy Tabs (4):** `EntradaNFTab`, `EntradaImagemTab`, `EntradaSAPTab`, `EntradaManualTab` (deprecated, kept for reference)
+
+### NEXO Intelligent Import (January 2026)
+TRUE Agentic AI-First import with ReAct pattern. NEXO guides the user through the import flow intelligently.
+
+**Philosophy**: OBSERVE → THINK → ASK → LEARN → ACT
+1. **OBSERVE**: Analyze file structure (multi-sheet XLSX, column headers, data patterns)
+2. **THINK**: Explicit reasoning about column mappings, generate confidence scores
+3. **ASK**: Request clarification when uncertain (Human-in-the-Loop questions)
+4. **LEARN**: Store successful patterns for future imports (AgentCore Memory)
+5. **ACT**: Execute import with learned mappings
+
+**Backend Actions (5 new)**:
+- `nexo_analyze_file` - Multi-sheet analysis with reasoning trace
+- `nexo_get_questions` - Generate clarification questions
+- `nexo_submit_answers` - Process user answers
+- `nexo_learn_from_import` - Store patterns for future
+- `nexo_prepare_processing` - Final configuration before import
+
+**Frontend Flow**:
+```
+Upload → SmartImportNexoPanel → [NEXO analyzing...] →
+  → Show reasoning trace → [Questions if uncertain] →
+  → User answers → Prepare → Execute → Learn
+```
 
 ### SGA Terraform Resources
 `terraform/main/`:
@@ -672,3 +707,20 @@ export const invokeAgentCore = academyService.invoke;
 - `COGNITO_USER_POOL_ID` → `us-east-2_lkBXr4kjy` (faiston-users-prod)
 - `COGNITO_CLIENT_ID` → `7ovjm09dr94e52mpejvbu9v1cg` (faiston-client-prod)
 All 3 AgentCore deploy workflows now use `${{ secrets.COGNITO_USER_POOL_ID }}` and `${{ secrets.COGNITO_CLIENT_ID }}`
+
+### 11. AgentCore Control API SigV4 Signing (January 2026)
+**Issue**: Raw SigV4 signing with `botocore.auth.SigV4Auth` failed with "Unable to determine service/operation name to be authorized"
+**Cause**: The Bedrock AgentCore Control API requires specific service name and API version for signing that isn't simply the subdomain
+**Fix**: Use boto3's native client instead of raw HTTP + SigV4:
+```python
+# WRONG - Raw SigV4 signing fails
+from botocore.auth import SigV4Auth
+SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(request)
+
+# CORRECT - boto3 client handles signing automatically
+client = boto3.client("bedrock-agentcore-control", region_name=REGION)
+response = client.list_agent_runtimes()
+current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
+client.update_agent_runtime(**update_params)
+```
+**Affected workflows**: All 3 AgentCore deploy workflows (academy, inventory, portal)

@@ -77,9 +77,9 @@ aws sts get-caller-identity --profile faiston-aio
 |----------|---------|---------|
 | `terraform.yml` | Push to `terraform/**` | Plan on PR, Apply on merge |
 | `deploy-frontend.yml` | Push to `client/**` | Build & deploy to S3/CloudFront |
-| `deploy-agentcore-academy.yml` | Push/Manual | Deploy Academy agents (JWT Auth via secrets) |
-| `deploy-agentcore-inventory.yml` | Push/Manual | Deploy SGA agents (JWT Auth via secrets) |
-| `deploy-agentcore-portal.yml` | Push/Manual | Deploy Portal NEXO agents (JWT Auth via secrets) |
+| `deploy-agentcore-academy.yml` | Push/Manual | Deploy Academy agents (JWT Auth via secrets + boto3 control client) |
+| `deploy-agentcore-inventory.yml` | Push/Manual | Deploy SGA agents (JWT Auth via secrets + boto3 control client) |
+| `deploy-agentcore-portal.yml` | Push/Manual | Deploy Portal NEXO agents (JWT Auth via secrets + boto3 control client) |
 | `deploy-sga-postgres-lambda.yml` | Push/Manual | Deploy PostgreSQL MCP tools Lambda |
 | `migrate-sga-schema.yml` | Manual | Apply PostgreSQL schema via Lambda bridge |
 
@@ -234,7 +234,7 @@ lpd-faiston-allinone/
 │   │   └── ativos/        # 6 SGA contexts
 │   ├── hooks/             # Custom hooks
 │   │   ├── academy/      # 12 Academy-specific hooks
-│   │   └── ativos/       # 17 SGA-specific hooks
+│   │   └── ativos/       # 16 SGA-specific hooks
 │   ├── lib/               # Utilities
 │   │   ├── academy/      # Academy types, constants
 │   │   └── ativos/       # SGA types, constants
@@ -290,6 +290,7 @@ New types: `types/zoom-videosdk.d.ts`
 **Pattern**: All Academy hooks use object-based parameters (not positional)
 **TypeScript Fixes**: Discriminated union types in `portalAgentcore.ts` for `DailySummarySectionData`
 **Service Factory (January 2026)**: Created `agentcoreBase.ts` - unified retry/session/SSE across all 3 services (~450 lines deduped)
+**SigV4 Fix (January 2026)**: All 3 AgentCore deploy workflows use boto3 client instead of raw SigV4 signing for JWT Authorizer configuration
 
 ### Key Adaptations (Hive → Faiston)
 - "Sasha" → "NEXO" (AI tutor)
@@ -314,6 +315,7 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 - ✅ Unified Entry: Multi-source tabs (NF, Image OCR, SAP Export, Manual)
 - ✅ **Estoque Page Refactor (January 2026)**: Unified navigation into single ModuleNavigation (8 items), removed KPIs (already in Dashboard)
 - ✅ **Smart Import**: Universal file importer - auto-detects XML/PDF/CSV/XLSX/JPG/PNG/TXT
+- ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
   - Aurora Serverless v2 cluster with RDS Proxy (connection pooling)
   - 13 tables, 110 indexes, 8 materialized views
@@ -325,10 +327,11 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
 ### SGA Key Components
 | Category | Components |
 |----------|------------|
-| **Backend Agents (10)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, base |
+| **Backend Agents (11)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, **nexo_import**, base |
+| **Backend Tools (5)** | dynamodb_client, s3_client, nf_parser, hil_workflow, **sheet_analyzer** |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
-| **Hooks (16)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, **useSmartImporter** |
-| **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch |
+| **Hooks (17)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, useSmartImporter, **useSmartImportNexo** |
+| **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch, **SmartImportNexoPanel** |
 | **Mobile/PWA** | MobileScanner, MobileChecklist, ConfirmationButton |
 | **Smart Import** | SmartUploadZone, SmartPreview, NFPreview, SpreadsheetPreview, TextPreview, PendingEntriesList |
 
