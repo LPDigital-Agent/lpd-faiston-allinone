@@ -1,9 +1,12 @@
 /**
  * NEXO Import Explanations - Contextual help content for Smart Import
  *
+ * IMPORTANT: All text must be in FIRST PERSON voice.
+ * NEXO speaks directly to the user ("Eu encontrei..." not "O NEXO encontrou...")
+ *
  * Each section has:
- * - summary: Always visible (1-2 sentences)
- * - details: Expandable explanation (optional)
+ * - summary: Always visible (1-2 sentences) - FIRST PERSON
+ * - details: Expandable explanation (optional) - FIRST PERSON
  * - action: Recommended next step (optional)
  *
  * Language: Brazilian Portuguese (pt-BR)
@@ -31,15 +34,15 @@ export interface DynamicExplanation {
 // =============================================================================
 
 export const REASONING_TRACE_EXPLANATION: NexoExplanation = {
-  summary: "Aqui você vê como o NEXO está pensando. Cada etapa mostra raciocínio, ações e observações.",
-  details: `O NEXO usa o padrão ReAct (Reason + Act):
+  summary: "Aqui você vê como estou pensando. Cada etapa mostra meu raciocínio, ações e observações.",
+  details: `Uso o padrão ReAct (Reason + Act) para ser transparente:
 
-• Pensamento (roxo): NEXO reflete sobre o que viu
-• Ação (ciano): NEXO executa uma ferramenta ou análise
-• Observação (verde): NEXO registra o que encontrou
+• Pensamento (roxo): Reflito sobre o que vi
+• Ação (ciano): Executo uma ferramenta ou análise
+• Observação (verde): Registro o que encontrei
 
-Este padrão garante transparência total - você entende cada decisão tomada.`,
-  action: "Acompanhe o progresso em tempo real.",
+Assim você entende cada decisão que tomo.`,
+  action: "Acompanhe meu progresso em tempo real.",
 };
 
 // =============================================================================
@@ -49,19 +52,19 @@ Este padrão garante transparência total - você entende cada decisão tomada.`
 export const SHEET_ANALYSIS_EXPLANATION: DynamicExplanation = {
   getSummary: (params) => {
     const count = params.sheetCount ?? 0;
-    if (count === 0) return "Nenhuma aba identificada no arquivo.";
-    if (count === 1) return "O NEXO identificou 1 aba e classificou pelo tipo de conteúdo.";
-    return `O NEXO identificou ${count} abas e classificou cada uma pelo tipo de conteúdo.`;
+    if (count === 0) return "Não identifiquei nenhuma aba no arquivo.";
+    if (count === 1) return "Identifiquei 1 aba e classifiquei pelo tipo de conteúdo.";
+    return `Identifiquei ${count} abas e classifiquei cada uma pelo tipo de conteúdo.`;
   },
-  details: `Cada aba é classificada por propósito:
+  details: `Classifico cada aba por propósito:
 
 • Itens: Materiais/produtos a importar (mais importante!)
 • Seriais: Números de série para cada item
 • Metadados: Informações do fornecedor/projeto
-• Resumo: Totais e estatísticas (geralmente ignoramos)
+• Resumo: Totais e estatísticas (geralmente ignoro)
 
-O percentual indica quão certo o NEXO está. Abaixo de 70% pode precisar confirmação.`,
-  action: "Verifique se a aba principal está correta.",
+O percentual indica minha certeza. Abaixo de 70% pode precisar sua confirmação.`,
+  action: "Verifique se identifiquei a aba principal corretamente.",
 };
 
 // =============================================================================
@@ -75,17 +78,17 @@ export const COLUMN_MAPPINGS_EXPLANATION: DynamicExplanation = {
     const medium = params.medium ?? 0;
     const low = params.low ?? 0;
 
-    if (total === 0) return "Nenhuma coluna mapeada ainda.";
+    if (total === 0) return "Ainda não mapeei nenhuma coluna.";
 
-    return `O NEXO mapeou ${total} colunas: ${high} alta, ${medium} média, ${low} baixa confiança.`;
+    return `Mapeei ${total} colunas: ${high} com alta, ${medium} com média, ${low} com baixa confiança.`;
   },
-  details: `Níveis de confiança explicados:
+  details: `Meus níveis de confiança significam:
 
-• Alta (verde, 80%+): Mapeamento praticamente certo
-• Média (amarelo, 50-79%): Provável correto, mas vale verificar
-• Baixa (vermelho, <50%): Incerto, você deve confirmar
+• Alta (verde, 80%+): Tenho quase certeza do mapeamento
+• Média (amarelo, 50-79%): Provavelmente correto, mas vale você verificar
+• Baixa (vermelho, <50%): Estou incerto, preciso da sua confirmação
 
-Mapeamentos errados causam dados no campo errado! Exemplo: se "EQUIPAMENTO" mapear para "quantity" em vez de "part_number", os itens não serão identificados corretamente.`,
+Se eu errar um mapeamento, os dados vão para o campo errado! Ex: "EQUIPAMENTO" mapeado para "quantity" em vez de "part_number" impede a identificação dos itens.`,
   action: "Revise os mapeamentos de baixa confiança nas perguntas abaixo.",
 };
 
@@ -94,26 +97,26 @@ Mapeamentos errados causam dados no campo errado! Exemplo: se "EQUIPAMENTO" mape
 // =============================================================================
 
 export const QUESTIONS_CRITICAL_EXPLANATION: NexoExplanation = {
-  summary: "Perguntas essenciais - o NEXO não conseguiu inferir com certeza suficiente.",
-  details: `Tipos de perguntas:
+  summary: "Preciso da sua ajuda nestas perguntas - não consegui inferir com certeza suficiente.",
+  details: `Tipos de perguntas que faço:
 
-• Obrigatórias (vermelho): Sem resposta, importação pode falhar
-• Importantes (laranja): Afetam qualidade, mas temos padrão
-• Opcionais (cinza): Refinamentos que podem ser pulados
+• Obrigatórias (vermelho): Sem sua resposta, a importação pode falhar
+• Importantes (laranja): Afetam a qualidade, mas tenho um padrão
+• Opcionais (cinza): Refinamentos que você pode pular
 
-Se você selecionar "Outros", pode digitar um valor personalizado.`,
-  action: "Responda pelo menos as obrigatórias.",
+Se selecionar "Outros", você pode digitar um valor personalizado.`,
+  action: "Responda pelo menos as obrigatórias para eu continuar.",
 };
 
 export const QUESTIONS_OPTIONAL_EXPLANATION: NexoExplanation = {
-  summary: "Respostas opcionais refinam a importação. Se pular, usaremos valores padrão.",
-  details: `Estas perguntas são baseadas em:
+  summary: "Estas respostas refinam a importação. Se pular, usarei valores padrão.",
+  details: `Baseei estas perguntas em:
 
-• Padrões históricos de importações similares
-• Campos detectados no arquivo atual
+• Padrões que aprendi em importações similares
+• Campos que detectei no arquivo atual
 • Regras de negócio do SGA
 
-Respondê-las melhora a precisão e reduz correções manuais depois.`,
+Respondê-las me ajuda a ser mais preciso e reduz correções manuais depois.`,
   action: "Preencha se tiver tempo - não são obrigatórias.",
 };
 
@@ -124,28 +127,28 @@ Respondê-las melhora a precisão e reduz correções manuais depois.`,
 export const PRIOR_KNOWLEDGE_WITH_HISTORY: DynamicExplanation = {
   getSummary: (params) => {
     const count = params.episodeCount ?? 0;
-    return `O NEXO encontrou ${count} importaç${count === 1 ? 'ão anterior similar' : 'ões anteriores similares'}.`;
+    return `Encontrei ${count} importaç${count === 1 ? 'ão anterior similar' : 'ões anteriores similares'} na minha memória!`;
   },
-  details: `Cada importação ensina o NEXO:
+  details: `Aprendo com cada importação:
 
 • Quais colunas contêm Part Number, Quantidade, etc.
-• Qual projeto associado a qual tipo de arquivo
-• Quais mapeamentos você corrige frequentemente
+• Qual projeto está associado a cada tipo de arquivo
+• Quais mapeamentos você costuma corrigir
 
-Importações bem-sucedidas aumentam a confiança do NEXO em decisões futuras.`,
-  action: "Quanto mais você usar, mais inteligente ele fica!",
+Importações bem-sucedidas aumentam minha confiança em decisões futuras.`,
+  action: "Quanto mais você me usar, mais inteligente eu fico!",
 };
 
 export const PRIOR_KNOWLEDGE_FIRST_TIME: NexoExplanation = {
-  summary: "Primeira vez com este tipo de arquivo. Suas respostas ajudarão importações futuras.",
-  details: `O NEXO está aprendendo com você:
+  summary: "É minha primeira vez com este tipo de arquivo. Suas respostas vão me ajudar no futuro!",
+  details: `Estou aprendendo com você:
 
-• Esta importação será memorizada
+• Vou memorizar esta importação
 • Próximas importações similares serão mais rápidas
-• Seus ajustes refinam o conhecimento do sistema
+• Seus ajustes refinam meu conhecimento
 
-É normal ter mais perguntas na primeira vez.`,
-  action: "Responda com atenção - você está treinando o NEXO!",
+É normal eu fazer mais perguntas na primeira vez.`,
+  action: "Responda com atenção - você está me treinando!",
 };
 
 // =============================================================================
@@ -162,16 +165,16 @@ export const FILE_INFO_EXPLANATION: DynamicExplanation = {
       ai_extraction: "IA generativa",
     };
     const name = strategyNames[strategy as string] ?? strategy;
-    return `O NEXO detectou o tipo do arquivo e selecionou a estratégia: ${name}.`;
+    return `Detectei o tipo do arquivo e escolhi a melhor estratégia: ${name}.`;
   },
-  details: `Estratégias de processamento:
+  details: `Minhas estratégias de processamento:
 
-• direct_parse: Arquivos estruturados (XML, CSV) - mais rápido
-• vision_ocr: Imagens e PDFs escaneados - usa IA visual
-• multi_sheet: Excel com várias abas - analisa estrutura
-• ai_extraction: Texto livre - usa IA generativa para extrair
+• direct_parse: Para arquivos estruturados (XML, CSV) - mais rápido
+• vision_ocr: Para imagens e PDFs escaneados - uso IA visual
+• multi_sheet: Para Excel com várias abas - analiso a estrutura
+• ai_extraction: Para texto livre - uso IA generativa para extrair
 
-A estratégia correta garante máxima precisão na extração.`,
+Escolhi a estratégia que garante máxima precisão para este arquivo.`,
 };
 
 // =============================================================================
@@ -180,24 +183,24 @@ A estratégia correta garante máxima precisão na extração.`,
 
 export const LOADING_EXPLANATIONS: Record<string, NexoExplanation> = {
   uploading: {
-    summary: "Enviando arquivo para processamento seguro...",
-    details: "O arquivo é armazenado de forma segura no S3 com URLs assinadas temporárias.",
+    summary: "Estou recebendo seu arquivo e armazenando de forma segura...",
+    details: "Uso URLs assinadas temporárias para garantir a segurança dos seus dados.",
   },
   recalling: {
-    summary: "Consultando memória para encontrar importações similares...",
-    details: "O NEXO está buscando episódios passados que possam ajudar nesta importação.",
+    summary: "Consultando minha memória para encontrar importações similares...",
+    details: "Estou buscando episódios passados que possam me ajudar nesta importação.",
   },
   analyzing: {
-    summary: "Analisando estrutura e detectando padrões...",
-    details: "Identificando abas, colunas e tipos de dados automaticamente.",
+    summary: "Analisando a estrutura e detectando padrões...",
+    details: "Estou identificando abas, colunas e tipos de dados automaticamente.",
   },
   mapping: {
     summary: "Mapeando colunas para campos do sistema...",
-    details: "Comparando nomes de colunas com campos conhecidos do SGA.",
+    details: "Estou comparando nomes de colunas com campos conhecidos do SGA.",
   },
   generating: {
-    summary: "Gerando perguntas inteligentes...",
-    details: "Criando perguntas baseadas em ambiguidades detectadas e histórico.",
+    summary: "Gerando perguntas inteligentes para você...",
+    details: "Estou criando perguntas baseadas em ambiguidades que detectei e no histórico.",
   },
 };
 
@@ -206,15 +209,15 @@ export const LOADING_EXPLANATIONS: Record<string, NexoExplanation> = {
 // =============================================================================
 
 export const ERROR_EXPLANATION: NexoExplanation = {
-  summary: "Algo deu errado. Veja abaixo o que pode ter causado.",
-  details: `Soluções comuns:
+  summary: "Ops! Encontrei um problema. Veja abaixo o que pode ter causado.",
+  details: `Soluções comuns para me ajudar:
 
 1. Arquivo muito grande: Máximo 50MB
 2. Formato não suportado: Use XML, PDF, CSV, XLSX, JPG, PNG, TXT
 3. Arquivo corrompido: Reexporte do sistema de origem
-4. Timeout: Arquivo muito complexo - simplifique ou divida
+4. Timeout: Arquivo muito complexo - tente simplificar ou dividir
 5. Erro de rede: Verifique sua conexão e tente novamente`,
-  action: "Corrija o problema e tente novamente.",
+  action: "Corrija o problema e vamos tentar de novo!",
 };
 
 // =============================================================================
@@ -222,12 +225,12 @@ export const ERROR_EXPLANATION: NexoExplanation = {
 // =============================================================================
 
 export const SUCCESS_EXPLANATION: NexoExplanation = {
-  summary: "Análise completa! Revise os dados e confirme a importação.",
-  details: `O NEXO analisou com sucesso:
+  summary: "Análise completa! Revise os dados e me diga se está tudo certo.",
+  details: `Consegui analisar com sucesso:
 
 • Estrutura do arquivo detectada
 • Colunas mapeadas para campos do sistema
-• Perguntas geradas para ambiguidades
+• Perguntas geradas para esclarecer dúvidas
 
 Agora é sua vez de revisar e ajustar se necessário.`,
   action: "Revise e clique em 'Confirmar Importação'.",
@@ -238,9 +241,9 @@ Agora é sua vez de revisar e ajustar se necessário.`,
 // =============================================================================
 
 export const CONFIDENCE_BADGE_EXPLANATIONS: Record<string, string> = {
-  high: "Confiança alta (80%+): Mapeamento muito provável correto. NEXO está seguro.",
-  medium: "Confiança média (50-79%): Provável correto, mas vale verificar.",
-  low: "Confiança baixa (<50%): Incerto. Por favor, confirme manualmente.",
+  high: "Confiança alta (80%+): Tenho quase certeza que este mapeamento está correto.",
+  medium: "Confiança média (50-79%): Provavelmente correto, mas vale você verificar.",
+  low: "Confiança baixa (<50%): Estou incerto. Por favor, confirme manualmente.",
 };
 
 // =============================================================================
