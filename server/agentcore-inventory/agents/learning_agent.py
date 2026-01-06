@@ -257,7 +257,8 @@ class LearningAgent(BaseInventoryAgent):
             sheets_info=[
                 {
                     "name": s.get("name"),
-                    "purpose": s.get("detected_purpose"),
+                    # Support both field names: 'purpose' (new) and 'detected_purpose' (legacy)
+                    "purpose": s.get("purpose", s.get("detected_purpose")),
                     "column_count": s.get("column_count"),
                 }
                 for s in file_analysis.get("sheets", [])
@@ -605,7 +606,8 @@ class LearningAgent(BaseInventoryAgent):
         sig_parts = []
 
         for sheet in file_analysis.get("sheets", []):
-            sheet_sig = f"{sheet.get('detected_purpose', 'unknown')}"
+            # Support both field names: 'purpose' (new) and 'detected_purpose' (legacy)
+            sheet_sig = f"{sheet.get('purpose', sheet.get('detected_purpose', 'unknown'))}"
             columns = sheet.get("columns", [])
 
             # Add column names (sorted for consistency)

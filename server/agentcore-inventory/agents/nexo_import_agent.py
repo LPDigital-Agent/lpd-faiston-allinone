@@ -483,7 +483,9 @@ class NexoImportAgent(BaseInventoryAgent):
 """
         for sheet in analysis.get("sheets", []):
             prompt += f"\n### {sheet['name']} ({sheet['row_count']} linhas)\n"
-            prompt += f"Propósito detectado: {sheet['detected_purpose']}\n"
+            # Support both field names: 'purpose' (new) and 'detected_purpose' (legacy)
+            sheet_purpose = sheet.get('purpose', sheet.get('detected_purpose', 'unknown'))
+            prompt += f"Propósito detectado: {sheet_purpose}\n"
             prompt += "Colunas:\n"
 
             for col in sheet.get("columns", [])[:10]:  # First 10 columns
@@ -702,7 +704,7 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
                 "sheets": [
                     {
                         "name": s.get("name", ""),
-                        "purpose": s.get("detected_purpose", ""),
+                        "purpose": s.get("purpose", s.get("detected_purpose", "")),
                         "column_count": s.get("column_count", 0),
                         "row_count": s.get("row_count", 0),
                     }
