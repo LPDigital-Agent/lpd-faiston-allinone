@@ -169,16 +169,18 @@ class BaseInventoryAgent:
         # Lazy import to reduce cold start time
         from google.genai import types
         from google.adk.runners import Runner
+        from google.adk.sessions import InMemorySessionService
 
         log_agent_action(self.name, "invoke", status="started")
 
         try:
-            # Create runner for this invocation
+            # Create session service and runner
+            # Note: session_id and user_id are passed to run_async(), not Runner()
+            session_service = InMemorySessionService()
             runner = Runner(
                 agent=self.agent,
                 app_name=APP_NAME,
-                session_id=session_id,
-                user_id=user_id,
+                session_service=session_service,
             )
 
             # Build content
