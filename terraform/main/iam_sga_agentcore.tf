@@ -29,9 +29,9 @@ data "aws_iam_policy_document" "sga_agentcore_assume_role" {
     principals {
       type = "Service"
       identifiers = [
-        "bedrock.amazonaws.com",
-        # AgentCore Runtime uses a specific service principal for role assumption
-        "agentcore.bedrock.amazonaws.com"
+        # AgentCore Runtime uses this specific service principal
+        # Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html
+        "bedrock-agentcore.amazonaws.com"
       ]
     }
     actions = ["sts:AssumeRole"]
@@ -39,6 +39,11 @@ data "aws_iam_policy_document" "sga_agentcore_assume_role" {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
       values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"]
     }
   }
 }
