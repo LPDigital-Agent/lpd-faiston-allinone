@@ -10,7 +10,7 @@
 // This component makes NEXO's thinking visible and interactive.
 // =============================================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Brain,
@@ -482,10 +482,13 @@ export function SmartImportNexoPanel({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Start analysis when file changes
-  useMemo(() => {
+  // Start analysis when file changes (CRITICAL: useEffect for side effects, NOT useMemo)
+  useEffect(() => {
     if (file && state.stage === 'idle') {
-      startAnalysis(file).catch(console.error);
+      console.log('[NEXO] AI-First: Starting intelligent analysis for:', file.name);
+      startAnalysis(file).catch(err => {
+        console.error('[NEXO] Analysis failed:', err);
+      });
     }
   }, [file, state.stage, startAnalysis]);
 

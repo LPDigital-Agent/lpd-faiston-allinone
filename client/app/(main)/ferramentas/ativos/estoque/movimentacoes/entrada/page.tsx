@@ -19,6 +19,8 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import {
   ArrowLeft,
   Upload,
@@ -28,6 +30,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Briefcase,
+  Brain,
 } from 'lucide-react';
 import {
   useAssetManagement,
@@ -44,6 +47,9 @@ import {
   PendingEntriesList,
 } from './components';
 
+// NEXO Intelligent Import Components
+import { SmartImportNexoPanel } from '@/components/ferramentas/ativos/estoque/nexo';
+
 // =============================================================================
 // Tab Types
 // =============================================================================
@@ -56,8 +62,11 @@ type EntradaTab = 'smart' | 'manual';
 
 export default function EntradaPage() {
   const [activeTab, setActiveTab] = useState<EntradaTab>('smart');
+  // File stored for NEXO intelligent analysis flow
+  const [nexoFile, setNexoFile] = useState<File | null>(null);
 
   // Smart Importer Hook (NEW - unified for all file types)
+  // Includes NEXO Intelligent Import toggle for agentic AI-first flow
   const {
     detectedType,
     isProcessing: smartProcessing,
@@ -70,6 +79,9 @@ export default function EntradaPage() {
     pendingEntries,
     pendingEntriesLoading,
     assignProject,
+    // NEXO toggle - SmartImportNexoPanel manages its own state via useSmartImportNexo
+    useNexoFlow,
+    setUseNexoFlow,
   } = useSmartImporter();
 
   // Asset Management Hook for master data
@@ -114,8 +126,32 @@ export default function EntradaPage() {
 
   // Handle Smart Upload (unified for ALL file types)
   // Project and Location are optional - can be set in preview after analysis
+  // When NEXO flow is enabled for spreadsheets, uses intelligent analysis with questions
   const handleSmartUpload = async (file: File, projectId: string | null, locationId: string | null) => {
-    await uploadAndProcess(file, projectId, locationId);
+    const isSpreadsheet = file.name.endsWith('.xlsx') || file.name.endsWith('.csv');
+
+    // AI-First: NEXO ALWAYS analyzes spreadsheets autonomously (no toggle needed)
+    if (isSpreadsheet) {
+      console.log('[EntradaPage] AI-First: NEXO autonomous analysis for:', file.name);
+      // Store file - SmartImportNexoPanel will handle analysis internally
+      setNexoFile(file);
+    } else {
+      // NF processing (XML/PDF/Image) continues to use standard flow
+      await uploadAndProcess(file, projectId, locationId);
+    }
+  };
+
+  // Handle NEXO analysis complete
+  const handleNexoComplete = (sessionId: string) => {
+    console.log('[EntradaPage] NEXO analysis complete, session:', sessionId);
+    setNexoFile(null);
+    // After NEXO completes, the hook should update with results
+  };
+
+  // Handle NEXO cancel
+  const handleNexoCancel = () => {
+    console.log('[EntradaPage] NEXO analysis cancelled');
+    setNexoFile(null);
   };
 
   // Handle Smart Confirm
@@ -170,8 +206,35 @@ export default function EntradaPage() {
         </TabsList>
 
         {/* Smart Upload Tab Content */}
-        <TabsContent value="smart" className="mt-6">
-          {!smartPreview ? (
+        <TabsContent value="smart" className="mt-6 space-y-4">
+          {/* NEXO Intelligent Import Toggle */}
+          <div className="flex items-center justify-between p-3 bg-gradient-to-r from-purple-500/10 to-cyan-500/10 rounded-lg border border-purple-500/20">
+            <div className="flex items-center gap-3">
+              <Brain className="w-5 h-5 text-purple-400" />
+              <div>
+                <Label htmlFor="nexo-toggle" className="text-sm font-medium text-text-primary cursor-pointer">
+                  Importação Inteligente com NEXO
+                </Label>
+                <p className="text-xs text-text-muted">
+                  NEXO analisa e faz perguntas para mapear colunas automaticamente
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="nexo-toggle"
+              checked={useNexoFlow}
+              onCheckedChange={setUseNexoFlow}
+            />
+          </div>
+
+          {/* NEXO Analysis Panel - shown when NEXO is analyzing a file */}
+          {nexoFile ? (
+            <SmartImportNexoPanel
+              file={nexoFile}
+              onComplete={handleNexoComplete}
+              onCancel={handleNexoCancel}
+            />
+          ) : !smartPreview ? (
             <SmartUploadZone
               onFileSelect={handleSmartUpload}
               isProcessing={smartProcessing}
