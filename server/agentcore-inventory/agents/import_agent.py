@@ -23,8 +23,8 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 import json
 
-from .base_agent import BaseInventoryAgent, ConfidenceScore
-from .utils import (
+from agents.base_agent import BaseInventoryAgent, ConfidenceScore
+from agents.utils import (
     EntityPrefix,
     MovementType,
     HILTaskType,
@@ -139,7 +139,7 @@ class ImportAgent(BaseInventoryAgent):
     def _ensure_tools(self):
         """Lazy-load tools to minimize cold start time."""
         if self.csv_parser is None:
-            from ..tools.csv_parser import (
+            from tools.csv_parser import (
                 parse_import_file,
                 preview_to_dict,
                 extract_all_rows,
@@ -151,7 +151,7 @@ class ImportAgent(BaseInventoryAgent):
             }
 
         if self.db is None:
-            from ..tools.dynamodb_client import SGADynamoDBClient
+            from tools.dynamodb_client import SGADynamoDBClient
             self.db = SGADynamoDBClient()
 
     # =========================================================================

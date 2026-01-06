@@ -16,7 +16,7 @@ from typing import List, Dict, Any, Optional
 from enum import Enum
 import os
 
-from .utils import (
+from agents.utils import (
     APP_NAME,
     MODEL_GEMINI,
     RiskLevel,

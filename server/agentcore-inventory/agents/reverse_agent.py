@@ -157,7 +157,7 @@ class ReverseAgent(BaseInventoryAgent):
     def _ensure_tools(self):
         """Lazy-load tools."""
         if self.db is None:
-            from ..tools.dynamodb_client import SGADynamoDBClient
+            from tools.dynamodb_client import SGADynamoDBClient
             self.db = SGADynamoDBClient()
 
     # =========================================================================
@@ -578,7 +578,7 @@ class ReverseAgent(BaseInventoryAgent):
         operator_id: str,
     ) -> str:
         """Create HIL task for discard approval."""
-        from ..tools.hil_workflow import HILWorkflowManager
+        from tools.hil_workflow import HILWorkflowManager
 
         hil = HILWorkflowManager()
 

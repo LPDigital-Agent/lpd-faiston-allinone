@@ -183,7 +183,7 @@ class ExpeditionAgent(BaseInventoryAgent):
     def _ensure_tools(self):
         """Lazy-load tools to minimize cold start time."""
         if self.db is None:
-            from ..tools.dynamodb_client import SGADynamoDBClient
+            from tools.dynamodb_client import SGADynamoDBClient
             self.db = SGADynamoDBClient()
 
     # =========================================================================
