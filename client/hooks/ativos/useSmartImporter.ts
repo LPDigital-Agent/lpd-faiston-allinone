@@ -176,12 +176,28 @@ export function useSmartImporter(): UseSmartImporterReturn {
       // =======================================================================
       setProgress({ stage: 'complete', percent: 100, message: 'Processamento concluído!' });
 
-      const previewResult = smartResult.data.preview;
+      // DEBUG: Log the actual response to diagnose modal issue
+      console.log('[SmartImporter] Raw smartResult:', JSON.stringify(smartResult, null, 2));
+      console.log('[SmartImporter] smartResult.data:', smartResult.data);
+      console.log('[SmartImporter] smartResult.data.preview:', smartResult.data?.preview);
+      console.log('[SmartImporter] smartResult.data.source_type:', smartResult.data?.source_type);
+
+      // Handle both OLD format (no preview wrapper) and NEW format (with preview wrapper)
+      // OLD: { source_type, items, ... } directly
+      // NEW: { success, preview: { source_type, items, ... } }
+      const responseData = smartResult.data;
+      const previewResult = responseData?.preview ||
+        (responseData?.source_type ? responseData as unknown as SmartImportPreview : null);
+
+      console.log('[SmartImporter] Resolved previewResult:', previewResult);
+
       setPreview(previewResult);
       setResponse(smartResult.data);
 
       // Update detected type from backend (more reliable)
-      setDetectedType(smartResult.data.detected_type);
+      const detectedType = smartResult.data?.detected_type ||
+        (previewResult as Record<string, unknown>)?.detected_file_type as SmartFileType | undefined;
+      setDetectedType(detectedType || null);
 
       return previewResult;
     } catch (err) {
