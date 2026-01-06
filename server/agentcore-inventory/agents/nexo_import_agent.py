@@ -1004,18 +1004,24 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
             Complete analysis with questions if needed
         """
         # Create session
+        print(f"[NexoImportAgent] Creating session for: {filename}")
         session = self.create_session(filename, s3_key)
+        print(f"[NexoImportAgent] Session created: {session.session_id}")
 
         # OBSERVE: Analyze file
+        print(f"[NexoImportAgent] OBSERVE phase - analyzing file...")
         analysis_result = await self.analyze_file(session.session_id, file_content)
+        print(f"[NexoImportAgent] OBSERVE result: success={analysis_result.get('success')}, error={analysis_result.get('error')}")
         if not analysis_result.get("success"):
             return analysis_result
 
         # THINK: Reason about mappings
+        print(f"[NexoImportAgent] THINK phase - reasoning about mappings...")
         reasoning_result = await self.reason_about_mappings(
             session.session_id,
             prior_knowledge,
         )
+        print(f"[NexoImportAgent] THINK result: success={reasoning_result.get('success')}, error={reasoning_result.get('error')}")
         if not reasoning_result.get("success"):
             return reasoning_result
 

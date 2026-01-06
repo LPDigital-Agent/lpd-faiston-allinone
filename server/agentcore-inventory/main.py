@@ -2500,12 +2500,17 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
     from agents.nexo_import_agent import NexoImportAgent
 
     agent = NexoImportAgent()
+    print(f"[nexo_analyze_file] Starting analysis for: {filename}, s3_key: {s3_key}")
+    print(f"[nexo_analyze_file] File data size: {len(file_data) if file_data else 0} bytes")
+
     result = await agent.analyze_file_intelligently(
         filename=filename,
         s3_key=s3_key,
         file_content=file_data,
         prior_knowledge=prior_knowledge,
     )
+
+    print(f"[nexo_analyze_file] Agent raw result: {result}")
 
     # Transform agent response to match frontend expected format (NexoAnalyzeFileResponse)
     # Agent returns: session_id, analysis, suggested_mappings, confidence, reasoning, questions
