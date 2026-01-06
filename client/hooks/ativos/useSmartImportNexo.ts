@@ -286,7 +286,9 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       });
 
       if (!analysisResult.data?.success) {
-        throw new Error(analysisResult.data?.import_session_id || 'Falha na análise');
+        const errorMsg = analysisResult.data?.error || 'Falha na análise (sem detalhes)';
+        console.error('[NEXO] Analysis failed with error:', errorMsg, analysisResult.data);
+        throw new Error(errorMsg);
       }
 
       const data = analysisResult.data as NexoAnalyzeFileResponse;

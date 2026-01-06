@@ -1096,6 +1096,7 @@ export interface NexoReasoningStep {
  */
 export interface NexoAnalyzeFileResponse {
   success: boolean;
+  error?: string;  // Error message when success is false
   import_session_id: string;
   filename: string;
   detected_file_type: string;
