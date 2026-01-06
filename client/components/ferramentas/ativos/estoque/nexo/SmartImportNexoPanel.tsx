@@ -299,10 +299,37 @@ function QuestionPanel({
   onSkip: () => void;
   isSubmitting: boolean;
 }) {
+  // State for "Outros" text input per question
+  const [otherTexts, setOtherTexts] = useState<Record<string, string>>({});
+
   const criticalQuestions = questions.filter(q => q.importance === 'critical');
   const optionalQuestions = questions.filter(q => q.importance !== 'critical');
 
-  const allCriticalAnswered = criticalQuestions.every(q => answers[q.id]);
+  // Check if critical questions are answered (including "Outros" with text)
+  const allCriticalAnswered = criticalQuestions.every(q => {
+    const answer = answers[q.id];
+    if (answer === '__other__') {
+      // "Outros" requires text to be filled
+      return otherTexts[q.id]?.trim().length > 0;
+    }
+    return !!answer;
+  });
+
+  // Handler for "Outros" text changes
+  const handleOtherTextChange = (questionId: string, text: string) => {
+    setOtherTexts(prev => ({ ...prev, [questionId]: text }));
+  };
+
+  // Enhanced submit that replaces "__other__" answers with actual text
+  const handleSubmit = () => {
+    // Replace "__other__" answers with the actual text before submitting
+    Object.keys(answers).forEach(questionId => {
+      if (answers[questionId] === '__other__' && otherTexts[questionId]?.trim()) {
+        onAnswer(questionId, `Outros: ${otherTexts[questionId].trim()}`);
+      }
+    });
+    onSubmit();
+  };
 
   const getImportanceBadge = (importance: NexoQuestion['importance']) => {
     const styles: Record<NexoQuestion['importance'], string> = {
@@ -342,7 +369,9 @@ function QuestionPanel({
               key={question.id}
               question={question}
               answer={answers[question.id]}
+              otherText={otherTexts[question.id]}
               onAnswer={onAnswer}
+              onOtherTextChange={handleOtherTextChange}
               importanceBadge={getImportanceBadge(question.importance)}
             />
           ))}
@@ -360,7 +389,9 @@ function QuestionPanel({
               key={question.id}
               question={question}
               answer={answers[question.id]}
+              otherText={otherTexts[question.id]}
               onAnswer={onAnswer}
+              onOtherTextChange={handleOtherTextChange}
               importanceBadge={getImportanceBadge(question.importance)}
             />
           ))}
@@ -377,7 +408,7 @@ function QuestionPanel({
           Pular e usar padrões
         </Button>
         <Button
-          onClick={onSubmit}
+          onClick={handleSubmit}
           disabled={!allCriticalAnswered || isSubmitting}
           className="bg-gradient-to-r from-cyan-500 to-purple-500"
         >
@@ -399,19 +430,58 @@ function QuestionPanel({
 }
 
 /**
- * Single question item with radio options.
+ * Normalize option to always have value and label.
+ * Handles cases where Gemini returns strings instead of objects.
+ */
+function normalizeOption(
+  option: string | { value?: string; label?: string; description?: string },
+  index: number
+): { value: string; label: string; description?: string } {
+  // If option is a string, convert to object
+  if (typeof option === 'string') {
+    return {
+      value: option.toLowerCase().replace(/\s+/g, '_'),
+      label: option,
+    };
+  }
+
+  // If option is object but missing value/label, add fallbacks
+  const value = option.value || option.label || `option_${index}`;
+  const label = option.label || option.value || `Opção ${index + 1}`;
+
+  return {
+    value,
+    label,
+    description: option.description,
+  };
+}
+
+/**
+ * Single question item with radio options and "Outros" textarea.
  */
 function QuestionItem({
   question,
   answer,
+  otherText,
   onAnswer,
+  onOtherTextChange,
   importanceBadge,
 }: {
   question: NexoQuestion;
   answer?: string;
+  otherText?: string;
   onAnswer: (questionId: string, answer: string) => void;
+  onOtherTextChange?: (questionId: string, text: string) => void;
   importanceBadge: React.ReactNode;
 }) {
+  // Normalize all options to ensure they have value/label
+  const normalizedOptions = (question.options || []).map((opt, idx) =>
+    normalizeOption(opt as string | { value?: string; label?: string; description?: string }, idx)
+  );
+
+  // Check if "Outros" is selected
+  const isOtherSelected = answer === '__other__';
+
   return (
     <div className="p-4 bg-white/5 rounded-lg border border-white/10 space-y-3">
       <div className="flex items-start justify-between gap-4">
@@ -432,7 +502,8 @@ function QuestionItem({
         onValueChange={(value: string) => onAnswer(question.id, value)}
         className="space-y-2"
       >
-        {question.options.map((option) => (
+        {/* Render normalized options */}
+        {normalizedOptions.map((option) => (
           <div key={option.value} className="flex items-start space-x-3">
             <RadioGroupItem
               value={option.value}
@@ -450,7 +521,38 @@ function QuestionItem({
             </Label>
           </div>
         ))}
+
+        {/* "Outros" option - always present */}
+        <div className="flex items-start space-x-3">
+          <RadioGroupItem
+            value="__other__"
+            id={`${question.id}-__other__`}
+            className="mt-1"
+          />
+          <Label
+            htmlFor={`${question.id}-__other__`}
+            className="flex-1 cursor-pointer"
+          >
+            <span className="font-medium">Outros</span>
+            <p className="text-sm text-text-muted">Especificar uma resposta diferente</p>
+          </Label>
+        </div>
       </RadioGroup>
+
+      {/* Textarea for "Outros" - appears when selected */}
+      {isOtherSelected && (
+        <div className="mt-3 pl-7">
+          <textarea
+            value={otherText || ''}
+            onChange={(e) => onOtherTextChange?.(question.id, e.target.value)}
+            placeholder="Descreva sua resposta..."
+            className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-sm
+                       placeholder:text-text-muted focus:outline-none focus:ring-2
+                       focus:ring-purple-500/50 focus:border-purple-500/50 resize-none"
+            rows={3}
+          />
+        </div>
+      )}
     </div>
   );
 }
