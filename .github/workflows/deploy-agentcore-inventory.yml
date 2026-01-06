@@ -244,6 +244,9 @@ jobs:
           if update_response.status_code in [200, 202]:
               print("✅ JWT Authorizer configured successfully!")
               print(f"  Discovery URL: {discovery_url}")
+          elif update_response.status_code == 400 and "already exists" in update_response.text.lower():
+              print("✅ JWT Authorizer already configured - skipping")
+              print(f"  Discovery URL: {discovery_url}")
           else:
               print(f"ERROR: Failed to update runtime: {update_response.status_code}")
               print(update_response.text)
