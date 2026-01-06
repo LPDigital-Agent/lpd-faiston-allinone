@@ -9,8 +9,8 @@ agents:
     container_runtime: null
     source_path: .
     aws:
-      execution_role: null
-      execution_role_auto_create: true
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
       account: '377311924364'
       region: us-east-2
       ecr_repository: null
