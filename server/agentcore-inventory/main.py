@@ -2507,11 +2507,100 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
         prior_knowledge=prior_knowledge,
     )
 
-    # Add session tracking
-    result["user_id"] = user_id
-    result["session_id"] = session_id
+    # Transform agent response to match frontend expected format (NexoAnalyzeFileResponse)
+    # Agent returns: session_id, analysis, suggested_mappings, confidence, reasoning, questions
+    # Frontend expects: import_session_id, filename, detected_file_type, analysis, column_mappings,
+    #                   overall_confidence, questions, reasoning_trace
 
-    return result
+    if not result.get("success"):
+        return result
+
+    # Extract analysis data
+    analysis = result.get("analysis", {})
+    sheets = analysis.get("sheets", [])
+    suggested_mappings = result.get("suggested_mappings", {})
+    confidence = result.get("confidence", {})
+    reasoning = result.get("reasoning", [])
+    questions = result.get("questions", [])
+
+    # Detect file type from extension
+    file_ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "unknown"
+    file_type_map = {
+        "xlsx": "spreadsheet_xlsx",
+        "xls": "spreadsheet_xls",
+        "csv": "spreadsheet_csv",
+        "xml": "nf_xml",
+        "pdf": "nf_pdf",
+        "jpg": "nf_image",
+        "jpeg": "nf_image",
+        "png": "nf_image",
+    }
+    detected_file_type = file_type_map.get(file_ext, f"unknown_{file_ext}")
+
+    # Convert suggested_mappings dict to column_mappings array
+    column_mappings = []
+    for sheet in sheets:
+        for col in sheet.get("columns", []):
+            col_name = col.get("name", "")
+            mapping = suggested_mappings.get(col_name) or col.get("suggested_mapping")
+            mapping_confidence = col.get("mapping_confidence", 0.5)
+            column_mappings.append({
+                "source_column": col_name,
+                "target_field": mapping,
+                "confidence": mapping_confidence,
+                "sample_values": col.get("sample_values", []),
+                "needs_confirmation": mapping_confidence < 0.7,
+            })
+
+    # Extract overall confidence as number (agent returns dict with 'overall' key)
+    overall_confidence = 0.5
+    if isinstance(confidence, dict):
+        overall_confidence = confidence.get("overall", 0.5)
+    elif isinstance(confidence, (int, float)):
+        overall_confidence = float(confidence)
+
+    # Convert reasoning to reasoning_trace format
+    reasoning_trace = [
+        {
+            "step": r.get("type", "observation"),
+            "content": r.get("content", ""),
+            "timestamp": r.get("timestamp"),
+        }
+        for r in reasoning
+    ]
+
+    # Format questions
+    formatted_questions = [
+        {
+            "id": q.get("id", f"Q-{i}"),
+            "question": q.get("question", ""),
+            "context": q.get("context", ""),
+            "options": q.get("options", []),
+            "importance": q.get("importance", "medium"),
+            "topic": q.get("topic", "general"),
+            "column": q.get("column"),
+        }
+        for i, q in enumerate(questions)
+    ]
+
+    return {
+        "success": True,
+        "import_session_id": result.get("session_id", ""),
+        "filename": filename,
+        "detected_file_type": detected_file_type,
+        "analysis": {
+            "sheet_count": analysis.get("sheet_count", len(sheets)),
+            "total_rows": analysis.get("total_rows", 0),
+            "sheets": sheets,
+            "recommended_strategy": analysis.get("recommended_strategy", "single_sheet"),
+        },
+        "column_mappings": column_mappings,
+        "overall_confidence": overall_confidence,
+        "questions": formatted_questions,
+        "reasoning_trace": reasoning_trace,
+        "user_id": user_id,
+        "session_id": session_id,
+    }
 
 
 async def _nexo_get_questions(payload: dict, session_id: str) -> dict:
