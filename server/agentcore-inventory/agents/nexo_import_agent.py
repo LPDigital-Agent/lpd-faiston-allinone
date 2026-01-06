@@ -264,7 +264,7 @@ class NexoImportAgent(BaseInventoryAgent):
             return success
         except Exception as e:
             print(f"[NEXO] _save_session: EXCEPTION - {type(e).__name__}: {e}")
-            log_agent_action(self.name, "_save_session", status="error", details=str(e))
+            log_agent_action(self.name, "_save_session", status="error", details={"error": str(e)})
             # Still cache even on exception (for single-instance scenarios)
             self._sessions_cache[session.session_id] = session
             return False
@@ -288,7 +288,7 @@ class NexoImportAgent(BaseInventoryAgent):
                 return session
             return None
         except Exception as e:
-            log_agent_action(self.name, "_load_session", status="error", details=str(e))
+            log_agent_action(self.name, "_load_session", status="error", details={"error": str(e)})
             return None
 
     # =========================================================================

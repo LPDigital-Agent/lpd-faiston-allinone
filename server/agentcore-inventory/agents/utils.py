@@ -258,9 +258,14 @@ def log_agent_action(
         log_entry["entity_id"] = entity_id
     if details:
         # Filter out any potentially sensitive keys
-        safe_keys = {"count", "batch_size", "duration_ms", "confidence", "risk_level"}
-        safe_details = {k: v for k, v in details.items() if k in safe_keys}
-        if safe_details:
-            log_entry["details"] = safe_details
+        safe_keys = {"count", "batch_size", "duration_ms", "confidence", "risk_level", "error"}
+        # Defensive: handle both dict and string (callers may pass str(e) by mistake)
+        if isinstance(details, dict):
+            safe_details = {k: v for k, v in details.items() if k in safe_keys}
+            if safe_details:
+                log_entry["details"] = safe_details
+        elif isinstance(details, str):
+            # Convert string to error dict for backwards compatibility
+            log_entry["details"] = {"error": details[:200]}  # Truncate for safety
 
     print(json.dumps(log_entry))
