@@ -48,6 +48,19 @@ import {
   type NexoSheetAnalysis,
   type NexoColumnMapping,
 } from '@/hooks/ativos/useSmartImportNexo';
+import { NexoExplanation } from '@/components/shared/nexo-explanation';
+import {
+  REASONING_TRACE_EXPLANATION,
+  QUESTIONS_CRITICAL_EXPLANATION,
+  QUESTIONS_OPTIONAL_EXPLANATION,
+  ERROR_EXPLANATION,
+  SUCCESS_EXPLANATION,
+  LOADING_EXPLANATIONS,
+  getColumnMappingsExplanation,
+  getSheetAnalysisExplanation,
+  getPriorKnowledgeExplanation,
+  getFileInfoExplanation,
+} from '@/lib/ativos/nexoImportExplanations';
 
 // =============================================================================
 // Types
@@ -120,6 +133,15 @@ function ReasoningTrace({ steps }: { steps: NexoReasoningStep[] }) {
           animate={{ height: 'auto', opacity: 1 }}
           className="space-y-2 pl-2 border-l-2 border-white/10"
         >
+          {/* NEXO Explanation for reasoning trace */}
+          <NexoExplanation
+            summary={REASONING_TRACE_EXPLANATION.summary}
+            details={REASONING_TRACE_EXPLANATION.details}
+            action={REASONING_TRACE_EXPLANATION.action}
+            variant="info"
+            compact
+          />
+
           {visibleSteps.map((step, index) => (
             <motion.div
               key={index}
@@ -190,6 +212,9 @@ function SheetAnalysis({ sheets }: { sheets: NexoSheetAnalysis[] }) {
     return isNaN(confidence) ? 0 : confidence;
   };
 
+  // Get dynamic explanation based on sheet count
+  const sheetExplanation = getSheetAnalysisExplanation(sheets.length);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2 text-sm text-text-muted">
@@ -197,6 +222,15 @@ function SheetAnalysis({ sheets }: { sheets: NexoSheetAnalysis[] }) {
         <span>Abas detectadas</span>
         <Badge variant="outline">{sheets.length}</Badge>
       </div>
+
+      {/* NEXO Explanation for sheet analysis */}
+      <NexoExplanation
+        summary={sheetExplanation.summary}
+        details={sheetExplanation.details}
+        action={sheetExplanation.action}
+        variant="tip"
+        compact
+      />
 
       <div className="grid gap-2">
         {sheets.map((sheet, index) => {
@@ -255,6 +289,13 @@ function ColumnMappings({ mappings }: { mappings: NexoColumnMapping[] }) {
     return 'text-red-400';
   };
 
+  // Get dynamic explanation based on confidence counts
+  const mappingExplanation = getColumnMappingsExplanation(
+    highConfidence.length,
+    mediumConfidence.length,
+    lowConfidence.length
+  );
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -274,6 +315,15 @@ function ColumnMappings({ mappings }: { mappings: NexoColumnMapping[] }) {
           </Badge>
         </div>
       </div>
+
+      {/* NEXO Explanation for column mappings - PRIORITY section */}
+      <NexoExplanation
+        summary={mappingExplanation.summary}
+        details={mappingExplanation.details}
+        action={mappingExplanation.action}
+        variant="tip"
+        compact
+      />
 
       <div className="space-y-1">
         {visibleMappings.map((mapping, index) => (
@@ -388,6 +438,16 @@ function QuestionPanel({
             <AlertTriangle className="w-4 h-4 text-red-400" />
             Estas respostas são necessárias para continuar:
           </p>
+
+          {/* NEXO Explanation for critical questions */}
+          <NexoExplanation
+            summary={QUESTIONS_CRITICAL_EXPLANATION.summary}
+            details={QUESTIONS_CRITICAL_EXPLANATION.details}
+            action={QUESTIONS_CRITICAL_EXPLANATION.action}
+            variant="warning"
+            compact
+          />
+
           {criticalQuestions.map((question) => (
             <QuestionItem
               key={question.id}
@@ -408,6 +468,16 @@ function QuestionPanel({
           <p className="text-sm text-text-muted">
             Perguntas opcionais (respostas padrão serão usadas se não responder):
           </p>
+
+          {/* NEXO Explanation for optional questions */}
+          <NexoExplanation
+            summary={QUESTIONS_OPTIONAL_EXPLANATION.summary}
+            details={QUESTIONS_OPTIONAL_EXPLANATION.details}
+            action={QUESTIONS_OPTIONAL_EXPLANATION.action}
+            variant="info"
+            compact
+          />
+
           {optionalQuestions.map((question) => (
             <QuestionItem
               key={question.id}
@@ -718,6 +788,14 @@ export function SmartImportNexoPanel({
         </GlassCardHeader>
         <GlassCardContent>
           <div className="space-y-4">
+            {/* NEXO Explanation for error state */}
+            <NexoExplanation
+              summary={ERROR_EXPLANATION.summary}
+              details={ERROR_EXPLANATION.details}
+              action={ERROR_EXPLANATION.action}
+              variant="warning"
+            />
+
             <p className="text-sm text-red-400">{state.error}</p>
             <Button variant="outline" onClick={onCancel}>
               Tentar novamente
@@ -780,9 +858,18 @@ export function SmartImportNexoPanel({
                   </Badge>
                 </div>
 
+                {/* NEXO Explanation for prior knowledge */}
+                <NexoExplanation
+                  summary={getPriorKnowledgeExplanation(priorKnowledge.similar_episodes).summary}
+                  details={getPriorKnowledgeExplanation(priorKnowledge.similar_episodes).details}
+                  action={getPriorKnowledgeExplanation(priorKnowledge.similar_episodes).action}
+                  variant="success"
+                  compact
+                />
+
                 {/* Suggested mappings count */}
                 {Object.keys(priorKnowledge.suggested_mappings).length > 0 && (
-                  <div className="flex items-center gap-4 text-sm mb-2">
+                  <div className="flex items-center gap-4 text-sm mb-2 mt-3">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-4 h-4 text-cyan-400" />
                       <span className="text-text-secondary">
@@ -822,12 +909,16 @@ export function SmartImportNexoPanel({
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10"
+                className="space-y-3"
               >
-                <Sparkles className="w-4 h-4 text-text-muted" />
-                <span className="text-sm text-text-muted">
-                  Primeira vez analisando este tipo de arquivo - NEXO aprenderá com esta importação
-                </span>
+                {/* NEXO Explanation for first-time import */}
+                <NexoExplanation
+                  summary={getPriorKnowledgeExplanation(0).summary}
+                  details={getPriorKnowledgeExplanation(0).details}
+                  action={getPriorKnowledgeExplanation(0).action}
+                  variant="info"
+                  compact
+                />
               </motion.div>
             )}
 
