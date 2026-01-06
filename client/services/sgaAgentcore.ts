@@ -17,7 +17,7 @@
 // Agent ARN: Configured via NEXT_PUBLIC_SGA_AGENTCORE_ARN env variable
 // =============================================================================
 
-import { getAcademyCognitoToken } from './academyCognito';
+import { getAccessToken } from './authService';
 import { SGA_STORAGE_KEYS } from '@/lib/ativos/constants';
 import type {
   SmartImportUploadRequest,
@@ -172,8 +172,8 @@ export async function invokeSGAAgentCore<T = unknown>(
     : options;
   const { useSession = true, signal } = opts;
 
-  // Get JWT token (reuse Academy Cognito tokens - same user pool)
-  const token = await getAcademyCognitoToken();
+  // Get JWT token from authService (same Cognito user pool used for login)
+  const token = await getAccessToken();
   if (!token) {
     throw new Error('Nao autenticado. Por favor, faca login novamente.');
   }

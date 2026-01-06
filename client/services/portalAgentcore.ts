@@ -13,7 +13,7 @@
 // Agent ARN: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_portal_agents-PENDING
 // =============================================================================
 
-import { getAcademyCognitoToken } from './academyCognito';
+import { getAccessToken } from './authService';
 
 // =============================================================================
 // Configuration
@@ -206,8 +206,8 @@ export async function invokePortalAgentCore<T = unknown>(
     : options;
   const { useSession = true, signal } = opts;
 
-  // Get JWT token (reuse Academy Cognito for now)
-  const token = await getAcademyCognitoToken();
+  // Get JWT token from authService (same Cognito user pool used for login)
+  const token = await getAccessToken();
   if (!token) {
     throw new Error('Nao autenticado. Por favor, faca login novamente.');
   }

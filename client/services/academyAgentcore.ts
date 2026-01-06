@@ -18,7 +18,7 @@
 // Agent ARN: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_academy_agents-ODNvP6HxCD
 // =============================================================================
 
-import { getAcademyCognitoToken } from './academyCognito';
+import { getAccessToken } from './authService';
 import { ACADEMY_STORAGE_KEYS } from '@/lib/academy/constants';
 import type {
   FlashcardsRequest,
@@ -142,8 +142,8 @@ export async function invokeAgentCore<T = unknown>(
     : options;
   const { useSession = true, signal } = opts;
 
-  // Get JWT token
-  const token = await getAcademyCognitoToken();
+  // Get JWT token from authService (same Cognito user pool used for login)
+  const token = await getAccessToken();
   if (!token) {
     throw new Error('Nao autenticado. Por favor, faca login novamente.');
   }
