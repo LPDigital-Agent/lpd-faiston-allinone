@@ -13,39 +13,40 @@
 // Configuration: See @/lib/config/agentcore.ts for ARN configuration
 // =============================================================================
 
-import { getAccessToken } from './authService';
+import { PORTAL_AGENTCORE_ARN } from '@/lib/config/agentcore';
 import {
-  AGENTCORE_ENDPOINT,
-  PORTAL_AGENTCORE_ARN,
-} from '@/lib/config/agentcore';
+  createAgentCoreService,
+  type AgentCoreRequest,
+  type AgentCoreResponse,
+  type InvokeOptions,
+} from './agentcoreBase';
 
 // =============================================================================
-// Local Alias (for compatibility)
-// =============================================================================
-
-const AGENTCORE_ARN = PORTAL_AGENTCORE_ARN;
-
 // Session storage key
+// =============================================================================
+
 const PORTAL_SESSION_KEY = 'faiston_portal_agentcore_session';
+
+// =============================================================================
+// Service Instance
+// =============================================================================
+
+const portalService = createAgentCoreService({
+  arn: PORTAL_AGENTCORE_ARN,
+  sessionStorageKey: PORTAL_SESSION_KEY,
+  logPrefix: '[Portal AgentCore]',
+  sessionPrefix: 'portal-session',
+});
+
+// =============================================================================
+// Re-export Types
+// =============================================================================
+
+export type { AgentCoreRequest, AgentCoreResponse, InvokeOptions };
 
 // =============================================================================
 // Types
 // =============================================================================
-
-export interface AgentCoreRequest {
-  action: string;
-  [key: string]: unknown;
-}
-
-export interface AgentCoreResponse<T = unknown> {
-  data: T;
-  sessionId: string;
-}
-
-export interface InvokeOptions {
-  useSession?: boolean;
-  signal?: AbortSignal;
-}
 
 // News types
 export interface NewsArticle {
@@ -145,155 +146,12 @@ export interface DailySummaryResponse {
 }
 
 // =============================================================================
-// Retry Configuration
+// Core Functions (delegated to base service)
 // =============================================================================
 
-const RETRY_CONFIG = {
-  maxRetries: 3,
-  initialDelayMs: 3000,
-  retryableStatuses: [502, 503, 504],
-};
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// =============================================================================
-// Session Management
-// =============================================================================
-
-function generateSessionId(): string {
-  return `portal-session-${crypto.randomUUID().replace(/-/g, '')}`;
-}
-
-export function getPortalSessionId(): string {
-  if (typeof window === 'undefined') return generateSessionId();
-
-  try {
-    let sessionId = sessionStorage.getItem(PORTAL_SESSION_KEY);
-    if (!sessionId) {
-      sessionId = generateSessionId();
-      sessionStorage.setItem(PORTAL_SESSION_KEY, sessionId);
-    }
-    return sessionId;
-  } catch {
-    return generateSessionId();
-  }
-}
-
-export function clearPortalSession(): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    sessionStorage.removeItem(PORTAL_SESSION_KEY);
-  } catch {
-    // sessionStorage not available
-  }
-}
-
-// =============================================================================
-// Core Invocation
-// =============================================================================
-
-export async function invokePortalAgentCore<T = unknown>(
-  request: AgentCoreRequest,
-  options: InvokeOptions | boolean = true
-): Promise<AgentCoreResponse<T>> {
-  const opts: InvokeOptions = typeof options === 'boolean'
-    ? { useSession: options }
-    : options;
-  const { useSession = true, signal } = opts;
-
-  // Get JWT token from authService (same Cognito user pool used for login)
-  const token = await getAccessToken();
-  if (!token) {
-    throw new Error('Nao autenticado. Por favor, faca login novamente.');
-  }
-
-  // Build URL
-  const encodedArn = encodeURIComponent(AGENTCORE_ARN);
-  const url = `${AGENTCORE_ENDPOINT}/runtimes/${encodedArn}/invocations?qualifier=DEFAULT`;
-
-  // Get session ID
-  const sessionId = useSession ? getPortalSessionId() : generateSessionId();
-
-  // Retry loop
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id': sessionId,
-        },
-        body: JSON.stringify(request),
-        signal,
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        let errorMessage = `AgentCore error: ${response.status} ${response.statusText}`;
-
-        try {
-          const errorJson = JSON.parse(errorBody);
-          errorMessage = errorJson.message || errorJson.Message || errorMessage;
-        } catch {
-          if (errorBody) {
-            errorMessage = errorBody;
-          }
-        }
-
-        if (response.status === 401) {
-          throw new Error('Sessao expirada. Por favor, faca login novamente.');
-        }
-        if (response.status === 403) {
-          throw new Error('Acesso negado. Verifique suas permissoes.');
-        }
-
-        if (RETRY_CONFIG.retryableStatuses.includes(response.status) && attempt < RETRY_CONFIG.maxRetries) {
-          const delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt);
-          console.warn(`[Portal AgentCore] Received ${response.status}, retrying in ${delayMs}ms...`);
-          lastError = new Error(errorMessage);
-          await sleep(delayMs);
-          continue;
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      // Parse response
-      const contentType = response.headers.get('content-type') || '';
-
-      if (contentType.includes('application/json')) {
-        const data = (await response.json()) as T;
-        return { data, sessionId };
-      }
-
-      const text = await response.text();
-      try {
-        const data = JSON.parse(text) as T;
-        return { data, sessionId };
-      } catch {
-        return { data: text as unknown as T, sessionId };
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw error;
-      }
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < RETRY_CONFIG.maxRetries) {
-        const delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt);
-        console.warn(`[Portal AgentCore] Error, retrying in ${delayMs}ms...`, error);
-        await sleep(delayMs);
-        continue;
-      }
-    }
-  }
-
-  throw lastError || new Error('AgentCore request failed after all retries');
-}
+export const invokePortalAgentCore = portalService.invoke;
+export const getPortalSessionId = portalService.getSessionId;
+export const clearPortalSession = portalService.clearSession;
 
 // =============================================================================
 // NEXO Chat Functions

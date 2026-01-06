@@ -18,12 +18,14 @@
 // Configuration: See @/lib/config/agentcore.ts for ARN configuration
 // =============================================================================
 
-import { getAccessToken } from './authService';
+import { ACADEMY_AGENTCORE_ARN } from '@/lib/config/agentcore';
 import { ACADEMY_STORAGE_KEYS } from '@/lib/academy/constants';
 import {
-  AGENTCORE_ENDPOINT,
-  ACADEMY_AGENTCORE_ARN,
-} from '@/lib/config/agentcore';
+  createAgentCoreService,
+  type AgentCoreRequest,
+  type AgentCoreResponse,
+  type InvokeOptions,
+} from './agentcoreBase';
 import type {
   FlashcardsRequest,
   FlashcardsResponse,
@@ -45,8 +47,6 @@ import type {
   SlideDeckPlanResponse,
   SlideBatchRequest,
   SlideBatchResponse,
-  ExtraClassRequest,
-  ExtraClassResponse,
   ValidateDoubtRequest,
   ValidateDoubtResponse,
   GenerateExtraClassRequest,
@@ -56,206 +56,30 @@ import type {
 } from '@/lib/academy/types';
 
 // =============================================================================
-// Local Alias (for compatibility)
+// Service Instance
 // =============================================================================
 
-const AGENTCORE_ARN = ACADEMY_AGENTCORE_ARN;
+const academyService = createAgentCoreService({
+  arn: ACADEMY_AGENTCORE_ARN,
+  sessionStorageKey: ACADEMY_STORAGE_KEYS.AGENTCORE_SESSION,
+  logPrefix: '[Academy AgentCore]',
+  sessionPrefix: 'session',
+});
 
 // =============================================================================
-// Types
+// Re-export Types
 // =============================================================================
 
-export interface AgentCoreRequest {
-  action: string;
-  [key: string]: unknown;
-}
-
-export interface AgentCoreResponse<T = unknown> {
-  data: T;
-  sessionId: string;
-}
-
-export interface InvokeOptions {
-  useSession?: boolean;
-  signal?: AbortSignal;
-}
+export type { AgentCoreRequest, AgentCoreResponse, InvokeOptions };
 
 // =============================================================================
-// Retry Configuration
+// Core Functions (delegated to base service)
 // =============================================================================
 
-const RETRY_CONFIG = {
-  maxRetries: 3,
-  initialDelayMs: 3000,
-  retryableStatuses: [502, 503, 504],
-};
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// =============================================================================
-// Session Management
-// =============================================================================
-
-function generateSessionId(): string {
-  return `session-${crypto.randomUUID().replace(/-/g, '')}`;
-}
-
-export function getSessionId(): string {
-  if (typeof window === 'undefined') return generateSessionId();
-
-  try {
-    let sessionId = sessionStorage.getItem(ACADEMY_STORAGE_KEYS.AGENTCORE_SESSION);
-    if (!sessionId) {
-      sessionId = generateSessionId();
-      sessionStorage.setItem(ACADEMY_STORAGE_KEYS.AGENTCORE_SESSION, sessionId);
-    }
-    return sessionId;
-  } catch {
-    return generateSessionId();
-  }
-}
-
-export function clearSession(): void {
-  if (typeof window === 'undefined') return;
-
-  try {
-    sessionStorage.removeItem(ACADEMY_STORAGE_KEYS.AGENTCORE_SESSION);
-  } catch {
-    // sessionStorage not available
-  }
-}
-
-// =============================================================================
-// Core Invocation
-// =============================================================================
-
-export async function invokeAgentCore<T = unknown>(
-  request: AgentCoreRequest,
-  options: InvokeOptions | boolean = true
-): Promise<AgentCoreResponse<T>> {
-  const opts: InvokeOptions = typeof options === 'boolean'
-    ? { useSession: options }
-    : options;
-  const { useSession = true, signal } = opts;
-
-  // Get JWT token from authService (same Cognito user pool used for login)
-  const token = await getAccessToken();
-  if (!token) {
-    throw new Error('Nao autenticado. Por favor, faca login novamente.');
-  }
-
-  // Build URL
-  const encodedArn = encodeURIComponent(AGENTCORE_ARN);
-  const url = `${AGENTCORE_ENDPOINT}/runtimes/${encodedArn}/invocations?qualifier=DEFAULT`;
-
-  // Get session ID
-  const sessionId = useSession ? getSessionId() : generateSessionId();
-
-  // Retry loop
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id': sessionId,
-      },
-      body: JSON.stringify(request),
-      signal,
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      let errorMessage = `AgentCore error: ${response.status} ${response.statusText}`;
-
-      try {
-        const errorJson = JSON.parse(errorBody);
-        errorMessage = errorJson.message || errorJson.Message || errorMessage;
-      } catch {
-        if (errorBody) {
-          errorMessage = errorBody;
-        }
-      }
-
-      if (response.status === 401) {
-        throw new Error('Sessao expirada. Por favor, faca login novamente.');
-      }
-      if (response.status === 403) {
-        throw new Error('Acesso negado. Verifique suas permissoes.');
-      }
-
-      if (RETRY_CONFIG.retryableStatuses.includes(response.status) && attempt < RETRY_CONFIG.maxRetries) {
-        const delayMs = RETRY_CONFIG.initialDelayMs * Math.pow(2, attempt);
-        console.warn(`[Academy AgentCore] Received ${response.status}, retrying in ${delayMs}ms...`);
-        lastError = new Error(errorMessage);
-        await sleep(delayMs);
-        continue;
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    // Parse response
-    const contentType = response.headers.get('content-type') || '';
-
-    if (contentType.includes('text/event-stream')) {
-      const data = await parseSSEResponse<T>(response);
-      return { data, sessionId };
-    }
-
-    if (contentType.includes('application/json')) {
-      const data = (await response.json()) as T;
-      return { data, sessionId };
-    }
-
-    const text = await response.text();
-    try {
-      const data = JSON.parse(text) as T;
-      return { data, sessionId };
-    } catch {
-      return { data: text as unknown as T, sessionId };
-    }
-  }
-
-  throw lastError || new Error('AgentCore request failed after all retries');
-}
-
-async function parseSSEResponse<T>(response: Response): Promise<T> {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error('No response body for streaming');
-  }
-
-  const decoder = new TextDecoder();
-  const chunks: string[] = [];
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    const chunk = decoder.decode(value, { stream: true });
-    const lines = chunk.split('\n');
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6);
-        if (data && data !== '[DONE]') {
-          chunks.push(data);
-        }
-      }
-    }
-  }
-
-  const fullResponse = chunks.join('');
-  try {
-    return JSON.parse(fullResponse) as T;
-  } catch {
-    return fullResponse as unknown as T;
-  }
-}
+export const invokeAgentCore = academyService.invoke;
+export const getSessionId = academyService.getSessionId;
+export const clearSession = academyService.clearSession;
+export const getAgentCoreConfig = academyService.getConfig;
 
 // =============================================================================
 // NEXO AI Chat (renamed from Sasha)
@@ -568,16 +392,4 @@ export async function checkExtraClassStatus(
     action: 'check_extra_class_status',
     video_id: params.video_id,
   });
-}
-
-// =============================================================================
-// Configuration Helpers
-// =============================================================================
-
-export function getAgentCoreConfig() {
-  return {
-    endpoint: AGENTCORE_ENDPOINT,
-    arn: AGENTCORE_ARN,
-    configured: Boolean(AGENTCORE_ARN),
-  };
 }
