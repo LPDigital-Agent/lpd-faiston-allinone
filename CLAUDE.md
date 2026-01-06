@@ -8,6 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ---
 ## DO NOT REMOVE
 ### Important (Never Change or replace it)
+- FAISTON ONE (MANDATORY CONTEXT): Faiston ONE is a **100% AUTONOMOUS** and **GENERATIVE** AI agent system. The agents are intelligent: they automate cognitive tasks, learn from context/feedback, provide opinions/recommendations, and improve processes — acting like a “human operator” in Faiston’s operations. They continuously improve their **memory and knowledge** using **reinforcement learning techniques** (feedback-driven optimization) and other learning loops aligned with the platform’s architecture. This is NOT a traditional client-server microservices system. It is a **100% AI-FIRST** platform; if you do not understand what AI-FIRST means, you MUST research it and fully understand it before designing or implementing anything.
+
+
+---
+## DO NOT REMOVE
+### Important (Never Change or replace it)
 ## Primary Instructions
 - NEVER create files on root unless necessary
 - ALL documentation in `docs/` folder
