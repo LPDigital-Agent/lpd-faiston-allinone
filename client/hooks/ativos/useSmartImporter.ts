@@ -19,6 +19,7 @@ import {
   confirmNFEntry,
   getPendingNFEntries,
   assignProjectToEntry,
+  clearSGASession,
 } from '@/services/sgaAgentcore';
 import type {
   SmartFileType,
@@ -102,6 +103,11 @@ export function useSmartImporter(): UseSmartImporterReturn {
     setPreview(null);
     setResponse(null);
     setProgress({ stage: 'detecting', percent: 5, message: 'Detectando tipo de arquivo...' });
+
+    // IMPORTANT: Clear session to force cold start with latest deployed code
+    // AgentCore warm instances cache old code - new session ID forces new instance
+    clearSGASession();
+    console.log('[SmartImporter] Session cleared - forcing cold start');
 
     try {
       // =======================================================================
