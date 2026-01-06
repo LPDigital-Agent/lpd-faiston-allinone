@@ -9,3 +9,4 @@ export { NexoCopilot } from './NexoCopilot';
 export { NexoSearchBar } from './NexoSearchBar';
 export { UnifiedSearch } from './UnifiedSearch';
 export { SmartImportNexoPanel } from './SmartImportNexoPanel';
+export { SmartImportReasoningPanel } from './SmartImportReasoningPanel';

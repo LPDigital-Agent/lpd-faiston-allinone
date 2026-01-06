@@ -1,15 +1,4 @@
-# =============================================================================
-# AgentCore Configuration - Faiston SGA Inventory
-# =============================================================================
-# Configuration for Bedrock AgentCore deployment.
-# Module: Gestao de Ativos -> Gestao de Estoque
-#
-# Note: This file is overwritten by GitHub Actions during deployment.
-# Local changes are for development reference only.
-# =============================================================================
-
 default_agent: faiston_asset_management
-
 agents:
   faiston_asset_management:
     name: faiston_asset_management
@@ -20,9 +9,14 @@ agents:
     container_runtime: null
     source_path: .
     aws:
+      execution_role: null
+      execution_role_auto_create: true
       account: '377311924364'
       region: us-east-2
-      execution_role_auto_create: true
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
       network_configuration:
         network_mode: PUBLIC
         network_mode_config: null
@@ -33,6 +27,34 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: null
         max_lifetime: null
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: dff36485-6b9d-4e22-80ef-012dcf55599e
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
     memory:
-      # Using STM_AND_LTM for inventory context and historical patterns
       mode: STM_AND_LTM
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

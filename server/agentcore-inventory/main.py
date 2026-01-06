@@ -345,6 +345,12 @@ def invoke(payload: dict, context) -> dict:
         elif action == "nexo_prepare_processing":
             return asyncio.run(_nexo_prepare_processing(payload, session_id))
 
+        elif action == "nexo_get_prior_knowledge":
+            return asyncio.run(_nexo_get_prior_knowledge(payload, user_id))
+
+        elif action == "nexo_get_adaptive_threshold":
+            return asyncio.run(_nexo_get_adaptive_threshold(payload, user_id))
+
         # =================================================================
         # Expedition (ExpeditionAgent)
         # =================================================================
@@ -420,6 +426,7 @@ def _health_check() -> dict:
             "ComplianceAgent",
             "ComunicacaoAgent",
             "NexoImportAgent",  # Agentic AI-First intelligent import
+            "LearningAgent",    # Episodic Memory for continuous learning
         ],
         "tables": {
             "inventory": os.environ.get("INVENTORY_TABLE", ""),
@@ -2571,19 +2578,21 @@ async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
     Store learned patterns from successful import (LEARN phase).
 
     Called after import confirmation to build knowledge base.
-    Uses AgentCore Episodic Memory for cross-session learning.
+    Uses AgentCore Episodic Memory via LearningAgent for cross-session learning.
 
     Payload:
         import_session_id: Import session ID
         import_result: Result of the executed import
         user_corrections: Any manual corrections made by user
+        user_id: User performing the import
 
     Returns:
-        Learning confirmation with patterns stored
+        Learning confirmation with episode_id and patterns stored
     """
     import_session_id = payload.get("import_session_id", "")
     import_result = payload.get("import_result", {})
     user_corrections = payload.get("user_corrections", {})
+    user_id = payload.get("user_id", "anonymous")
 
     if not import_session_id:
         return {"success": False, "error": "import_session_id is required"}
@@ -2594,10 +2603,88 @@ async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
     result = await agent.learn_from_import(
         session_id=import_session_id,
         import_result=import_result,
+        user_id=user_id,
         user_corrections=user_corrections,
     )
 
     return result
+
+
+async def _nexo_get_prior_knowledge(payload: dict, user_id: str) -> dict:
+    """
+    Retrieve prior knowledge before file analysis (RECALL phase).
+
+    Queries AgentCore Episodic Memory via LearningAgent for similar
+    past imports to provide auto-suggestions and learned mappings.
+
+    Payload:
+        filename: Name of file being imported
+        file_analysis: Initial file analysis from sheet_analyzer
+        s3_key: Optional S3 key of file
+
+    Returns:
+        Prior knowledge with:
+        - similar_episodes: List of similar past imports
+        - suggested_mappings: Column mappings from successful imports
+        - confidence_boost: Whether to trust auto-mappings
+        - reflections: Cross-session insights
+    """
+    filename = payload.get("filename", "")
+    file_analysis = payload.get("file_analysis", {})
+
+    if not filename:
+        return {"success": False, "error": "filename is required"}
+
+    if not file_analysis:
+        return {"success": False, "error": "file_analysis is required"}
+
+    from agents.nexo_import_agent import NexoImportAgent
+
+    agent = NexoImportAgent()
+    result = await agent.get_prior_knowledge(
+        filename=filename,
+        file_analysis=file_analysis,
+        user_id=user_id,
+    )
+
+    return result
+
+
+async def _nexo_get_adaptive_threshold(payload: dict, user_id: str) -> dict:
+    """
+    Get adaptive confidence threshold based on historical patterns.
+
+    Uses LearningAgent reflections to determine appropriate threshold
+    for this file pattern. Files with good history get lower thresholds
+    (more trust), while unknown patterns get higher thresholds.
+
+    Payload:
+        filename: Name of file being imported
+
+    Returns:
+        Threshold configuration with:
+        - threshold: Confidence threshold (0.0 to 1.0)
+        - reason: Explanation for threshold choice
+        - history_count: Number of similar imports in history
+    """
+    filename = payload.get("filename", "")
+
+    if not filename:
+        return {"success": False, "error": "filename is required"}
+
+    from agents.nexo_import_agent import NexoImportAgent
+
+    agent = NexoImportAgent()
+    threshold = await agent.get_adaptive_threshold(
+        filename=filename,
+        user_id=user_id,
+    )
+
+    return {
+        "success": True,
+        "threshold": threshold,
+        "filename": filename,
+    }
 
 
 async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:

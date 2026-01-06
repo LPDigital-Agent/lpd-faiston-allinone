@@ -1087,6 +1087,8 @@ export interface NexoReasoningStep {
   type: 'thought' | 'action' | 'observation';
   content: string;
   timestamp?: string;
+  tool?: string;       // Tool used for action steps (e.g., 'sheet_analyzer', 'learning_agent')
+  result?: string;     // Result from tool execution
 }
 
 /**
@@ -1280,6 +1282,103 @@ export async function nexoPrepareProcessing(
   return invokeSGAAgentCore<NexoProcessingConfig>({
     action: 'nexo_prepare_processing',
     import_session_id: importSessionId,
+  });
+}
+
+// =============================================================================
+// NEXO Prior Knowledge & Adaptive Learning
+// =============================================================================
+
+/**
+ * Request for getting prior knowledge before analysis.
+ */
+export interface NexoGetPriorKnowledgeRequest {
+  filename: string;
+  file_analysis?: {
+    sheets?: Array<{ columns: string[] }>;
+    detected_type?: string;
+  };
+}
+
+/**
+ * Prior knowledge from episodic memory.
+ */
+export interface NexoPriorKnowledge {
+  similar_episodes: number;
+  suggested_mappings: Record<string, string>;
+  confidence_boost: boolean;
+  reflections: string[];
+  last_import_date?: string;
+  success_rate?: number;
+}
+
+/**
+ * Response from prior knowledge retrieval.
+ */
+export interface NexoGetPriorKnowledgeResponse {
+  success: boolean;
+  has_prior_knowledge: boolean;
+  prior_knowledge: NexoPriorKnowledge;
+  message: string;
+}
+
+/**
+ * Request for adaptive threshold.
+ */
+export interface NexoGetAdaptiveThresholdRequest {
+  filename: string;
+  detected_type?: string;
+}
+
+/**
+ * Response with adaptive confidence threshold.
+ */
+export interface NexoGetAdaptiveThresholdResponse {
+  success: boolean;
+  threshold: number;
+  reason: string;
+  based_on_episodes: number;
+}
+
+/**
+ * Retrieve prior knowledge before analysis (RECALL phase).
+ *
+ * Queries AgentCore Episodic Memory for similar past imports.
+ * Returns suggested mappings and confidence boosts based on history.
+ *
+ * @param params.filename - Filename being imported
+ * @param params.file_analysis - Optional initial file analysis
+ * @returns Prior knowledge with suggested mappings and reflections
+ */
+export async function nexoGetPriorKnowledge(
+  params: NexoGetPriorKnowledgeRequest
+): Promise<AgentCoreResponse<NexoGetPriorKnowledgeResponse>> {
+  return invokeSGAAgentCore<NexoGetPriorKnowledgeResponse>({
+    action: 'nexo_get_prior_knowledge',
+    filename: params.filename,
+    file_analysis: params.file_analysis,
+  });
+}
+
+/**
+ * Get adaptive confidence threshold based on historical success.
+ *
+ * Uses episodic memory reflections to determine optimal threshold:
+ * - High success rate → Lower threshold (trust auto-mapping)
+ * - High failure rate → Higher threshold (require confirmation)
+ * - New pattern → Default threshold
+ *
+ * @param params.filename - Filename being imported
+ * @param params.detected_type - Optional detected file type
+ * @returns Adaptive threshold and reasoning
+ */
+export async function nexoGetAdaptiveThreshold(
+  params: NexoGetAdaptiveThresholdRequest
+): Promise<AgentCoreResponse<NexoGetAdaptiveThresholdResponse>> {
+  return invokeSGAAgentCore<NexoGetAdaptiveThresholdResponse>({
+    action: 'nexo_get_adaptive_threshold',
+    filename: params.filename,
+    detected_type: params.detected_type,
   });
 }
 

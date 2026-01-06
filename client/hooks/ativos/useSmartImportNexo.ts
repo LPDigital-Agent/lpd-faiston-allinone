@@ -22,6 +22,8 @@ import {
   nexoSubmitAnswers,
   nexoLearnFromImport,
   nexoPrepareProcessing,
+  nexoGetPriorKnowledge,
+  nexoGetAdaptiveThreshold,
   getNFUploadUrl,
   executeImport,
   clearSGASession,
@@ -31,6 +33,7 @@ import {
   type NexoReasoningStep,
   type NexoSheetAnalysis,
   type NexoProcessingConfig,
+  type NexoPriorKnowledge,
 } from '@/services/sgaAgentcore';
 
 // =============================================================================
@@ -43,6 +46,7 @@ import {
 export type NexoImportStage =
   | 'idle'           // No import in progress
   | 'uploading'      // Uploading file to S3
+  | 'recalling'      // NEXO recalling prior knowledge (RECALL)
   | 'analyzing'      // NEXO analyzing file (OBSERVE + THINK)
   | 'questioning'    // Waiting for user answers (ASK)
   | 'processing'     // Preparing final configuration (ACT)
@@ -85,6 +89,8 @@ export interface NexoImportState {
   questions: NexoQuestion[];
   answers: Record<string, string>;
   processingConfig: NexoProcessingConfig | null;
+  priorKnowledge: NexoPriorKnowledge | null;
+  adaptiveThreshold: number;
   error: string | null;
 }
 
@@ -95,6 +101,7 @@ export interface UseSmartImportNexoReturn {
   // State
   state: NexoImportState;
   isAnalyzing: boolean;
+  isRecalling: boolean;
   hasQuestions: boolean;
   isReadyToProcess: boolean;
 
@@ -111,6 +118,9 @@ export interface UseSmartImportNexoReturn {
   // Reasoning trace (for UI display)
   reasoningTrace: NexoReasoningStep[];
   currentThought: string | null;
+
+  // Prior knowledge from episodic memory
+  priorKnowledge: NexoPriorKnowledge | null;
 }
 
 // =============================================================================
@@ -130,6 +140,8 @@ const INITIAL_STATE: NexoImportState = {
   questions: [],
   answers: {},
   processingConfig: null,
+  priorKnowledge: null,
+  adaptiveThreshold: 0.75, // Default confidence threshold
   error: null,
 };
 
@@ -146,6 +158,11 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
   const isAnalyzing = useMemo(
     () => state.stage === 'analyzing',
+    [state.stage]
+  );
+
+  const isRecalling = useMemo(
+    () => state.stage === 'recalling',
     [state.stage]
   );
 
@@ -222,13 +239,50 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         throw new Error('Falha no upload do arquivo');
       }
 
-      // Step 3: NEXO Analysis (OBSERVE + THINK)
+      // Step 3: RECALL - Fetch prior knowledge from episodic memory
+      updateProgress('recalling', 35, 'NEXO consultando memória...', 'recall');
+
+      let priorKnowledge: NexoPriorKnowledge | null = null;
+      let adaptiveThreshold = 0.75;
+
+      try {
+        // Fetch prior knowledge (non-blocking, failure is OK)
+        const priorResult = await nexoGetPriorKnowledge({ filename: file.name });
+        if (priorResult.data?.success && priorResult.data?.has_prior_knowledge) {
+          priorKnowledge = priorResult.data.prior_knowledge;
+          console.log('[NEXO] Prior knowledge retrieved:', priorKnowledge);
+        }
+
+        // Fetch adaptive threshold
+        const thresholdResult = await nexoGetAdaptiveThreshold({ filename: file.name });
+        if (thresholdResult.data?.success) {
+          adaptiveThreshold = thresholdResult.data.threshold;
+          console.log('[NEXO] Adaptive threshold:', adaptiveThreshold, thresholdResult.data.reason);
+        }
+      } catch (recallError) {
+        // Prior knowledge retrieval failure is not critical
+        console.warn('[NEXO] Prior knowledge retrieval failed (continuing):', recallError);
+      }
+
+      // Update state with prior knowledge
+      setState(prev => ({
+        ...prev,
+        priorKnowledge,
+        adaptiveThreshold,
+      }));
+
+      // Step 4: NEXO Analysis (OBSERVE + THINK)
       updateProgress('analyzing', 50, 'NEXO analisando arquivo...', 'observe');
 
       const analysisResult = await nexoAnalyzeFile({
         s3_key: urlResult.data.s3_key,
         filename: file.name,
         content_type: contentType,
+        prior_knowledge: priorKnowledge ? {
+          suggested_mappings: priorKnowledge.suggested_mappings,
+          confidence_boost: priorKnowledge.confidence_boost,
+          reflections: priorKnowledge.reflections,
+        } : undefined,
       });
 
       if (!analysisResult.data?.success) {
@@ -490,6 +544,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   return {
     state,
     isAnalyzing,
+    isRecalling,
     hasQuestions,
     isReadyToProcess,
 
@@ -504,6 +559,9 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
     reasoningTrace: state.analysis?.reasoningTrace || [],
     currentThought,
+
+    // Prior knowledge from episodic memory
+    priorKnowledge: state.priorKnowledge,
   };
 }
 
@@ -517,4 +575,5 @@ export type {
   NexoReasoningStep,
   NexoSheetAnalysis,
   NexoProcessingConfig,
+  NexoPriorKnowledge,
 };

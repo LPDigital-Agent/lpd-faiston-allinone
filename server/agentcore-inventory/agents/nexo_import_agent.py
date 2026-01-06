@@ -647,25 +647,31 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
         }
 
     # =========================================================================
-    # LEARN Phase: Pattern Storage
+    # LEARN Phase: Pattern Storage (with AgentCore Episodic Memory)
     # =========================================================================
 
     async def learn_from_import(
         self,
         session_id: str,
         import_result: Dict[str, Any],
+        user_id: str = "anonymous",
+        user_corrections: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Store learned patterns from successful import (LEARN phase).
 
-        Uses AgentCore Episodic Memory to store patterns for future imports.
+        Uses AgentCore Episodic Memory via LearningAgent to store patterns
+        for future imports. Creates episodes that are consolidated into
+        reflections for continuous improvement.
 
         Args:
             session_id: Import session ID
             import_result: Result of the import operation
+            user_id: User performing the import
+            user_corrections: Manual corrections made by user
 
         Returns:
-            Learning result
+            Learning result with episode_id
         """
         session = self.get_session(session_id)
         if not session:
@@ -680,42 +686,65 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
 
         session.reasoning_trace.append(ReasoningStep(
             step_type="action",
-            content="Armazenando padrões aprendidos para futuras importações",
-            tool="episodic_memory",
+            content="Armazenando padrões aprendidos em Memória Episódica",
+            tool="learning_agent",
         ))
 
-        # Build episode data for memory
+        # Build episode data from session + result
         episode_data = {
+            "session_id": session_id,
+            "filename": session.filename,
             "filename_pattern": self._extract_filename_pattern(session.filename),
+            "file_type": self._detect_file_type(session.filename),
+            "file_signature": self._compute_file_signature(session.file_analysis),
             "sheet_structure": {
                 "sheet_count": session.file_analysis.get("sheet_count", 1),
                 "sheets": [
                     {
-                        "purpose": s.get("detected_purpose"),
-                        "column_count": s.get("column_count"),
+                        "name": s.get("name", ""),
+                        "purpose": s.get("detected_purpose", ""),
+                        "column_count": s.get("column_count", 0),
+                        "row_count": s.get("row_count", 0),
                     }
                     for s in session.file_analysis.get("sheets", [])
                 ],
             },
-            "learned_mappings": session.learned_mappings,
-            "user_corrections": session.answers,
+            "column_mappings": session.learned_mappings,
+            "confidence_score": session.confidence.score if session.confidence else 0.5,
+            "user_answers": session.answers,
+            "user_corrections": user_corrections or {},
             "import_success": import_result.get("success", False),
             "match_rate": import_result.get("match_rate", 0),
-            "lessons": [
-                {
-                    "pattern": f"Column '{col}' maps to '{field}'",
-                    "confidence": 0.95,
-                }
-                for col, field in session.learned_mappings.items()
-            ],
+            "items_imported": import_result.get("items_created", 0),
+            "errors": import_result.get("errors", []),
         }
 
-        # TODO: Store in AgentCore Episodic Memory when available
-        # For now, log the episode data
-        session.reasoning_trace.append(ReasoningStep(
-            step_type="conclusion",
-            content=f"Aprendizado registrado: {len(session.learned_mappings)} mapeamentos",
-        ))
+        # Use LearningAgent to store episode
+        try:
+            from agents.learning_agent import LearningAgent
+
+            learning_agent = LearningAgent()
+            episode_result = await learning_agent.create_episode(
+                import_data=episode_data,
+                user_id=user_id,
+            )
+
+            episode_stored = episode_result.get("success", False)
+            episode_id = episode_result.get("episode_id")
+
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="conclusion",
+                content=f"Episódio {episode_id} armazenado: {len(session.learned_mappings)} mapeamentos aprendidos",
+            ))
+
+        except Exception as e:
+            # Learning failure is not critical - log and continue
+            episode_stored = False
+            episode_id = None
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Falha ao armazenar episódio (não crítico): {str(e)}",
+            ))
 
         session.stage = ImportStage.COMPLETE
         session.updated_at = now_iso()
@@ -732,8 +761,153 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
             "session_id": session_id,
             "stage": session.stage.value,
             "learned_patterns": len(session.learned_mappings),
-            "episode_stored": True,  # Will be True when Memory is integrated
+            "episode_stored": episode_stored,
+            "episode_id": episode_id,
         }
+
+    def _detect_file_type(self, filename: str) -> str:
+        """Detect file type from filename extension."""
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
+        type_map = {
+            "xlsx": "excel",
+            "xls": "excel",
+            "csv": "csv",
+            "xml": "xml",
+            "pdf": "pdf",
+            "jpg": "image",
+            "jpeg": "image",
+            "png": "image",
+        }
+        return type_map.get(ext, "unknown")
+
+    def _compute_file_signature(self, analysis: Dict[str, Any]) -> str:
+        """
+        Compute a signature based on file structure for pattern matching.
+
+        The signature captures column names to identify similar file formats.
+        """
+        import hashlib
+
+        columns = []
+        for sheet in analysis.get("sheets", []):
+            for col in sheet.get("columns", []):
+                columns.append(col.get("name", "").lower().strip())
+
+        # Sort for consistency
+        columns.sort()
+        signature_str = "|".join(columns)
+
+        return hashlib.md5(signature_str.encode()).hexdigest()[:12]
+
+    # =========================================================================
+    # RECALL Phase: Retrieve Prior Knowledge
+    # =========================================================================
+
+    async def get_prior_knowledge(
+        self,
+        filename: str,
+        file_analysis: Dict[str, Any],
+        user_id: str = "anonymous",
+    ) -> Dict[str, Any]:
+        """
+        Retrieve prior knowledge before analysis (RECALL phase).
+
+        Queries LearningAgent for similar past imports to provide
+        context and suggested mappings before AI reasoning.
+
+        Args:
+            filename: Name of file being imported
+            file_analysis: Initial file analysis
+            user_id: User performing import
+
+        Returns:
+            Prior knowledge with similar episodes and suggestions
+        """
+        log_agent_action(
+            self.name, "get_prior_knowledge",
+            entity_type="file",
+            entity_id=filename,
+            status="started",
+        )
+
+        try:
+            from agents.learning_agent import LearningAgent
+
+            learning_agent = LearningAgent()
+
+            # Build context for retrieval
+            context = {
+                "filename": filename,
+                "filename_pattern": self._extract_filename_pattern(filename),
+                "file_type": self._detect_file_type(filename),
+                "file_signature": self._compute_file_signature(file_analysis),
+                "sheet_count": file_analysis.get("sheet_count", 1),
+                "columns": [
+                    col.get("name", "")
+                    for sheet in file_analysis.get("sheets", [])
+                    for col in sheet.get("columns", [])
+                ],
+                "user_id": user_id,
+            }
+
+            result = await learning_agent.retrieve_prior_knowledge(context)
+
+            log_agent_action(
+                self.name, "get_prior_knowledge",
+                entity_type="file",
+                entity_id=filename,
+                status="completed",
+            )
+
+            return result
+
+        except Exception as e:
+            log_agent_action(
+                self.name, "get_prior_knowledge",
+                entity_type="file",
+                entity_id=filename,
+                status="failed",
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "similar_episodes": [],
+                "suggested_mappings": {},
+            }
+
+    async def get_adaptive_threshold(
+        self,
+        filename: str,
+        user_id: str = "anonymous",
+    ) -> float:
+        """
+        Get adaptive confidence threshold based on historical patterns.
+
+        Uses LearningAgent reflections to determine appropriate
+        threshold for this file pattern.
+
+        Args:
+            filename: Name of file being imported
+            user_id: User performing import
+
+        Returns:
+            Confidence threshold (0.0 to 1.0)
+        """
+        try:
+            from agents.learning_agent import LearningAgent
+
+            learning_agent = LearningAgent()
+            context = {
+                "filename_pattern": self._extract_filename_pattern(filename),
+                "file_type": self._detect_file_type(filename),
+                "user_id": user_id,
+            }
+
+            return await learning_agent.get_adaptive_threshold(context)
+
+        except Exception:
+            # Default threshold on error
+            return 0.75
 
     def _extract_filename_pattern(self, filename: str) -> str:
         """Extract pattern from filename for future matching."""
