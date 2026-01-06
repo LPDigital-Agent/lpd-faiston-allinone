@@ -136,6 +136,28 @@ export const clearSGASession = sgaService.clearSession;
 export const getSGAAgentCoreConfig = sgaService.getConfig;
 
 // =============================================================================
+// Debug & Diagnostics
+// =============================================================================
+
+/**
+ * Debug action to verify deployed code version.
+ * Returns git commit SHA and deployment timestamp.
+ * Use this to diagnose stale code issues.
+ */
+export async function debugVersion(): Promise<AgentCoreResponse<{
+  success: boolean;
+  code_marker: string;
+  git_commit: string;
+  deployed_at: string;
+  action_received: string;
+  has_get_nf_upload_url: boolean;
+}>> {
+  return invokeSGAAgentCore({
+    action: 'debug_version',
+  });
+}
+
+// =============================================================================
 // Asset Queries
 // =============================================================================
 

@@ -1,52 +1,18 @@
-'use client';
-
 // =============================================================================
 // Estoque Layout - SGA Inventory Module
 // =============================================================================
-// Provides context providers for the entire estoque section.
+// Pass-through layout for estoque routes.
+// Context providers are now in the parent layout (/ferramentas/ativos/layout.tsx)
+// to ensure ALL ativos routes have access to providers.
 // =============================================================================
 
 import { ReactNode } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import {
-  AssetManagementProvider,
-  TaskInboxProvider,
-  NexoEstoqueProvider,
-  InventoryOperationsProvider,
-  InventoryCountProvider,
-  OfflineSyncProvider,
-} from '@/contexts/ativos';
-
-// Create a client instance (singleton for the module)
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000, // 1 minute
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 interface EstoqueLayoutProps {
   children: ReactNode;
 }
 
 export default function EstoqueLayout({ children }: EstoqueLayoutProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AssetManagementProvider>
-        <InventoryOperationsProvider>
-          <TaskInboxProvider>
-            <NexoEstoqueProvider>
-              <InventoryCountProvider>
-                <OfflineSyncProvider>
-                  {children}
-                </OfflineSyncProvider>
-              </InventoryCountProvider>
-            </NexoEstoqueProvider>
-          </TaskInboxProvider>
-        </InventoryOperationsProvider>
-      </AssetManagementProvider>
-    </QueryClientProvider>
-  );
+  // Providers are in parent layout - just pass through children
+  return <>{children}</>;
 }
