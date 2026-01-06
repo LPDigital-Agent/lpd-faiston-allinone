@@ -27,8 +27,12 @@ data "aws_iam_policy_document" "sga_agentcore_assume_role" {
     sid    = "AgentCoreAssumeRole"
     effect = "Allow"
     principals {
-      type        = "Service"
-      identifiers = ["bedrock.amazonaws.com"]
+      type = "Service"
+      identifiers = [
+        "bedrock.amazonaws.com",
+        # AgentCore Runtime uses a specific service principal for role assumption
+        "agentcore.bedrock.amazonaws.com"
+      ]
     }
     actions = ["sts:AssumeRole"]
     condition {
