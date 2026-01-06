@@ -776,3 +776,43 @@ def session_to_dict(self, session: ImportSession) -> Dict:
 ```
 **Benefits**: No DynamoDB dependency, complies with "inventory table for inventory items only" rule, scales infinitely
 **Files Updated**: `sgaAgentcore.ts`, `useSmartImportNexo.ts`, `useSmartImporter.ts`, `nexo_import_agent.py`, `main.py`
+
+### 13. NEXO Import Serialization Mismatches (January 2026)
+**Issue**: Multiple serialization format mismatches between frontend TypeScript and backend Python caused runtime errors:
+1. `KeyError: 'level'` - ConfidenceScore used wrong field names
+2. `ValueError: 'analysis_complete' is not a valid ImportStage` - Invalid enum value
+3. `KeyError: 'step'` - reasoning_trace used wrong field name
+
+**Root Cause**: Frontend and backend evolved independently, creating schema drift in the stateless architecture
+**Fix**: Aligned all serialization formats:
+
+```typescript
+// Frontend ConfidenceScore format (CORRECT)
+// Must match Python ConfidenceScore dataclass fields
+confidence: {
+  overall: number;           // NOT 'level' or 'score'
+  extraction_quality: number;
+  evidence_strength: number;
+  historical_match: number;
+  risk_level: string;        // NOT 'reason'
+  factors: string[];
+  requires_hil: boolean;
+}
+
+// Stage must be valid Python ImportStage enum value
+// Valid: analyzing, reasoning, questioning, awaiting, learning, processing, complete
+// INVALID: 'analysis_complete' (was being sent incorrectly)
+stage: data.questions?.length > 0 ? 'questioning' : 'processing';
+
+// reasoning_trace must use 'type' field
+// Python main.py was transforming to 'step' but frontend expects 'type'
+reasoning_trace: [{ type: 'observation', content: '...', timestamp: '...' }]
+```
+
+**Lesson Learned**: When implementing stateless architecture across language boundaries (TypeScript ↔ Python), create a **shared schema contract document** defining:
+1. All field names and types
+2. Valid enum values
+3. Nullable vs required fields
+4. Default values for missing fields
+
+**Files Fixed**: `useSmartImportNexo.ts`, `useSmartImporter.ts`, `sgaAgentcore.ts`, `nexo_import_agent.py`, `main.py`
