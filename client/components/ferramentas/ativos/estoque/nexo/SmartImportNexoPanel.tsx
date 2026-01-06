@@ -26,6 +26,9 @@ import {
   Play,
   Loader2,
   Info,
+  History,
+  Sparkles,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -464,6 +467,7 @@ export function SmartImportNexoPanel({
   const {
     state,
     isAnalyzing,
+    isRecalling,
     hasQuestions,
     isReadyToProcess,
     startAnalysis,
@@ -473,6 +477,7 @@ export function SmartImportNexoPanel({
     prepareProcessing,
     reasoningTrace,
     currentThought,
+    priorKnowledge,
   } = useSmartImportNexo();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -517,14 +522,22 @@ export function SmartImportNexoPanel({
     }
   };
 
-  // Loading state
-  if (state.stage === 'uploading' || isAnalyzing) {
+  // Loading state (uploading, recalling, or analyzing)
+  if (state.stage === 'uploading' || isRecalling || isAnalyzing) {
+    const stageInfo = {
+      uploading: { icon: FileSpreadsheet, title: 'Enviando Arquivo', color: 'text-cyan-400' },
+      recalling: { icon: Brain, title: 'NEXO Consultando Memória', color: 'text-purple-400' },
+      analyzing: { icon: Brain, title: 'NEXO Analisando', color: 'text-purple-400' },
+    };
+    const currentStageKey = state.stage as 'uploading' | 'recalling' | 'analyzing';
+    const { icon: StageIcon, title, color } = stageInfo[currentStageKey] || stageInfo.analyzing;
+
     return (
       <GlassCard>
         <GlassCardHeader>
           <div className="flex items-center gap-2">
-            <Brain className="w-5 h-5 text-purple-400 animate-pulse" />
-            <GlassCardTitle>NEXO Analisando</GlassCardTitle>
+            <StageIcon className={`w-5 h-5 ${color} animate-pulse`} />
+            <GlassCardTitle>{title}</GlassCardTitle>
           </div>
         </GlassCardHeader>
         <GlassCardContent>
@@ -534,13 +547,27 @@ export function SmartImportNexoPanel({
               {state.progress.message}
             </p>
 
+            {/* Show recall phase indicator */}
+            {isRecalling && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-start gap-2 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20"
+              >
+                <Brain className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                <p className="text-sm text-text-secondary">
+                  Buscando padrões de importações anteriores...
+                </p>
+              </motion.div>
+            )}
+
             {currentThought && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-start gap-2 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20"
               >
-                <Brain className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                <Lightbulb className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-text-secondary">{currentThought}</p>
               </motion.div>
             )}
@@ -608,6 +635,72 @@ export function SmartImportNexoPanel({
                 </p>
               </div>
             </div>
+
+            {/* Prior knowledge indicator */}
+            {priorKnowledge && priorKnowledge.similar_episodes > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-4 bg-gradient-to-r from-purple-500/10 to-cyan-500/10 rounded-lg border border-purple-500/20"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <History className="w-4 h-4 text-purple-400" />
+                  <span className="font-medium text-sm">Conhecimento Prévio Encontrado</span>
+                  <Badge className="bg-purple-500/20 text-purple-400 text-xs">
+                    {priorKnowledge.similar_episodes} importações similares
+                  </Badge>
+                </div>
+
+                {/* Suggested mappings count */}
+                {Object.keys(priorKnowledge.suggested_mappings).length > 0 && (
+                  <div className="flex items-center gap-4 text-sm mb-2">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-cyan-400" />
+                      <span className="text-text-secondary">
+                        {Object.keys(priorKnowledge.suggested_mappings).length} mapeamentos sugeridos
+                      </span>
+                    </div>
+                    {priorKnowledge.confidence_boost && (
+                      <Badge className="bg-green-500/20 text-green-400 text-xs">
+                        +15% confiança
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
+                {/* Reflections from past imports */}
+                {priorKnowledge.reflections.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-white/10">
+                    <p className="text-xs text-text-muted mb-2 flex items-center gap-1">
+                      <Sparkles className="w-3 h-3" />
+                      Aprendizados de importações anteriores:
+                    </p>
+                    <ul className="space-y-1">
+                      {priorKnowledge.reflections.slice(0, 2).map((reflection, i) => (
+                        <li key={i} className="text-xs text-text-secondary flex items-start gap-2">
+                          <span className="text-purple-400">•</span>
+                          {reflection}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* First time indicator */}
+            {(!priorKnowledge || priorKnowledge.similar_episodes === 0) && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 p-3 bg-white/5 rounded-lg border border-white/10"
+              >
+                <Sparkles className="w-4 h-4 text-text-muted" />
+                <span className="text-sm text-text-muted">
+                  Primeira vez analisando este tipo de arquivo - NEXO aprenderá com esta importação
+                </span>
+              </motion.div>
+            )}
 
             {/* Reasoning trace */}
             <ReasoningTrace steps={reasoningTrace} />
