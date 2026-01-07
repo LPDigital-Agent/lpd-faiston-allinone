@@ -2608,9 +2608,13 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
         for i, q in enumerate(questions)
     ]
 
+    # Extract session_id - may be at top level OR nested inside 'session' dict
+    session_data = result.get("session", {})
+    import_session_id = result.get("session_id") or session_data.get("session_id", "")
+
     return {
         "success": True,
-        "import_session_id": result.get("session_id", ""),
+        "import_session_id": import_session_id,
         "filename": filename,
         "detected_file_type": detected_file_type,
         "analysis": {
@@ -2625,6 +2629,7 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
         "reasoning_trace": reasoning_trace,
         "user_id": user_id,
         "session_id": session_id,
+        "session_state": session_data,  # Pass full session state for stateless architecture
     }
 
 
