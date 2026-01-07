@@ -996,25 +996,43 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
             content="Preparando configuração final para processamento",
         ))
 
-        # Build processing config
-        config = {
-            "session_id": session.session_id,
-            "filename": session.filename,
-            "s3_key": session.s3_key,
-            "column_mappings": session.learned_mappings,
-            "selected_sheets": session.file_analysis.get("selected_sheets", "all") if session.file_analysis else "all",
-            "movement_type": session.file_analysis.get("movement_type", "entry") if session.file_analysis else "entry",
-            "confidence": session.confidence.to_dict() if session.confidence else None,
-            "strategy": session.file_analysis.get("recommended_strategy") if session.file_analysis else None,
-        }
+        # Build column mappings in expected format
+        # Convert learned_mappings dict to array format expected by frontend
+        column_mappings_array = []
+        if session.learned_mappings:
+            for file_col, target_field in session.learned_mappings.items():
+                column_mappings_array.append({
+                    "file_column": file_col,
+                    "target_field": target_field,
+                })
+
+        # Get selected sheets as array
+        raw_sheets = session.file_analysis.get("selected_sheets", []) if session.file_analysis else []
+        if isinstance(raw_sheets, str):
+            selected_sheets = [raw_sheets] if raw_sheets != "all" else []
+        else:
+            selected_sheets = raw_sheets if raw_sheets else []
+
+        # Get confidence value
+        final_confidence = 0.0
+        if session.confidence:
+            final_confidence = session.confidence.overall
 
         session.stage = ImportStage.PROCESSING
         session.updated_at = now_iso()
 
+        # Return response matching NexoProcessingConfig interface
         return {
             "success": True,
-            "session": session_to_dict(session),  # Return full state
-            "config": config,
+            "ready": True,  # CRITICAL: Frontend checks this field
+            "import_session_id": session.session_id,
+            "column_mappings": column_mappings_array,
+            "selected_sheets": selected_sheets,
+            "movement_type": session.file_analysis.get("movement_type", "entry") if session.file_analysis else "entry",
+            "special_handling": session.file_analysis.get("special_handling", {}) if session.file_analysis else {},
+            "final_confidence": final_confidence,
+            # Also include session state for stateless architecture
+            "session": session_to_dict(session),
             "reasoning": [
                 {"type": r.step_type, "content": r.content}
                 for r in session.reasoning_trace
