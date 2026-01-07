@@ -1518,7 +1518,8 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
 
     Payload:
         import_id: Import session ID from preview
-        file_content_base64: Base64-encoded file content
+        file_content_base64: Base64-encoded file content (optional if s3_key provided)
+        s3_key: S3 key of already-uploaded file (NEXO flow uses this)
         filename: Original filename
         column_mappings: Confirmed column mappings [{file_column, target_field}]
         pn_overrides: Optional manual PN assignments {row_number: pn_id}
@@ -1533,6 +1534,7 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
 
     import_id = payload.get("import_id", "")
     file_content_b64 = payload.get("file_content_base64", "")
+    s3_key = payload.get("s3_key", "")  # NEXO flow: file already in S3
     filename = payload.get("filename", "import.csv")
     column_mappings = payload.get("column_mappings", [])
     pn_overrides = payload.get("pn_overrides", {})
@@ -1542,16 +1544,27 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
     if not import_id:
         return {"success": False, "error": "import_id is required"}
 
-    if not file_content_b64:
-        return {"success": False, "error": "file_content_base64 is required"}
+    if not file_content_b64 and not s3_key:
+        return {"success": False, "error": "file_content_base64 or s3_key is required"}
 
     if not column_mappings:
         return {"success": False, "error": "column_mappings is required"}
 
-    try:
-        file_content = base64.b64decode(file_content_b64)
-    except Exception as e:
-        return {"success": False, "error": f"Invalid base64 content: {e}"}
+    # Get file content: either from base64 or S3
+    file_content = None
+    if file_content_b64:
+        try:
+            file_content = base64.b64decode(file_content_b64)
+        except Exception as e:
+            return {"success": False, "error": f"Invalid base64 content: {e}"}
+    elif s3_key:
+        # NEXO flow: download from S3
+        from tools.s3_client import SGAS3Client
+        s3_client = SGAS3Client()
+        try:
+            file_content = s3_client.download_file(s3_key)
+        except Exception as e:
+            return {"success": False, "error": f"Failed to download file from S3: {e}"}
 
     # Convert pn_overrides keys to int (JSON keys are strings)
     pn_overrides_int = {int(k): v for k, v in pn_overrides.items()}

@@ -613,7 +613,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     try {
       const result = await executeImport({
         import_id: state.sessionState.session_id,  // STATELESS: Use session_id from state
-        file_content_base64: '', // Already uploaded to S3
+        s3_key: state.sessionState.s3_key,         // NEXO flow: file already in S3
         filename: state.sessionState.filename,
         column_mappings: config.column_mappings,
         project_id: projectId,

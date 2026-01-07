@@ -602,10 +602,14 @@ export async function previewImport(params: {
 /**
  * Execute the import after preview/confirmation.
  * Creates entry movements for all valid rows.
+ *
+ * For NEXO flow: use s3_key (file already uploaded during analysis)
+ * For direct flow: use file_content_base64
  */
 export async function executeImport(params: {
   import_id: string;
-  file_content_base64: string;
+  file_content_base64?: string;  // Optional if s3_key provided
+  s3_key?: string;               // NEXO flow: file already in S3
   filename: string;
   column_mappings: Array<{ file_column: string; target_field: string }>;
   pn_overrides?: Record<number, string>;
