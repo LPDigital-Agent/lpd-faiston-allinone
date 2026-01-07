@@ -1516,6 +1516,9 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
 
     Creates entry movements for all valid rows.
 
+    IMPORTANT: Per CLAUDE.md, inventory data MUST be stored in Aurora PostgreSQL.
+    This function uses SGAPostgresClient directly to insert movements.
+
     Payload:
         import_id: Import session ID from preview
         file_content_base64: Base64-encoded file content (optional if s3_key provided)
@@ -1530,7 +1533,8 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
         Import result with created movements
     """
     import base64
-    from agents.import_agent import create_import_agent
+    import logging
+    logger = logging.getLogger(__name__)
 
     import_id = payload.get("import_id", "")
     file_content_b64 = payload.get("file_content_base64", "")
@@ -1540,6 +1544,9 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
     pn_overrides = payload.get("pn_overrides", {})
     project_id = payload.get("project_id")
     destination_location_id = payload.get("destination_location_id")
+
+    logger.info(f"[execute_import] Starting import {import_id} for file {filename}")
+    logger.info(f"[execute_import] s3_key={s3_key}, column_mappings count={len(column_mappings)}")
 
     if not import_id:
         return {"success": False, "error": "import_id is required"}
@@ -1555,6 +1562,7 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
     if file_content_b64:
         try:
             file_content = base64.b64decode(file_content_b64)
+            logger.info(f"[execute_import] Decoded base64 content, {len(file_content)} bytes")
         except Exception as e:
             return {"success": False, "error": f"Invalid base64 content: {e}"}
     elif s3_key:
@@ -1563,25 +1571,143 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
         s3_client = SGAS3Client()
         try:
             file_content = s3_client.download_file(s3_key)
+            logger.info(f"[execute_import] Downloaded from S3: {s3_key}, {len(file_content) if file_content else 0} bytes")
         except Exception as e:
+            logger.error(f"[execute_import] S3 download failed: {e}")
             return {"success": False, "error": f"Failed to download file from S3: {e}"}
 
-    # Convert pn_overrides keys to int (JSON keys are strings)
-    pn_overrides_int = {int(k): v for k, v in pn_overrides.items()}
+    if not file_content:
+        return {"success": False, "error": "Failed to get file content"}
 
-    agent = create_import_agent()
-    result = await agent.execute_import(
-        import_id=import_id,
-        file_content=file_content,
-        filename=filename,
-        column_mappings=column_mappings,
-        pn_overrides=pn_overrides_int,
-        project_id=project_id,
-        destination_location_id=destination_location_id,
-        operator_id=user_id,
+    # Parse file using csv_parser
+    from tools.csv_parser import extract_all_rows
+
+    try:
+        all_rows = extract_all_rows(file_content, filename, column_mappings)
+        logger.info(f"[execute_import] Parsed {len(all_rows)} rows from file")
+    except Exception as e:
+        logger.error(f"[execute_import] File parsing failed: {e}")
+        return {"success": False, "error": f"Failed to parse file: {e}"}
+
+    if not all_rows:
+        return {"success": False, "error": "No valid rows found in file"}
+
+    # Use PostgreSQL client for inventory operations (MANDATORY per CLAUDE.md)
+    from tools.postgres_client import SGAPostgresClient
+
+    try:
+        pg_client = SGAPostgresClient()
+        logger.info("[execute_import] PostgreSQL client initialized")
+    except Exception as e:
+        logger.error(f"[execute_import] PostgreSQL connection failed: {e}")
+        return {"success": False, "error": f"Database connection failed: {e}"}
+
+    # Process each row
+    created_movements = []
+    failed_rows = []
+    skipped_rows = []
+
+    for i, row_data in enumerate(all_rows):
+        row_number = i + 2  # 1-based + header
+
+        try:
+            # Extract data from row
+            part_number = row_data.get("part_number", "").strip()
+            description = row_data.get("description", "").strip()
+            qty_str = row_data.get("quantity", "0").strip()
+            serial = row_data.get("serial", "").strip()
+            location = row_data.get("location", destination_location_id or "").strip()
+
+            # Skip empty rows
+            if not part_number and not description:
+                continue
+
+            # Parse quantity
+            try:
+                quantity = int(float(qty_str.replace(",", ".")))
+            except (ValueError, TypeError):
+                failed_rows.append({
+                    "row_number": row_number,
+                    "reason": f"Quantidade invalida: {qty_str}",
+                    "data": row_data,
+                })
+                continue
+
+            if quantity <= 0:
+                failed_rows.append({
+                    "row_number": row_number,
+                    "reason": "Quantidade deve ser maior que zero",
+                    "data": row_data,
+                })
+                continue
+
+            # Create movement via PostgreSQL client
+            result = pg_client.create_movement(
+                movement_type="ENTRADA",
+                part_number=part_number,
+                quantity=quantity,
+                destination_location_id=location,
+                project_id=project_id,
+                serial_numbers=[serial] if serial else None,
+                reason=f"Import {import_id}",
+            )
+
+            if result.get("error"):
+                # Part number not found - try to create it first or skip
+                if "not found" in result.get("error", "").lower():
+                    skipped_rows.append({
+                        "row_number": row_number,
+                        "reason": f"Part number nao encontrado: {part_number}",
+                        "data": row_data,
+                    })
+                else:
+                    failed_rows.append({
+                        "row_number": row_number,
+                        "reason": result.get("error"),
+                        "data": row_data,
+                    })
+            else:
+                created_movements.append({
+                    "row_number": row_number,
+                    "movement_id": result.get("movement_id", ""),
+                    "part_number": part_number,
+                    "quantity": quantity,
+                })
+                logger.info(f"[execute_import] Row {row_number}: Created movement for {part_number} qty={quantity}")
+
+        except Exception as row_error:
+            logger.error(f"[execute_import] Row {row_number} error: {row_error}")
+            failed_rows.append({
+                "row_number": row_number,
+                "reason": str(row_error),
+                "data": row_data,
+            })
+
+    # Calculate final stats
+    total_rows = len(all_rows)
+    success_rate = len(created_movements) / max(total_rows, 1)
+
+    logger.info(
+        f"[execute_import] Import complete: {len(created_movements)}/{total_rows} succeeded, "
+        f"{len(failed_rows)} failed, {len(skipped_rows)} skipped"
     )
 
-    return result
+    return {
+        "success": True,
+        "import_id": import_id,
+        "total_rows": total_rows,
+        "created_count": len(created_movements),
+        "failed_count": len(failed_rows),
+        "skipped_count": len(skipped_rows),
+        "success_rate": round(success_rate * 100, 1),
+        "created_movements": created_movements[:50],  # Limit response size
+        "failed_rows": failed_rows[:20],
+        "skipped_rows": skipped_rows[:20],
+        "message": (
+            f"Importacao concluida: {len(created_movements)}/{total_rows} "
+            f"itens importados com sucesso via PostgreSQL"
+        ),
+    }
 
 
 async def _validate_pn_mapping(payload: dict) -> dict:

@@ -816,3 +816,35 @@ reasoning_trace: [{ type: 'observation', content: '...', timestamp: '...' }]
 4. Default values for missing fields
 
 **Files Fixed**: `useSmartImportNexo.ts`, `useSmartImporter.ts`, `sgaAgentcore.ts`, `nexo_import_agent.py`, `main.py`
+
+### 14. NEXO Import Using DynamoDB Instead of PostgreSQL (January 2026)
+**Issue**: NEXO Smart Import "completed" instantly without actually importing items - UI showed success but no data was inserted
+**Root Cause**: `ImportAgent` in `import_agent.py` used `SGADynamoDBClient` for all database operations, violating the CLAUDE.md mandate that **ALL inventory data MUST go to Aurora PostgreSQL**
+**Symptoms**:
+1. Import "completed" in < 1 second for 1400+ items (impossible for real DB writes)
+2. No PostgreSQL movements created
+3. DynamoDB tables likely didn't exist or had wrong schema, silently failing
+
+**Fix**: Rewrote `_execute_import()` in `main.py` to use `SGAPostgresClient` directly:
+```python
+# OLD - Using DynamoDB via ImportAgent (WRONG)
+agent = create_import_agent()  # Uses SGADynamoDBClient internally
+result = await agent.execute_import(...)
+
+# NEW - Using PostgreSQL directly (CORRECT per CLAUDE.md)
+from tools.postgres_client import SGAPostgresClient
+pg_client = SGAPostgresClient()
+
+for row_data in all_rows:
+    result = pg_client.create_movement(
+        movement_type="ENTRADA",
+        part_number=part_number,
+        quantity=quantity,
+        destination_location_id=location,
+        # ...
+    )
+```
+
+**Lesson Learned**: The `ImportAgent` class was created before the PostgreSQL migration was mandated. When adding new features, always verify the datastore being used matches the CLAUDE.md requirements.
+
+**Files Fixed**: `main.py` (`_execute_import` function)
