@@ -598,9 +598,13 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
   const executeNexoImport = useCallback(async (
     projectId?: string,
-    locationId?: string
+    locationId?: string,
+    configOverride?: NexoProcessingConfig // Allow passing config directly to avoid stale closure
   ): Promise<void> => {
-    if (!state.sessionState || !state.processingConfig) {
+    // Use passed config OR state config (stale closure fix)
+    const config = configOverride || state.processingConfig;
+
+    if (!state.sessionState || !config) {
       throw new Error('Preparação não concluída');
     }
 
@@ -611,7 +615,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         import_id: state.sessionState.session_id,  // STATELESS: Use session_id from state
         file_content_base64: '', // Already uploaded to S3
         filename: state.sessionState.filename,
-        column_mappings: state.processingConfig.column_mappings,
+        column_mappings: config.column_mappings,
         project_id: projectId,
         destination_location_id: locationId,
       });
@@ -685,13 +689,14 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       stage: 'processing',
     }));
 
-    // Prepare processing configuration
-    await prepareProcessing();
+    // Prepare processing configuration - capture returned config to avoid stale closure
+    const config = await prepareProcessing();
 
-    // Execute the import
+    // Execute the import - pass config directly to avoid React state timing issue
     await executeNexoImport(
       state.answers['project'] || state.answers['projeto'] || undefined,
-      state.answers['location'] || state.answers['local'] || undefined
+      state.answers['location'] || state.answers['local'] || undefined,
+      config // Pass config directly to avoid stale closure
     );
 
     // Learn from this import for future improvements
