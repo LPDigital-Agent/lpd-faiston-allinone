@@ -10,3 +10,4 @@ export { NexoSearchBar } from './NexoSearchBar';
 export { UnifiedSearch } from './UnifiedSearch';
 export { SmartImportNexoPanel } from './SmartImportNexoPanel';
 export { SmartImportReasoningPanel } from './SmartImportReasoningPanel';
+export { KBCitationCard, KBCitationsList } from './KBCitationCard';

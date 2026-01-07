@@ -564,3 +564,396 @@ class SGAS3Client:
                 break  # Found files, stop searching
 
         return files
+
+
+# =============================================================================
+# Equipment Documentation Client (for Bedrock Knowledge Base)
+# =============================================================================
+
+
+class EquipmentDocsS3Client:
+    """
+    S3 client for equipment documentation storage.
+
+    Stores documents in a structure optimized for Bedrock Knowledge Base:
+    - equipment-docs/{part_number}/{doc_type}/{filename}
+    - equipment-docs/{part_number}/{doc_type}/{filename}.metadata.json
+
+    The .metadata.json sidecar files contain KB indexing metadata:
+    - part_number, manufacturer, description, document_type
+    - source_url, download_timestamp
+
+    Example:
+        client = EquipmentDocsS3Client()
+        result = client.upload_equipment_document(
+            part_number="ABC-123",
+            document_type="manual",
+            filename="user_manual.pdf",
+            content=pdf_bytes,
+            metadata={"manufacturer": "Cisco", "source_url": "..."}
+        )
+    """
+
+    # Default bucket for equipment documentation
+    DEFAULT_BUCKET = "faiston-one-sga-equipment-docs-prod"
+
+    def __init__(self, bucket_name: Optional[str] = None):
+        """
+        Initialize the equipment docs client.
+
+        Args:
+            bucket_name: Override bucket name (for testing)
+        """
+        self._bucket = bucket_name or os.environ.get(
+            "EQUIPMENT_DOCS_BUCKET",
+            self.DEFAULT_BUCKET
+        )
+
+    @property
+    def bucket(self) -> str:
+        """Get bucket name."""
+        return self._bucket
+
+    @property
+    def client(self):
+        """Get S3 client with lazy loading."""
+        return _get_s3_client()
+
+    # =========================================================================
+    # Path Generation
+    # =========================================================================
+
+    def get_doc_path(
+        self,
+        part_number: str,
+        doc_type: str,
+        filename: str,
+    ) -> str:
+        """
+        Generate S3 key for equipment document.
+
+        Structure: equipment-docs/{part_number}/{doc_type}/{filename}
+
+        Args:
+            part_number: Equipment part number
+            doc_type: Type (manual, datasheet, spec, guide, firmware, driver)
+            filename: Document filename
+
+        Returns:
+            S3 key path
+        """
+        # Sanitize part number for use as path component
+        safe_pn = part_number.replace("/", "_").replace("\\", "_").strip()
+        safe_doc_type = doc_type.lower().replace(" ", "_")
+        return f"equipment-docs/{safe_pn}/{safe_doc_type}/{filename}"
+
+    def get_metadata_path(self, doc_key: str) -> str:
+        """
+        Get metadata sidecar path for a document.
+
+        Args:
+            doc_key: Document S3 key
+
+        Returns:
+            Metadata JSON key path
+        """
+        return f"{doc_key}.metadata.json"
+
+    # =========================================================================
+    # Document Upload
+    # =========================================================================
+
+    def upload_equipment_document(
+        self,
+        part_number: str,
+        document_type: str,
+        filename: str,
+        content: bytes,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Upload equipment document with KB metadata.
+
+        Creates both the document file and a .metadata.json sidecar
+        file that Bedrock Knowledge Base uses for indexing.
+
+        Args:
+            part_number: Equipment part number
+            document_type: Type (manual, datasheet, spec, etc.)
+            filename: Document filename
+            content: File content as bytes
+            metadata: Additional metadata (manufacturer, source_url, etc.)
+
+        Returns:
+            Dict with success, doc_key, metadata_key, s3_uri
+        """
+        import json
+
+        try:
+            # Generate paths
+            doc_key = self.get_doc_path(part_number, document_type, filename)
+            meta_key = self.get_metadata_path(doc_key)
+
+            # Determine content type
+            content_type = self._get_content_type(filename)
+
+            # Upload document
+            self.client.put_object(
+                Bucket=self._bucket,
+                Key=doc_key,
+                Body=content,
+                ContentType=content_type,
+            )
+
+            # Build KB metadata
+            kb_metadata = {
+                "part_number": part_number,
+                "document_type": document_type,
+                "filename": filename,
+                "content_type": content_type,
+                "file_size_bytes": len(content),
+                "upload_timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+
+            # Merge additional metadata
+            if metadata:
+                kb_metadata.update(metadata)
+
+            # Upload metadata sidecar
+            self.client.put_object(
+                Bucket=self._bucket,
+                Key=meta_key,
+                Body=json.dumps(kb_metadata, ensure_ascii=False, indent=2).encode("utf-8"),
+                ContentType="application/json",
+            )
+
+            print(f"[EquipmentDocs] Uploaded: {doc_key}")
+
+            return {
+                "success": True,
+                "doc_key": doc_key,
+                "metadata_key": meta_key,
+                "s3_uri": f"s3://{self._bucket}/{doc_key}",
+                "bucket": self._bucket,
+            }
+
+        except Exception as e:
+            print(f"[EquipmentDocs] Upload error: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+            }
+
+    def _get_content_type(self, filename: str) -> str:
+        """Get MIME type from filename."""
+        ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+        content_types = {
+            "pdf": "application/pdf",
+            "doc": "application/msword",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "xls": "application/vnd.ms-excel",
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "txt": "text/plain",
+            "html": "text/html",
+            "htm": "text/html",
+            "xml": "application/xml",
+            "json": "application/json",
+            "zip": "application/zip",
+            "png": "image/png",
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+        }
+        return content_types.get(ext, "application/octet-stream")
+
+    # =========================================================================
+    # Document Retrieval
+    # =========================================================================
+
+    def list_documents_for_part(
+        self,
+        part_number: str,
+        doc_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        List all documents for a part number.
+
+        Args:
+            part_number: Equipment part number
+            doc_type: Optional filter by document type
+
+        Returns:
+            List of document info dicts
+        """
+        safe_pn = part_number.replace("/", "_").replace("\\", "_").strip()
+
+        if doc_type:
+            prefix = f"equipment-docs/{safe_pn}/{doc_type.lower()}/"
+        else:
+            prefix = f"equipment-docs/{safe_pn}/"
+
+        try:
+            response = self.client.list_objects_v2(
+                Bucket=self._bucket,
+                Prefix=prefix,
+                MaxKeys=100,
+            )
+
+            documents = []
+            for obj in response.get("Contents", []):
+                key = obj["Key"]
+                # Skip metadata sidecar files
+                if key.endswith(".metadata.json"):
+                    continue
+
+                documents.append({
+                    "key": key,
+                    "s3_uri": f"s3://{self._bucket}/{key}",
+                    "size": obj["Size"],
+                    "last_modified": obj["LastModified"].isoformat(),
+                    "filename": key.rsplit("/", 1)[-1],
+                })
+
+            return documents
+
+        except Exception as e:
+            print(f"[EquipmentDocs] List error: {e}")
+            return []
+
+    def get_document_metadata(self, doc_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Get metadata for a document.
+
+        Args:
+            doc_key: Document S3 key
+
+        Returns:
+            Metadata dict or None
+        """
+        import json
+
+        try:
+            meta_key = self.get_metadata_path(doc_key)
+            response = self.client.get_object(
+                Bucket=self._bucket,
+                Key=meta_key,
+            )
+            return json.loads(response["Body"].read().decode("utf-8"))
+        except Exception as e:
+            print(f"[EquipmentDocs] Get metadata error: {e}")
+            return None
+
+    def generate_download_url(
+        self,
+        doc_key: str,
+        expires_in: int = 3600,
+    ) -> Optional[str]:
+        """
+        Generate presigned download URL for a document.
+
+        Args:
+            doc_key: Document S3 key
+            expires_in: URL expiration in seconds
+
+        Returns:
+            Presigned URL or None
+        """
+        try:
+            url = self.client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": self._bucket,
+                    "Key": doc_key,
+                },
+                ExpiresIn=expires_in,
+            )
+            return url
+        except Exception as e:
+            print(f"[EquipmentDocs] URL generation error: {e}")
+            return None
+
+    def generate_download_url_from_uri(
+        self,
+        s3_uri: str,
+        expires_in: int = 3600,
+    ) -> Optional[str]:
+        """
+        Generate presigned download URL from S3 URI.
+
+        Args:
+            s3_uri: S3 URI (s3://bucket/key)
+            expires_in: URL expiration in seconds
+
+        Returns:
+            Presigned URL or None
+        """
+        # Parse S3 URI
+        if not s3_uri.startswith("s3://"):
+            return None
+
+        parts = s3_uri[5:].split("/", 1)
+        if len(parts) != 2:
+            return None
+
+        bucket, key = parts
+
+        try:
+            url = self.client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": bucket,
+                    "Key": key,
+                },
+                ExpiresIn=expires_in,
+            )
+            return url
+        except Exception as e:
+            print(f"[EquipmentDocs] URL from URI error: {e}")
+            return None
+
+    # =========================================================================
+    # Deletion
+    # =========================================================================
+
+    def delete_document(self, doc_key: str) -> bool:
+        """
+        Delete a document and its metadata.
+
+        Args:
+            doc_key: Document S3 key
+
+        Returns:
+            True if successful
+        """
+        try:
+            # Delete document
+            self.client.delete_object(Bucket=self._bucket, Key=doc_key)
+
+            # Delete metadata sidecar
+            meta_key = self.get_metadata_path(doc_key)
+            self.client.delete_object(Bucket=self._bucket, Key=meta_key)
+
+            print(f"[EquipmentDocs] Deleted: {doc_key}")
+            return True
+
+        except Exception as e:
+            print(f"[EquipmentDocs] Delete error: {e}")
+            return False
+
+    def document_exists(self, part_number: str, doc_type: str, filename: str) -> bool:
+        """
+        Check if a document already exists.
+
+        Args:
+            part_number: Equipment part number
+            doc_type: Document type
+            filename: Document filename
+
+        Returns:
+            True if exists
+        """
+        doc_key = self.get_doc_path(part_number, doc_type, filename)
+        try:
+            self.client.head_object(Bucket=self._bucket, Key=doc_key)
+            return True
+        except Exception:
+            return False

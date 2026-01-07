@@ -1954,3 +1954,139 @@ export interface SGAApplyReconciliationActionResponse {
   message: string;
   error?: string;
 }
+
+// =============================================================================
+// Equipment Documentation / Knowledge Base Types (Phase 6)
+// =============================================================================
+
+/**
+ * Research status for equipment documentation.
+ */
+export type EquipmentResearchStatus =
+  | 'NOT_RESEARCHED'
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'NO_DOCS_FOUND'
+  | 'FAILED'
+  | 'RATE_LIMITED';
+
+/**
+ * Document type categories.
+ */
+export type EquipmentDocumentType =
+  | 'manual'
+  | 'datasheet'
+  | 'spec'
+  | 'guide'
+  | 'firmware'
+  | 'driver'
+  | 'unknown';
+
+/**
+ * Citation from Knowledge Base query result.
+ */
+export interface KBCitation {
+  document_id: string;
+  s3_uri: string;
+  part_number?: string;
+  document_type?: EquipmentDocumentType;
+  title?: string;
+  excerpt: string;
+  score: number;
+  download_url?: string;
+}
+
+/**
+ * Knowledge Base query response.
+ */
+export interface KBQueryResponse {
+  success: boolean;
+  answer: string;
+  citations: KBCitation[];
+  query: string;
+  error?: string;
+}
+
+/**
+ * Downloaded equipment document metadata.
+ */
+export interface EquipmentDocument {
+  s3_key: string;
+  filename: string;
+  document_type: EquipmentDocumentType;
+  size_bytes: number;
+  source_url?: string;
+  last_modified?: string;
+}
+
+/**
+ * Research result for equipment documentation.
+ */
+export interface EquipmentResearchResult {
+  success: boolean;
+  part_number: string;
+  status: EquipmentResearchStatus;
+  search_queries: string[];
+  sources_found: number;
+  documents_downloaded: EquipmentDocument[];
+  s3_prefix: string;
+  summary: string;
+  confidence?: ConfidenceScore;
+  reasoning_trace: Array<{
+    type: string;
+    content: string;
+    timestamp: string;
+  }>;
+  error?: string;
+}
+
+/**
+ * Research batch result.
+ */
+export interface EquipmentResearchBatchResult {
+  success: boolean;
+  total_items: number;
+  completed: number;
+  no_docs_found: number;
+  failed: number;
+  rate_limited: number;
+  results: Array<{
+    part_number: string;
+    status: EquipmentResearchStatus;
+    documents_downloaded: number;
+    summary: string;
+  }>;
+}
+
+/**
+ * Research status check response.
+ */
+export interface EquipmentResearchStatusResponse {
+  success: boolean;
+  part_number: string;
+  status: EquipmentResearchStatus;
+  documents: EquipmentDocument[];
+  s3_prefix?: string;
+  error?: string;
+}
+
+/**
+ * Request to research equipment documentation.
+ */
+export interface ResearchEquipmentRequest {
+  part_number: string;
+  description: string;
+  serial_number?: string;
+  manufacturer?: string;
+  additional_info?: Record<string, unknown>;
+}
+
+/**
+ * Request to query equipment documentation KB.
+ */
+export interface QueryEquipmentDocsRequest {
+  query: string;
+  part_number?: string;
+  max_results?: number;
+}

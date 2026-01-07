@@ -15,8 +15,8 @@ import {
   useCallback,
   useRef,
 } from 'react';
-import { nexoEstoqueChat } from '@/services/sgaAgentcore';
-import type { SGANexoChatResponse } from '@/lib/ativos/types';
+import { nexoEstoqueChat, queryEquipmentDocs } from '@/services/sgaAgentcore';
+import type { SGANexoChatResponse, KBCitation } from '@/lib/ativos/types';
 
 // =============================================================================
 // Types
@@ -29,6 +29,7 @@ export interface ChatMessage {
   timestamp: string;
   data?: Record<string, unknown>;
   suggestions?: string[];
+  citations?: KBCitation[];
 }
 
 interface NexoEstoqueContextType {
@@ -40,6 +41,10 @@ interface NexoEstoqueContextType {
   // Actions
   sendMessage: (question: string, context?: Record<string, unknown>) => Promise<SGANexoChatResponse>;
   clearChat: () => void;
+
+  // Knowledge Base query
+  queryKB: (query: string, partNumber?: string) => Promise<void>;
+  isQueryingKB: boolean;
 
   // Suggestions
   suggestions: string[];
@@ -77,6 +82,12 @@ const DEFAULT_QUICK_ACTIONS: QuickAction[] = [
     label: 'Localizar serial',
     query: 'Onde esta o serial {serial}?',
     icon: 'MapPin',
+  },
+  {
+    id: 'docs',
+    label: 'Documentacao equipamento',
+    query: 'Onde encontro o manual do {part_number}?',
+    icon: 'FileText',
   },
   {
     id: 'pending',
@@ -123,6 +134,9 @@ export function NexoEstoqueProvider({ children }: NexoEstoqueProviderProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // KB query state
+  const [isQueryingKB, setIsQueryingKB] = useState(false);
 
   // Suggestions state
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -214,6 +228,63 @@ export function NexoEstoqueProvider({ children }: NexoEstoqueProviderProps) {
     }
   }, [buildConversationHistory]);
 
+  // Query Knowledge Base for equipment documentation
+  const queryKB = useCallback(async (
+    query: string,
+    partNumber?: string
+  ): Promise<void> => {
+    // Add user message showing the KB query
+    const userMessage: ChatMessage = {
+      id: generateId(),
+      role: 'user',
+      content: query,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, userMessage]);
+
+    setIsQueryingKB(true);
+    setError(null);
+
+    try {
+      const result = await queryEquipmentDocs({
+        query,
+        part_number: partNumber,
+        max_results: 5,
+      });
+
+      // Add assistant response with KB answer and citations
+      const assistantMessage: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: result.data.answer || 'Nenhuma informacao encontrada na base de conhecimento.',
+        timestamp: new Date().toISOString(),
+        citations: result.data.citations || [],
+        data: { source: 'knowledge_base', query },
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+
+      // Set follow-up suggestions
+      setSuggestions([
+        'Mais detalhes sobre este equipamento',
+        'Como fazer a instalacao?',
+        'Quais sao as especificacoes tecnicas?',
+      ]);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao consultar base de conhecimento';
+      setError(errorMessage);
+
+      const errorResponse: ChatMessage = {
+        id: generateId(),
+        role: 'assistant',
+        content: `Nao foi possivel consultar a documentacao: ${errorMessage}`,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
+      setIsQueryingKB(false);
+    }
+  }, []);
+
   // Clear chat history
   const clearChat = useCallback(() => {
     setMessages([]);
@@ -234,6 +305,8 @@ export function NexoEstoqueProvider({ children }: NexoEstoqueProviderProps) {
         error,
         sendMessage,
         clearChat,
+        queryKB,
+        isQueryingKB,
         suggestions,
         setSuggestions,
         quickActions: DEFAULT_QUICK_ACTIONS,

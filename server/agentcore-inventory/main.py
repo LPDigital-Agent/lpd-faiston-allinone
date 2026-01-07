@@ -390,6 +390,23 @@ def invoke(payload: dict, context) -> dict:
         elif action == "track_shipment":
             return asyncio.run(_track_shipment(payload))
 
+        # =================================================================
+        # Equipment Research (EquipmentResearchAgent)
+        # =================================================================
+        # Researches equipment documentation using Gemini + google_search
+        # and stores in S3 for Bedrock Knowledge Base ingestion
+        elif action == "research_equipment":
+            return asyncio.run(_research_equipment(payload, user_id))
+
+        elif action == "research_equipment_batch":
+            return asyncio.run(_research_equipment_batch(payload, user_id))
+
+        elif action == "get_research_status":
+            return asyncio.run(_get_research_status(payload))
+
+        elif action == "query_equipment_docs":
+            return asyncio.run(_query_equipment_docs(payload, user_id))
+
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -2819,6 +2836,276 @@ async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
     result = await agent.prepare_for_processing(session=session)
 
     return result
+
+
+# =============================================================================
+# Equipment Research (EquipmentResearchAgent)
+# =============================================================================
+
+
+async def _research_equipment(payload: dict, user_id: str) -> dict:
+    """
+    Research documentation for a single piece of equipment.
+
+    Uses Gemini 3.0 Pro with google_search grounding to find official
+    documentation from manufacturer websites. Documents are downloaded
+    and stored in S3 for Bedrock Knowledge Base ingestion.
+
+    Payload:
+        part_number: Equipment part number / SKU
+        description: Equipment description
+        serial_number: Optional serial number
+        manufacturer: Optional manufacturer name
+        additional_info: Optional extra context dict
+
+    Returns:
+        Research result with status, sources found, and documents downloaded
+    """
+    from agents.equipment_research_agent import EquipmentResearchAgent
+
+    part_number = payload.get("part_number", "")
+    description = payload.get("description", "")
+    serial_number = payload.get("serial_number")
+    manufacturer = payload.get("manufacturer")
+    additional_info = payload.get("additional_info")
+
+    if not part_number:
+        return {"success": False, "error": "part_number is required"}
+
+    if not description:
+        return {"success": False, "error": "description is required"}
+
+    agent = EquipmentResearchAgent()
+    result = await agent.research_equipment(
+        part_number=part_number,
+        description=description,
+        serial_number=serial_number,
+        manufacturer=manufacturer,
+        additional_info=additional_info,
+    )
+
+    # Convert dataclass to dict for JSON serialization
+    return {
+        "success": result.status.value in ["COMPLETED", "NO_DOCS_FOUND"],
+        "part_number": result.part_number,
+        "status": result.status.value,
+        "search_queries": result.search_queries,
+        "sources_found": len(result.sources_found),
+        "documents_downloaded": [
+            {
+                "s3_key": doc.s3_key,
+                "filename": doc.filename,
+                "document_type": doc.document_type,
+                "size_bytes": doc.size_bytes,
+            }
+            for doc in result.documents_downloaded
+        ],
+        "s3_prefix": result.s3_prefix,
+        "summary": result.summary,
+        "confidence": result.confidence.to_dict() if result.confidence else None,
+        "reasoning_trace": result.reasoning_trace,
+        "error": result.error,
+    }
+
+
+async def _research_equipment_batch(payload: dict, user_id: str) -> dict:
+    """
+    Research documentation for multiple equipment items.
+
+    Processes items sequentially to respect Google Search rate limits.
+    Useful after bulk imports to enrich all new items.
+
+    Payload:
+        equipment_list: List of equipment dicts, each with:
+            - part_number: Equipment part number
+            - description: Equipment description
+            - serial_number: Optional serial number
+            - manufacturer: Optional manufacturer name
+
+    Returns:
+        Batch result with status for each item
+    """
+    from agents.equipment_research_agent import EquipmentResearchAgent
+
+    equipment_list = payload.get("equipment_list", [])
+
+    if not equipment_list:
+        return {"success": False, "error": "equipment_list is required"}
+
+    if len(equipment_list) > 50:
+        return {"success": False, "error": "Maximum 50 items per batch"}
+
+    agent = EquipmentResearchAgent()
+    results = await agent.research_batch(equipment_list=equipment_list)
+
+    return {
+        "success": True,
+        "total_items": len(equipment_list),
+        "completed": sum(1 for r in results if r.status.value == "COMPLETED"),
+        "no_docs_found": sum(1 for r in results if r.status.value == "NO_DOCS_FOUND"),
+        "failed": sum(1 for r in results if r.status.value == "FAILED"),
+        "rate_limited": sum(1 for r in results if r.status.value == "RATE_LIMITED"),
+        "results": [
+            {
+                "part_number": r.part_number,
+                "status": r.status.value,
+                "documents_downloaded": len(r.documents_downloaded),
+                "summary": r.summary,
+            }
+            for r in results
+        ],
+    }
+
+
+async def _get_research_status(payload: dict) -> dict:
+    """
+    Get research status for a part number.
+
+    Checks if documentation research has been completed for this item.
+
+    Payload:
+        part_number: Part number to check
+
+    Returns:
+        Research status with documents if available
+    """
+    part_number = payload.get("part_number", "")
+
+    if not part_number:
+        return {"success": False, "error": "part_number is required"}
+
+    # TODO: Query PostgreSQL for research status
+    # For now, check S3 for existing documents
+    from tools.s3_client import SGAS3Client
+    import os
+    import re
+    import hashlib
+
+    bucket = os.environ.get("EQUIPMENT_DOCS_BUCKET", "faiston-one-sga-equipment-docs-prod")
+    s3_client = SGAS3Client(bucket_name=bucket)
+
+    # Generate S3 prefix (same logic as agent)
+    safe_pn = re.sub(r'[^a-zA-Z0-9\-_]', '_', part_number)
+    hash_prefix = hashlib.md5(part_number.encode()).hexdigest()[:4]
+    s3_prefix = f"equipment-docs/{hash_prefix}/{safe_pn}/"
+
+    files = s3_client.list_files(prefix=s3_prefix, max_keys=20)
+
+    if not files:
+        return {
+            "success": True,
+            "part_number": part_number,
+            "status": "NOT_RESEARCHED",
+            "documents": [],
+        }
+
+    # Filter out metadata files
+    docs = [f for f in files if not f["key"].endswith(".metadata.json")]
+
+    return {
+        "success": True,
+        "part_number": part_number,
+        "status": "COMPLETED" if docs else "NOT_RESEARCHED",
+        "documents": [
+            {
+                "s3_key": f["key"],
+                "size_bytes": f["size"],
+                "last_modified": f["last_modified"],
+            }
+            for f in docs
+        ],
+        "s3_prefix": s3_prefix,
+    }
+
+
+async def _query_equipment_docs(payload: dict, user_id: str) -> dict:
+    """
+    Query equipment documentation using Bedrock Knowledge Base.
+
+    Searches the KB for relevant documentation and returns
+    answers with citations to source documents.
+
+    Payload:
+        query: Natural language question about equipment
+        part_number: Optional filter by specific part number
+        max_results: Maximum number of results (default 5)
+
+    Returns:
+        Answer with citations to source documents
+    """
+    # Lazy import
+    from tools.knowledge_base_retrieval_tool import query_knowledge_base
+
+    query = payload.get("query", "")
+    part_number = payload.get("part_number")
+    max_results = payload.get("max_results", 5)
+
+    if not query:
+        return {"success": False, "error": "query is required"}
+
+    result = await query_knowledge_base(
+        query=query,
+        part_number_filter=part_number,
+        max_results=max_results,
+    )
+
+    return result
+
+
+# =============================================================================
+# Auto-trigger Equipment Research (after imports)
+# =============================================================================
+
+
+async def _trigger_equipment_research_async(
+    imported_items: list,
+    user_id: str,
+) -> None:
+    """
+    Trigger equipment research asynchronously after import.
+
+    This runs in the background and doesn't block the import response.
+    Extracts unique part numbers from imported items and queues research.
+
+    Args:
+        imported_items: List of imported item dicts
+        user_id: User who performed the import
+    """
+    try:
+        from agents.equipment_research_agent import EquipmentResearchAgent
+
+        # Extract unique part numbers with descriptions
+        seen_pns = set()
+        equipment_to_research = []
+
+        for item in imported_items:
+            pn = item.get("part_number", "")
+            if pn and pn not in seen_pns:
+                seen_pns.add(pn)
+                equipment_to_research.append({
+                    "part_number": pn,
+                    "description": item.get("description", ""),
+                    "manufacturer": item.get("manufacturer"),
+                })
+
+        if not equipment_to_research:
+            print("[EquipmentResearch] No new part numbers to research")
+            return
+
+        print(f"[EquipmentResearch] Triggering research for {len(equipment_to_research)} part numbers")
+
+        # Research in batch (respects rate limits)
+        agent = EquipmentResearchAgent()
+        results = await agent.research_batch(
+            equipment_list=equipment_to_research[:20],  # Limit to 20 per import
+        )
+
+        completed = sum(1 for r in results if r.status.value == "COMPLETED")
+        print(f"[EquipmentResearch] Completed: {completed}/{len(results)}")
+
+    except Exception as e:
+        # Log but don't fail - research is non-blocking
+        print(f"[EquipmentResearch] Error: {e}")
 
 
 # =============================================================================

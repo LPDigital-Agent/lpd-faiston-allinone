@@ -1475,3 +1475,113 @@ export async function generateImportObservations(
     context,
   });
 }
+
+// =============================================================================
+// Equipment Documentation Research (Knowledge Base)
+// =============================================================================
+
+import type {
+  KBCitation,
+  KBQueryResponse,
+  EquipmentResearchResult,
+  EquipmentResearchBatchResult,
+  EquipmentResearchStatusResponse,
+  ResearchEquipmentRequest,
+  QueryEquipmentDocsRequest,
+  EquipmentDocument,
+} from '@/lib/ativos/types';
+
+/**
+ * Research documentation for a single piece of equipment.
+ *
+ * Uses Gemini 3.0 Pro with google_search grounding to find official
+ * documentation from manufacturer websites. Documents are downloaded
+ * and stored in S3 for Bedrock Knowledge Base ingestion.
+ *
+ * @param params.part_number - Equipment part number / SKU
+ * @param params.description - Equipment description
+ * @param params.serial_number - Optional serial number
+ * @param params.manufacturer - Optional manufacturer name
+ * @returns Research result with status, sources found, and documents downloaded
+ */
+export async function researchEquipment(
+  params: ResearchEquipmentRequest
+): Promise<AgentCoreResponse<EquipmentResearchResult>> {
+  return invokeSGAAgentCore<EquipmentResearchResult>({
+    action: 'research_equipment',
+    part_number: params.part_number,
+    description: params.description,
+    serial_number: params.serial_number,
+    manufacturer: params.manufacturer,
+    additional_info: params.additional_info,
+  });
+}
+
+/**
+ * Research documentation for multiple equipment items in batch.
+ *
+ * Processes items sequentially to respect Google Search rate limits.
+ * Useful after bulk imports to enrich all new items.
+ *
+ * @param equipment_list - List of equipment dicts with part_number, description, etc.
+ * @returns Batch result with status for each item
+ */
+export async function researchEquipmentBatch(
+  equipment_list: ResearchEquipmentRequest[]
+): Promise<AgentCoreResponse<EquipmentResearchBatchResult>> {
+  return invokeSGAAgentCore<EquipmentResearchBatchResult>({
+    action: 'research_equipment_batch',
+    equipment_list,
+  });
+}
+
+/**
+ * Get research status for a part number.
+ *
+ * Checks if documentation research has been completed for this item
+ * and returns list of available documents if any.
+ *
+ * @param part_number - Part number to check
+ * @returns Research status with documents if available
+ */
+export async function getResearchStatus(
+  part_number: string
+): Promise<AgentCoreResponse<EquipmentResearchStatusResponse>> {
+  return invokeSGAAgentCore<EquipmentResearchStatusResponse>({
+    action: 'get_research_status',
+    part_number,
+  });
+}
+
+/**
+ * Query equipment documentation using Bedrock Knowledge Base.
+ *
+ * Searches the KB for relevant documentation and returns
+ * answers with citations to source documents. Uses RAG
+ * (Retrieval Augmented Generation) for accurate responses.
+ *
+ * @param params.query - Natural language question about equipment
+ * @param params.part_number - Optional filter by specific part number
+ * @param params.max_results - Maximum number of citations (default 5)
+ * @returns Answer with citations to source documents
+ */
+export async function queryEquipmentDocs(
+  params: QueryEquipmentDocsRequest
+): Promise<AgentCoreResponse<KBQueryResponse>> {
+  return invokeSGAAgentCore<KBQueryResponse>({
+    action: 'query_equipment_docs',
+    query: params.query,
+    part_number: params.part_number,
+    max_results: params.max_results ?? 5,
+  });
+}
+
+// Re-export types for consumer convenience
+export type {
+  KBCitation,
+  KBQueryResponse,
+  EquipmentResearchResult,
+  EquipmentResearchBatchResult,
+  EquipmentResearchStatusResponse,
+  EquipmentDocument,
+};

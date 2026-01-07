@@ -22,6 +22,8 @@ import {
   Activity,
   Loader2,
   MessageSquare,
+  FileText,
+  BookOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +32,7 @@ import { Badge } from '@/components/ui/badge';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { useNexoEstoque } from '@/contexts/ativos';
 import type { QuickAction } from '@/contexts/ativos/NexoEstoqueContext';
+import { KBCitationsList } from './KBCitationCard';
 
 // =============================================================================
 // Icon Map for Quick Actions
@@ -42,11 +45,28 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   CheckSquare,
   AlertTriangle,
   Activity,
+  FileText,
+  BookOpen,
 };
 
 // =============================================================================
 // NexoCopilot Component
 // =============================================================================
+
+// Keywords that indicate an equipment documentation query
+const KB_QUERY_KEYWORDS = [
+  'manual', 'datasheet', 'especificacao', 'especificações', 'documentacao',
+  'documentação', 'instalacao', 'instalação', 'configuracao', 'configuração',
+  'firmware', 'driver', 'guia', 'tutorial',
+];
+
+/**
+ * Check if a question is likely about equipment documentation.
+ */
+function isKBQuery(question: string): boolean {
+  const lower = question.toLowerCase();
+  return KB_QUERY_KEYWORDS.some(keyword => lower.includes(keyword));
+}
 
 export function NexoCopilot() {
   const {
@@ -55,6 +75,8 @@ export function NexoCopilot() {
     error,
     sendMessage,
     clearChat,
+    queryKB,
+    isQueryingKB,
     suggestions,
     quickActions,
     isPanelOpen,
@@ -79,19 +101,27 @@ export function NexoCopilot() {
     }
   }, [isPanelOpen]);
 
-  // Handle send
+  // Combined loading state
+  const isBusy = isLoading || isQueryingKB;
+
+  // Handle send - routes to KB or general chat based on question content
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isBusy) return;
 
     const question = input.trim();
     setInput('');
 
     try {
-      await sendMessage(question);
+      // Route documentation questions to Knowledge Base
+      if (isKBQuery(question)) {
+        await queryKB(question);
+      } else {
+        await sendMessage(question);
+      }
     } catch {
       // Error handled by context
     }
-  }, [input, isLoading, sendMessage]);
+  }, [input, isBusy, sendMessage, queryKB]);
 
   // Handle quick action
   const handleQuickAction = useCallback((action: QuickAction) => {
@@ -228,7 +258,7 @@ export function NexoCopilot() {
                       key={msg.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                     >
                       <div
                         className={`max-w-[85%] rounded-xl px-4 py-2 ${
@@ -246,12 +276,22 @@ export function NexoCopilot() {
                           <p className="text-sm">{msg.content}</p>
                         )}
                       </div>
+
+                      {/* Citations from Knowledge Base */}
+                      {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
+                        <div className="max-w-[85%] mt-2">
+                          <KBCitationsList
+                            citations={msg.citations}
+                            maxVisible={3}
+                          />
+                        </div>
+                      )}
                     </motion.div>
                   ))
                 )}
 
                 {/* Loading indicator */}
-                {isLoading && (
+                {isBusy && (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -260,7 +300,9 @@ export function NexoCopilot() {
                     <div className="bg-white/5 border border-border rounded-xl px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin text-magenta-mid" />
-                        <span className="text-sm text-text-muted">Pensando...</span>
+                        <span className="text-sm text-text-muted">
+                          {isQueryingKB ? 'Consultando documentacao...' : 'Pensando...'}
+                        </span>
                       </div>
                     </div>
                   </motion.div>
@@ -300,16 +342,16 @@ export function NexoCopilot() {
                 <Input
                   ref={inputRef}
                   type="text"
-                  placeholder="Pergunte sobre o estoque..."
+                  placeholder="Pergunte sobre estoque ou documentacao..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  disabled={isLoading}
+                  disabled={isBusy}
                   className="flex-1 bg-white/5 border-border"
                 />
                 <Button
                   onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
+                  disabled={!input.trim() || isBusy}
                   className="bg-gradient-to-r from-magenta-mid to-blue-mid hover:opacity-90"
                 >
                   <Send className="w-4 h-4" />
