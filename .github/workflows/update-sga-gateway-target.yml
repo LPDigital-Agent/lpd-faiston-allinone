@@ -258,14 +258,17 @@ jobs:
               session = boto3.Session()
               credentials = session.get_credentials().get_frozen_credentials()
 
-              # AgentCore Control API endpoint
+              # AgentCore Control API endpoint (per AWS docs)
+              # https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_UpdateGatewayTarget.html
               api_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com"
 
-              # Update target endpoint
-              update_url = f"{api_url}/gateways/{GATEWAY_ID}/targets/{TARGET_ID}"
+              # Update target endpoint - NOTE: trailing slash is REQUIRED per API spec
+              update_url = f"{api_url}/gateways/{GATEWAY_ID}/targets/{TARGET_ID}/"
 
-              # Request body
+              # Request body - per UpdateGatewayTarget API reference
+              # The API uses PUT (not PATCH) and requires 'name' and 'targetConfiguration'
               payload = {
+                  "name": TARGET_NAME,
                   "targetConfiguration": {
                       "lambda": {
                           "lambdaArn": LAMBDA_ARN,
@@ -281,9 +284,9 @@ jobs:
 
               body = json.dumps(payload)
 
-              # Create and sign request
+              # Create and sign request - using PUT per API spec
               request = AWSRequest(
-                  method="PATCH",
+                  method="PUT",
                   url=update_url,
                   data=body,
                   headers={
@@ -294,14 +297,14 @@ jobs:
 
               SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(request)
 
-              print(f"\nSending PATCH to: {update_url}")
-              print(f"Payload: {json.dumps(payload, indent=2)[:500]}...")
+              print(f"\nSending PUT to: {update_url}")
+              print(f"Payload (first 1000 chars): {json.dumps(payload, indent=2)[:1000]}...")
 
-              response = requests.patch(
+              response = requests.put(
                   update_url,
                   headers=dict(request.headers),
                   data=body,
-                  timeout=30
+                  timeout=60  # Longer timeout for update operation
               )
 
               print(f"\nResponse Status: {response.status_code}")
