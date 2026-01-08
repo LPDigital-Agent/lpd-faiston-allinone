@@ -1162,6 +1162,18 @@ export interface NexoSessionState {
   answers: Record<string, string>;
   learned_mappings: Record<string, string>;
   column_mappings?: Record<string, string>;
+  // FIX (January 2026): AI instructions from "Outros:" answers - MUST be preserved across rounds!
+  ai_instructions?: Record<string, { column: string; instruction: string; question: string }>;
+  // FEATURE (January 2026): Dynamic schema evolution - columns user wants to create
+  requested_new_columns?: Array<{
+    name: string;
+    original_name: string;
+    user_intent: string;
+    inferred_type: string;
+    sample_values: string[];
+    source_file_column: string;
+    approved: boolean;
+  }>;
   // NOTE: confidence format MUST match Python ConfidenceScore dataclass
   confidence?: {
     overall: number;

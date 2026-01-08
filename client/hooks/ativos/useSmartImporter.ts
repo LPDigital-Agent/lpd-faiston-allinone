@@ -436,6 +436,10 @@ export function useSmartImporter(): UseSmartImporterReturn & {
         questions: data.questions || [],
         answers: {},
         learned_mappings: {},
+        // FIX (January 2026): Initialize ai_instructions for "Outros:" answers
+        ai_instructions: {},
+        // FEATURE (January 2026): Initialize requested_new_columns for dynamic schema
+        requested_new_columns: [],
         column_mappings: data.column_mappings.reduce((acc, m) => {
           acc[m.file_column] = m.target_field;
           return acc;
