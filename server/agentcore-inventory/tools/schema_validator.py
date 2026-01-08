@@ -220,6 +220,104 @@ class SchemaValidator:
                 )
 
         # =================================================================
+        # 0.5 Handle NEXO special markers (FIX January 2026)
+        # =================================================================
+        # These are special values used by NEXO import flow that should NOT be
+        # validated against PostgreSQL schema - they have special meaning:
+        # - "_ignore" → User explicitly chose to skip this column
+        # - "__new_column__:xxx" → Pending column creation (needs HIL approval)
+        # - "__create_column__:xxx" → Approved column creation (create during import)
+        # - "__custom_fields__" → Store in JSONB custom_fields column
+        # - "__ai_pending__:xxx" → Waiting for AI interpretation (should be resolved)
+        pending_new_columns = []  # Track columns pending creation
+
+        for file_col, target_col in list(column_mappings.items()):
+            # Skip ignored columns - remove from mappings entirely
+            if target_col == "_ignore":
+                del column_mappings[file_col]
+                logger.info(f"[SchemaValidator] Ignoring column '{file_col}' per user request")
+                continue
+
+            # Handle pending column creation - these need HIL approval first!
+            if target_col.startswith("__new_column__:"):
+                new_col_name = target_col.split(":", 1)[1]
+                pending_new_columns.append({
+                    "file_column": file_col,
+                    "suggested_name": new_col_name,
+                    "marker": target_col,
+                })
+                del column_mappings[file_col]
+                logger.warning(
+                    f"[SchemaValidator] Column '{file_col}' pending creation as '{new_col_name}' "
+                    f"- requires HIL approval"
+                )
+                continue
+
+            # Handle approved column creation - should have been created by now
+            if target_col.startswith("__create_column__:"):
+                new_col_name = target_col.split(":", 1)[1]
+                # Check if column was actually created
+                if new_col_name in schema_columns:
+                    column_mappings[file_col] = new_col_name  # Replace marker with actual name
+                    logger.info(f"[SchemaValidator] Using created column '{new_col_name}'")
+                else:
+                    pending_new_columns.append({
+                        "file_column": file_col,
+                        "suggested_name": new_col_name,
+                        "marker": target_col,
+                        "approved": True,
+                    })
+                    del column_mappings[file_col]
+                    logger.warning(
+                        f"[SchemaValidator] Approved column '{new_col_name}' not yet created"
+                    )
+                continue
+
+            # Handle custom_fields JSONB storage
+            if target_col == "__custom_fields__":
+                if "custom_fields" in schema_columns:
+                    column_mappings[file_col] = "custom_fields"
+                    logger.info(f"[SchemaValidator] Storing '{file_col}' in custom_fields JSONB")
+                else:
+                    warnings.append(ValidationIssue(
+                        field=file_col,
+                        issue_type="no_custom_fields",
+                        message=f"Cannot store '{file_col}' in custom_fields - column doesn't exist",
+                        severity="warning",
+                    ))
+                    del column_mappings[file_col]
+                continue
+
+            # Handle unresolved AI pending markers - should have been resolved!
+            if target_col.startswith("__ai_pending__:"):
+                errors.append(ValidationIssue(
+                    field=file_col,
+                    issue_type="unresolved_ai",
+                    message=(
+                        f"Coluna '{file_col}' aguardando interpretação AI que não foi completada. "
+                        f"Por favor, responda as perguntas novamente."
+                    ),
+                    severity="error",
+                ))
+                del column_mappings[file_col]
+                continue
+
+        # If there are pending column creations, return error asking for HIL approval
+        if pending_new_columns:
+            for pending in pending_new_columns:
+                errors.append(ValidationIssue(
+                    field=pending["file_column"],
+                    issue_type="pending_column_creation",
+                    message=(
+                        f"Coluna '{pending['file_column']}' requer criação do campo "
+                        f"'{pending['suggested_name']}' no banco de dados. "
+                        f"Aguardando aprovação do administrador."
+                    ),
+                    severity="error",
+                    expected="Aprovação de criação de coluna",
+                ))
+
+        # =================================================================
         # 1. Validate target columns exist
         # =================================================================
         for file_col, target_col in column_mappings.items():

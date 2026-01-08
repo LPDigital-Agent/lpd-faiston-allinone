@@ -236,12 +236,12 @@ class NexoImportAgent(BaseInventoryAgent):
             name: Raw column name from user/AI
 
         Returns:
-            Sanitized snake_case column name with 'import_' prefix
+            Sanitized snake_case column name (clear, user-friendly naming)
         """
         import re
 
         if not name:
-            return "import_unknown"
+            return "custom_field"
 
         # Convert to lowercase
         sanitized = name.lower().strip()
@@ -259,15 +259,15 @@ class NexoImportAgent(BaseInventoryAgent):
         if sanitized and sanitized[0].isdigit():
             sanitized = f"col_{sanitized}"
 
-        # Add prefix to distinguish user-created columns
-        if not sanitized.startswith('import_'):
-            sanitized = f"import_{sanitized}"
+        # FIX (January 2026): Don't add automatic "import_" prefix
+        # Column names should be clear and user-friendly
+        # The user explicitly requested clearer naming without the import_ prefix
 
         # Limit length (PostgreSQL max is 63, we use 50 for safety)
         if len(sanitized) > 50:
             sanitized = sanitized[:50]
 
-        return sanitized or "import_unknown"
+        return sanitized or "custom_field"
 
     def _get_schema_context(self, target_table: str = "pending_entry_items") -> str:
         """
