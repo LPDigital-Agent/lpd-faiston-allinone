@@ -259,13 +259,18 @@ jobs:
 
           # Request body - per UpdateGatewayTarget API reference
           # The API uses PUT (not PATCH) and requires 'name' and 'targetConfiguration'
+          # Structure per AWS docs:
+          #   targetConfiguration.mcp.lambda.lambdaArn
+          #   targetConfiguration.mcp.lambda.toolSchema.inlinePayload
           payload = {
               "name": TARGET_NAME,
               "targetConfiguration": {
-                  "lambda": {
-                      "lambdaArn": LAMBDA_ARN,
-                      "toolSchema": {
-                          "inlinePayload": TOOL_SCHEMA
+                  "mcp": {
+                      "lambda": {
+                          "lambdaArn": LAMBDA_ARN,
+                          "toolSchema": {
+                              "inlinePayload": TOOL_SCHEMA
+                          }
                       }
                   }
               },
