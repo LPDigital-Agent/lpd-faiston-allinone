@@ -885,3 +885,294 @@ def analysis_to_dict(analysis: WorkbookAnalysis) -> Dict[str, Any]:
         "questions_for_user": analysis.questions_for_user,
         "reasoning_trace": analysis.reasoning_trace,
     }
+
+
+# =============================================================================
+# Smart File Analysis (FIX January 2026)
+# =============================================================================
+# Routes to the correct parser based on file type detection.
+# This is the AI-First approach: detect file type intelligently and activate
+# the appropriate handler.
+
+
+def analyze_file_smart(
+    content: bytes,
+    filename: str,
+    max_sample_rows: int = 20,
+) -> WorkbookAnalysis:
+    """
+    Intelligently analyze any supported file format (CSV, XLSX, XLS).
+
+    This is the AI-First entry point that:
+    1. Detects file type from extension AND content
+    2. Routes to the appropriate parser
+    3. Returns a unified WorkbookAnalysis structure
+
+    Args:
+        content: Raw file content as bytes
+        filename: Original filename (used for type detection)
+        max_sample_rows: Maximum rows to sample per sheet
+
+    Returns:
+        WorkbookAnalysis with unified structure regardless of file type
+    """
+    # Detect file type from extension
+    lower_name = filename.lower()
+
+    if lower_name.endswith(".csv"):
+        return _analyze_csv(content, filename, max_sample_rows)
+    elif lower_name.endswith(".xlsx"):
+        return analyze_workbook(content, filename, max_sample_rows)
+    elif lower_name.endswith(".xls"):
+        raise ValueError(
+            "Formato .xls (Excel 97-2003) não suportado. "
+            "Por favor, salve o arquivo como .xlsx ou .csv"
+        )
+    else:
+        # Try to detect from content
+        # XLSX files start with PK (ZIP signature)
+        if content[:2] == b'PK':
+            return analyze_workbook(content, filename, max_sample_rows)
+        else:
+            # Default to CSV for unknown types
+            return _analyze_csv(content, filename, max_sample_rows)
+
+
+def _analyze_csv(
+    content: bytes,
+    filename: str,
+    max_sample_rows: int = 20,
+) -> WorkbookAnalysis:
+    """
+    Analyze a CSV file and return WorkbookAnalysis structure.
+
+    Creates a unified analysis structure compatible with XLSX analysis,
+    treating the CSV as a single-sheet workbook.
+
+    Args:
+        content: Raw CSV content as bytes
+        filename: Original filename
+        max_sample_rows: Maximum rows to sample
+
+    Returns:
+        WorkbookAnalysis with CSV data as single sheet
+    """
+    import csv
+
+    reasoning_trace = []
+
+    reasoning_trace.append({
+        "type": "thought",
+        "content": f"Detectei arquivo CSV: '{filename}'. Vou analisar sua estrutura.",
+    })
+
+    # Decode content
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+        reasoning_trace.append({
+            "type": "observation",
+            "content": "Arquivo usa encoding Latin-1 (não UTF-8)",
+        })
+
+    # Detect delimiter
+    sample = text[:4096]
+    delimiters = [',', ';', '\t', '|']
+    delimiter_counts = {d: sample.count(d) for d in delimiters}
+    delimiter = max(delimiter_counts, key=delimiter_counts.get)
+
+    reasoning_trace.append({
+        "type": "observation",
+        "content": f"Delimitador detectado: '{delimiter}' (aparece {delimiter_counts[delimiter]} vezes)",
+    })
+
+    # Parse CSV
+    lines = text.strip().split('\n')
+    reader = csv.reader(lines, delimiter=delimiter)
+    rows = list(reader)
+
+    if not rows:
+        raise ValueError("Arquivo CSV está vazio")
+
+    headers = rows[0]
+    data_rows = rows[1:max_sample_rows + 1] if len(rows) > 1 else []
+    total_rows = len(rows) - 1  # Exclude header
+
+    reasoning_trace.append({
+        "type": "observation",
+        "content": f"CSV tem {len(headers)} colunas e {total_rows} linhas de dados",
+    })
+
+    # Analyze columns
+    columns_analysis = []
+
+    for col_idx, header in enumerate(headers):
+        # Get sample values for this column
+        sample_values = []
+        null_count = 0
+        unique_values = set()
+
+        for row in data_rows:
+            if col_idx < len(row):
+                value = row[col_idx].strip()
+                if value:
+                    sample_values.append(value)
+                    unique_values.add(value)
+                else:
+                    null_count += 1
+            else:
+                null_count += 1
+
+        # Detect data type
+        data_type = _detect_data_type(sample_values)
+
+        # Normalize column name
+        normalized = normalize_column_name(header)
+
+        # Get schema-aware mapping suggestion using the existing function
+        suggested_mapping, mapping_confidence = detect_column_mapping(header)
+
+        columns_analysis.append(ColumnAnalysis(
+            name=header,
+            normalized_name=normalized,
+            sample_values=sample_values[:5],
+            data_type=data_type,
+            unique_count=len(unique_values),
+            null_count=null_count,
+            is_likely_key=len(unique_values) == len(data_rows) and null_count == 0,
+            suggested_mapping=suggested_mapping,
+            mapping_confidence=mapping_confidence,
+        ))
+
+    # Determine sheet purpose (for CSV, always assume ITEMS)
+    purpose = SheetPurpose.ITEMS
+    purpose_confidence = 0.8
+
+    reasoning_trace.append({
+        "type": "conclusion",
+        "content": f"CSV analisado: {len(headers)} colunas, {total_rows} linhas. Pronto para mapeamento.",
+    })
+
+    # Create single-sheet analysis
+    sheet_analysis = SheetAnalysis(
+        name="CSV Data",
+        row_count=total_rows,
+        column_count=len(headers),
+        columns=columns_analysis,
+        detected_purpose=purpose,
+        purpose_confidence=purpose_confidence,
+        has_headers=True,
+        suggested_action="process",
+        merge_target=None,
+        notes=[],
+    )
+
+    return WorkbookAnalysis(
+        filename=filename,
+        sheet_count=1,
+        total_rows=total_rows,
+        sheets=[sheet_analysis],
+        relationships=[],
+        recommended_strategy="single_sheet",
+        questions_for_user=[],
+        reasoning_trace=reasoning_trace,
+    )
+
+
+def _detect_data_type(values: List[str]) -> str:
+    """Detect data type from sample values."""
+    if not values:
+        return "text"
+
+    numeric_count = 0
+    date_count = 0
+
+    for v in values:
+        # Check numeric
+        try:
+            float(v.replace(",", ".").replace(" ", ""))
+            numeric_count += 1
+            continue
+        except ValueError:
+            pass
+
+        # Check date patterns
+        if any(sep in v for sep in ["/", "-"]) and len(v) <= 20:
+            parts = v.replace("-", "/").split("/")
+            if len(parts) >= 2 and all(p.isdigit() for p in parts if p):
+                date_count += 1
+
+    if numeric_count >= len(values) * 0.8:
+        return "number"
+    elif date_count >= len(values) * 0.8:
+        return "date"
+    else:
+        return "text"
+
+
+def load_workbook_smart(content: bytes):
+    """
+    Load workbook content smartly, detecting format.
+
+    Returns an object that can be used with both pandas ExcelFile
+    or openpyxl Workbook APIs.
+
+    Args:
+        content: Raw file content
+
+    Returns:
+        Workbook object (openpyxl or pandas ExcelFile)
+    """
+    # Check if content is XLSX (starts with PK = ZIP signature)
+    if content[:2] == b'PK':
+        from openpyxl import load_workbook
+        return load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    else:
+        # For CSV, return a simple wrapper
+        return _CSVWorkbookWrapper(content)
+
+
+class _CSVWorkbookWrapper:
+    """Wrapper to make CSV content look like a workbook for compatibility."""
+
+    def __init__(self, content: bytes):
+        self.content = content
+        self.sheetnames = ["CSV Data"]
+        self._data = None
+
+    def __getitem__(self, sheet_name: str):
+        return _CSVSheetWrapper(self.content)
+
+    def close(self):
+        pass
+
+
+class _CSVSheetWrapper:
+    """Wrapper to make CSV sheet look like openpyxl worksheet."""
+
+    def __init__(self, content: bytes):
+        import csv as csv_module
+
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            text = content.decode("latin-1")
+
+        # Detect delimiter
+        sample = text[:4096]
+        delimiters = [',', ';', '\t', '|']
+        delimiter_counts = {d: sample.count(d) for d in delimiters}
+        delimiter = max(delimiter_counts, key=delimiter_counts.get)
+
+        lines = text.strip().split('\n')
+        reader = csv_module.reader(lines, delimiter=delimiter)
+        self._rows = list(reader)
+
+    def iter_rows(self, min_row: int = 1, max_row: int = None, values_only: bool = False):
+        """Iterate rows like openpyxl."""
+        start_idx = min_row - 1
+        end_idx = max_row if max_row else len(self._rows)
+
+        for row in self._rows[start_idx:end_idx]:
+            yield tuple(row)

@@ -704,16 +704,16 @@ Com base em toda a análise acima, qual é o tipo de movimento?
 
         try:
             # Lazy import to reduce cold start
-            from tools.sheet_analyzer import analyze_workbook, analysis_to_dict
+            from tools.sheet_analyzer import analyze_file_smart, analysis_to_dict
 
-            # Run analysis
+            # Run analysis - smart detection handles CSV, XLSX, etc.
             session.reasoning_trace.append(ReasoningStep(
                 step_type="action",
-                content="Executando análise multi-sheet",
+                content="Executando análise inteligente do arquivo (CSV/XLSX)",
                 tool="sheet_analyzer",
             ))
 
-            analysis = analyze_workbook(file_content, session.filename)
+            analysis = analyze_file_smart(file_content, session.filename)
             analysis_dict = analysis_to_dict(analysis)
 
             # Store analysis in session
