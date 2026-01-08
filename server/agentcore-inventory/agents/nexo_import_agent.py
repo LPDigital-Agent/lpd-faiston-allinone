@@ -88,6 +88,8 @@ class ImportSession:
     questions: List[NexoQuestion] = field(default_factory=list)
     answers: Dict[str, Any] = field(default_factory=dict)
     learned_mappings: Dict[str, str] = field(default_factory=dict)
+    # FIX (January 2026): Store "Outros:" user instructions for AI interpretation
+    ai_instructions: Dict[str, Dict[str, str]] = field(default_factory=dict)
     confidence: Optional[ConfidenceScore] = None
     error: Optional[str] = None
     created_at: str = field(default_factory=now_iso)
@@ -381,6 +383,8 @@ class NexoImportAgent(BaseInventoryAgent):
                 factors=state["confidence"].get("factors", []),
                 requires_hil=state["confidence"].get("requires_hil", False),
             ) if state.get("confidence") and isinstance(state["confidence"], dict) else None,
+            # FIX (January 2026): Restore AI instructions for "Outros:" answers
+            ai_instructions=state.get("ai_instructions", {}),
             error=state.get("error"),
             created_at=state.get("created_at", now_iso()),
             updated_at=now_iso(),
@@ -1065,11 +1069,15 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         ))
 
         # Step 1: Validate answers against PostgreSQL schema BEFORE applying
+        # FIX (January 2026): "Outros:" prefix indicates user INSTRUCTIONS for AI,
+        # not literal column names. These must be interpreted by Gemini re-reasoning.
         provider = self._get_schema_provider()
         schema = provider.get_table_schema("pending_entry_items") if provider else None
         valid_columns = schema.get_column_names() + ["_ignore"] if schema else []
 
         validation_errors = []
+        ai_instructions = {}  # Store "Outros:" answers for AI interpretation
+
         for q in session.questions:
             answer = answers.get(q.id)
             if not answer:
@@ -1077,10 +1085,31 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 
             # Validate column mapping answers
             if q.topic == "column_mapping" and valid_columns:
+                # FIX: "Outros:" answers are AI instructions, NOT literal column names
+                # Skip validation - these will be interpreted by Gemini in re-reasoning
+                if answer.startswith("Outros:"):
+                    ai_instructions[q.id] = {
+                        "column": q.column,
+                        "instruction": answer,
+                        "question": q.question,
+                    }
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="observation",
+                        content=f"Instrução do usuário para coluna '{q.column}': {answer}",
+                    ))
+                    # Don't validate - let AI interpret this
+                    continue
+
                 if answer not in valid_columns:
                     validation_errors.append(
                         f"Coluna '{answer}' não existe em sga.pending_entry_items"
                     )
+
+        # Store AI instructions in session for Gemini to process
+        if ai_instructions:
+            if not hasattr(session, "ai_instructions"):
+                session.ai_instructions = {}
+            session.ai_instructions.update(ai_instructions)
 
         if validation_errors:
             session.reasoning_trace.append(ReasoningStep(
@@ -1094,6 +1123,7 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             }
 
         # Step 2: Apply answers to session
+        # FIX: "Outros:" answers are AI instructions - don't store as literal mappings
         for q in session.questions:
             answer = answers.get(q.id)
             if not answer:
@@ -1105,7 +1135,13 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             ))
 
             if q.topic == "column_mapping" and q.column:
-                session.learned_mappings[q.column] = answer
+                # FIX: Skip "Outros:" answers - these need AI interpretation first
+                # They're stored in ai_instructions and will be processed by Gemini
+                if answer.startswith("Outros:"):
+                    # Mark as pending AI interpretation (placeholder)
+                    session.learned_mappings[q.column] = f"__ai_pending__:{q.id}"
+                else:
+                    session.learned_mappings[q.column] = answer
             elif q.topic == "sheet_selection":
                 if session.file_analysis:
                     session.file_analysis["selected_sheets"] = answer
@@ -1239,6 +1275,24 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 if isinstance(suggested, dict):
                     session.learned_mappings.update(suggested)
 
+                # FIX: Process interpreted instructions from "Outros:" answers
+                interpreted = result.get("interpreted_instructions", {})
+                if isinstance(interpreted, dict) and interpreted:
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="action",
+                        content=f"Interpretando {len(interpreted)} instruções do usuário",
+                    ))
+                    for file_col, db_col in interpreted.items():
+                        # Replace __ai_pending__ placeholders with actual interpretations
+                        if file_col in session.learned_mappings:
+                            old_value = session.learned_mappings[file_col]
+                            if old_value.startswith("__ai_pending__"):
+                                session.learned_mappings[file_col] = db_col
+                                session.reasoning_trace.append(ReasoningStep(
+                                    step_type="observation",
+                                    content=f"Interpretado: '{file_col}' → '{db_col}'",
+                                ))
+
                 session.reasoning_trace.append(ReasoningStep(
                     step_type="conclusion",
                     content=f"Reanálise completa. Confiança: {new_confidence:.0%}",
@@ -1265,6 +1319,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 
         This prompt includes the user's clarifications so Gemini can
         refine its understanding and improve confidence.
+
+        FIX (January 2026): Now includes AI instructions from "Outros:" answers
+        for Gemini to interpret and extract actual column mappings.
         """
         schema_context = self._get_schema_context(target_table)
 
@@ -1275,11 +1332,35 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             if q.id in user_answers
         ])
 
-        # Format current mappings
+        # Format current mappings (excluding __ai_pending__ placeholders)
         mappings_context = "\n".join([
             f"- {col} → {target}"
             for col, target in session.learned_mappings.items()
+            if not target.startswith("__ai_pending__")
         ])
+
+        # FIX: Format AI instructions that need Gemini interpretation
+        ai_instructions = getattr(session, "ai_instructions", {})
+        ai_instructions_context = ""
+        if ai_instructions:
+            ai_instructions_context = "\n## INSTRUÇÕES DO USUÁRIO PARA INTERPRETAR\n"
+            ai_instructions_context += "O usuário selecionou 'Outros' para estas colunas e forneceu explicações:\n\n"
+            for q_id, info in ai_instructions.items():
+                ai_instructions_context += f"- Coluna do arquivo: '{info.get('column', 'unknown')}'\n"
+                ai_instructions_context += f"  Instrução do usuário: {info.get('instruction', '')}\n"
+                ai_instructions_context += f"  Pergunta original: {info.get('question', '')}\n\n"
+            ai_instructions_context += """
+TAREFA CRÍTICA: Você DEVE interpretar cada instrução acima e determinar:
+1. Qual coluna do schema PostgreSQL corresponde à intenção do usuário
+2. Se o usuário mencionou múltiplos campos (ex: "Cliente e localidade"), mapeie para o campo principal
+3. Se não conseguir determinar, use "_ignore" para ignorar a coluna
+
+Exemplos de interpretação:
+- "import isto como ticket_flux" → mapear para "ticket_flux" (se existir no schema)
+- "colocado no campo Cliente" → mapear para "client_code" ou similar
+- "numero da Nota Fiscal" → mapear para "nf_number" ou similar
+- "deve ser de status" → mapear para "status" (se existir no schema)
+"""
 
         prompt = f"""Você é NEXO reanalisando um arquivo de importação COM as respostas do usuário.
 
@@ -1290,25 +1371,27 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 - Arquivo: {session.filename}
 - Colunas detectadas: {len(session.file_analysis.get('sheets', [{}])[0].get('columns', []))}
 
-## MAPEAMENTOS ATUAIS
-{mappings_context if mappings_context else "(nenhum mapeamento ainda)"}
+## MAPEAMENTOS JÁ CONFIRMADOS
+{mappings_context if mappings_context else "(nenhum mapeamento confirmado ainda)"}
 
 ## RESPOSTAS DO USUÁRIO (NOVAS INFORMAÇÕES)
 {answers_context if answers_context else "(nenhuma resposta)"}
-
+{ai_instructions_context}
 ## SUA TAREFA
 
 Com base nas respostas do usuário:
-1. REFINE os mapeamentos se necessário
-2. VALIDE que todos os mapeamentos usam colunas do schema acima
-3. CALCULE uma nova confiança (0.0 a 1.0)
-4. IDENTIFIQUE se ainda há dúvidas que precisam de mais perguntas
+1. INTERPRETE as instruções "Outros:" e determine a coluna PostgreSQL correta
+2. REFINE os mapeamentos se necessário
+3. VALIDE que todos os mapeamentos usam colunas do schema acima
+4. CALCULE uma nova confiança (0.0 a 1.0)
+5. IDENTIFIQUE se ainda há dúvidas que precisam de mais perguntas
 
 ## FORMATO DE RESPOSTA (JSON)
 ```json
 {{
-    "thoughts": ["Seu raciocínio sobre as respostas..."],
+    "thoughts": ["Seu raciocínio sobre as respostas e interpretações..."],
     "refined_mappings": {{"coluna_arquivo": "coluna_db"}},
+    "interpreted_instructions": {{"coluna_arquivo": "coluna_db_interpretada"}},
     "confidence": 0.85,
     "needs_more_questions": false,
     "uncertain_fields": []
@@ -1317,6 +1400,8 @@ Com base nas respostas do usuário:
 
 IMPORTANTE:
 - SOMENTE use colunas que existem no schema PostgreSQL acima
+- Para instruções "Outros:", extraia a INTENÇÃO do usuário e mapeie para a coluna correta
+- Se a coluna mencionada NÃO EXISTIR no schema, use o campo mais próximo ou "_ignore"
 - Se não tiver certeza, inclua o campo em "uncertain_fields"
 """
         return prompt
@@ -2329,6 +2414,8 @@ def session_to_dict(session: ImportSession) -> Dict[str, Any]:
         ],
         "answers": session.answers,
         "learned_mappings": session.learned_mappings,
+        # FIX (January 2026): Include AI instructions for "Outros:" answers
+        "ai_instructions": session.ai_instructions,
         "confidence": session.confidence.to_dict() if session.confidence else None,
         "error": session.error,
         "created_at": session.created_at,
