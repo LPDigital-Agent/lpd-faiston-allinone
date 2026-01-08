@@ -293,7 +293,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         const thresholdResult = await nexoGetAdaptiveThreshold({ filename: file.name });
         if (thresholdResult.data?.success) {
           adaptiveThreshold = thresholdResult.data.threshold;
-          console.log('[NEXO] Adaptive threshold:', adaptiveThreshold, thresholdResult.data.reason);
+          console.log('[NEXO] Adaptive threshold:', adaptiveThreshold, thresholdResult.data.reason || '(default)');
         }
       } catch (recallError) {
         // Prior knowledge retrieval failure is not critical

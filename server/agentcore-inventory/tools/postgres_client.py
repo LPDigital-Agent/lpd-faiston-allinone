@@ -40,8 +40,18 @@ class SGAPostgresClient:
     def __init__(self):
         """Initialize the PostgreSQL client."""
         self._connection = None
-        self._secrets_client = boto3.client("secretsmanager")
-        self._rds_client = boto3.client("rds")
+
+        # CRITICAL: Get region FIRST before creating boto3 clients
+        # AgentCore runtime may not set AWS_REGION consistently during cold starts
+        # Must explicitly pass region_name to all boto3.client() calls
+        self._region = os.environ.get(
+            "AWS_REGION",
+            os.environ.get("AWS_DEFAULT_REGION", "us-east-2")
+        )
+
+        # Create boto3 clients WITH explicit region (fixes "You must specify a region" error)
+        self._secrets_client = boto3.client("secretsmanager", region_name=self._region)
+        self._rds_client = boto3.client("rds", region_name=self._region)
 
         # Configuration from environment
         self._proxy_endpoint = os.environ.get("RDS_PROXY_ENDPOINT")
@@ -52,7 +62,6 @@ class SGAPostgresClient:
         )
         self._database = os.environ.get("RDS_DATABASE_NAME", "sga_inventory")
         self._port = int(os.environ.get("RDS_PORT", "5432"))
-        self._region = os.environ.get("AWS_REGION_NAME", "us-east-2")
         # DIRECT_CONNECT=true bypasses RDS Proxy and connects directly to Aurora with password
         # Use for bootstrap operations or when Proxy requires IAM auth not yet configured
         self._direct_connect = os.environ.get("DIRECT_CONNECT", "false").lower() == "true"
