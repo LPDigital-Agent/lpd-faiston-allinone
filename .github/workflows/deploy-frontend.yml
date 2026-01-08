@@ -16,6 +16,9 @@ on:
       - 'client/**'
       - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:
+  schedule:
+    # Run cleanup every Sunday at 3am UTC
+    - cron: '0 3 * * 0'
 
 permissions:
   id-token: write
@@ -71,16 +74,38 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Sync to S3
+      - name: Sync to S3 (with chunk retention)
         working-directory: client
         run: |
-          # Upload all files with immutable cache
+          # =================================================================
+          # PHASE 1: Sync all files EXCEPT chunks (with --delete)
+          # This removes old HTML/CSS/images but preserves old JS chunks
+          # =================================================================
           aws s3 sync out/ s3://${{ env.S3_BUCKET }} \
             --delete \
+            --exclude "_next/static/chunks/*" \
             --cache-control "public, max-age=31536000, immutable"
 
-          # Override HTML files with no-cache for instant updates
-          find out -name "*.html" -exec sh -c 'for f; do aws s3 cp "$f" "s3://${{ env.S3_BUCKET }}/${f#out/}" --cache-control "public, max-age=0, must-revalidate"; done' _ {} +
+          # =================================================================
+          # PHASE 2: Sync chunks WITHOUT --delete (preserves old chunks)
+          # Old chunks remain available for users with cached HTML
+          # =================================================================
+          aws s3 sync out/_next/static/chunks/ \
+            s3://${{ env.S3_BUCKET }}/_next/static/chunks/ \
+            --cache-control "public, max-age=31536000, immutable"
+
+          # =================================================================
+          # PHASE 3: Override HTML files with no-cache headers
+          # Ensures users always get fresh HTML on navigation
+          # =================================================================
+          find out -name "*.html" -exec sh -c '
+            for f; do
+              aws s3 cp "$f" "s3://${{ env.S3_BUCKET }}/${f#out/}" \
+                --cache-control "public, max-age=0, must-revalidate"
+            done
+          ' _ {} +
+
+          echo "✅ Deployment complete with chunk retention"
 
       - name: Invalidate CloudFront cache
         run: |
@@ -96,3 +121,60 @@ jobs:
           echo "**CloudFront Distribution:** \`${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "View at: https://\$(aws cloudfront get-distribution --id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --query 'Distribution.DomainName' --output text)" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Cleanup Job - Runs only on schedule (weekly)
+  # Removes old JS chunks to prevent S3 storage bloat
+  # ===========================================================================
+  cleanup-old-chunks:
+    name: Cleanup Old Chunks (Weekly)
+    runs-on: ubuntu-latest
+    # Only run on schedule, not on push or manual dispatch
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Remove chunks older than 7 days
+        run: |
+          echo "🧹 Cleaning up old chunks from S3..."
+
+          # Calculate the cutoff date (7 days ago)
+          CUTOFF_DATE=$(date -d '7 days ago' --iso-8601=seconds 2>/dev/null || date -v-7d +%Y-%m-%dT%H:%M:%S)
+          echo "Removing chunks older than: $CUTOFF_DATE"
+
+          # List and count old chunks
+          OLD_CHUNKS=$(aws s3api list-objects-v2 \
+            --bucket ${{ env.S3_BUCKET }} \
+            --prefix "_next/static/chunks/" \
+            --query "Contents[?LastModified<='${CUTOFF_DATE}'].Key" \
+            --output text 2>/dev/null | tr '\t' '\n' | grep -v '^None$' | grep -v '^$' || true)
+
+          if [ -z "$OLD_CHUNKS" ]; then
+            echo "✅ No old chunks to delete"
+            exit 0
+          fi
+
+          # Count and delete
+          COUNT=$(echo "$OLD_CHUNKS" | wc -l)
+          echo "Found $COUNT old chunks to delete"
+
+          echo "$OLD_CHUNKS" | while read key; do
+            if [ -n "$key" ]; then
+              echo "  Deleting: $key"
+              aws s3 rm "s3://${{ env.S3_BUCKET }}/$key"
+            fi
+          done
+
+          echo "✅ Cleanup complete - deleted $COUNT old chunks"
+
+      - name: Cleanup Summary
+        run: |
+          echo "## 🧹 Chunk Cleanup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Old chunks (>7 days) have been removed from S3." >> $GITHUB_STEP_SUMMARY
