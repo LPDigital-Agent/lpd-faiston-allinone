@@ -8,8 +8,8 @@ Architecture:
     Agent → GatewayPostgresAdapter → MCPGatewayClient (SigV4) → AgentCore Gateway → Lambda → Aurora PostgreSQL
 
 Tool Naming Convention (per AWS docs):
-    Format: {TargetName}__{ToolName}
-    Example: SGAPostgresTools__sga_get_balance
+    Format: {TargetName}___{ToolName} (THREE underscores)
+    Example: SGAPostgresTools___sga_get_balance
 
 Authentication:
     Uses AWS IAM SigV4 signing (NOT Bearer tokens) per AWS Well-Architected Framework.
@@ -101,7 +101,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         List assets and balances with optional filters.
 
-        Calls: SGAPostgresTools__sga_list_inventory
+        Calls: SGAPostgresTools___sga_list_inventory
         """
         arguments = {}
         if filters:
@@ -130,7 +130,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         Get stock balance for a part number.
 
-        Calls: SGAPostgresTools__sga_get_balance
+        Calls: SGAPostgresTools___sga_get_balance
         """
         arguments = self._clean_none_values({
             "part_number": part_number,
@@ -154,7 +154,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         Search assets by serial number, part number, or description.
 
-        Calls: SGAPostgresTools__sga_search_assets
+        Calls: SGAPostgresTools___sga_search_assets
         """
         arguments = {
             "query": query,
@@ -181,7 +181,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         Get complete history of an asset (event sourcing).
 
-        Calls: SGAPostgresTools__sga_get_asset_timeline
+        Calls: SGAPostgresTools___sga_get_asset_timeline
         """
         arguments = {
             "identifier": identifier,
@@ -205,7 +205,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         List movements with filters.
 
-        Calls: SGAPostgresTools__sga_get_movements
+        Calls: SGAPostgresTools___sga_get_movements
         """
         arguments = {}
         if filters:
@@ -237,7 +237,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         List pending approval tasks (Human-in-the-Loop).
 
-        Calls: SGAPostgresTools__sga_get_pending_tasks
+        Calls: SGAPostgresTools___sga_get_pending_tasks
         """
         arguments = self._clean_none_values({
             "task_type": task_type,
@@ -262,7 +262,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         Create a new inventory movement.
 
-        Calls: SGAPostgresTools__sga_create_movement
+        Calls: SGAPostgresTools___sga_create_movement
         """
         arguments = self._clean_none_values({
             "movement_type": movement_data.movement_type.value,
@@ -295,7 +295,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         Compare SGA inventory with SAP export data.
 
-        Calls: SGAPostgresTools__sga_reconcile_sap
+        Calls: SGAPostgresTools___sga_reconcile_sap
         """
         arguments = {
             "sap_data": sap_data,

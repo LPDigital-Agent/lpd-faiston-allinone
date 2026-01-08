@@ -56,7 +56,7 @@ class MCPGatewayClient:
 
         # Sync call - no context manager needed
         result = client.call_tool(
-            "SGAPostgresTools__sga_get_balance",
+            "SGAPostgresTools___sga_get_balance",  # 3 underscores
             {"part_number": "PN-001"}
         )
         ```
@@ -166,11 +166,11 @@ class MCPGatewayClient:
 
         Per AWS docs (gateway-using-mcp-call.html):
         - Method: tools/call
-        - Tool name format: {TargetName}__{tool_name}
+        - Tool name format: {TargetName}___{tool_name} (THREE underscores)
         - Response contains content array with results
 
         Args:
-            tool_name: Full tool name (e.g., "SGAPostgresTools__sga_get_balance")
+            tool_name: Full tool name (e.g., "SGAPostgresTools___sga_get_balance")
             arguments: Tool arguments as dictionary
             timeout: Request timeout in seconds (default 30)
 

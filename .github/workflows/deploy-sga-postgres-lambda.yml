@@ -139,8 +139,8 @@ jobs:
         run: |
           echo "=== Testing Lambda Invocation ==="
 
-          # Test with tools/call style payload (TWO underscores per AWS convention)
-          echo '{"name": "SGAPostgresTools__sga_get_balance", "arguments": {"part_number": "TEST-001"}}' > /tmp/test_event.json
+          # Test with tools/call style payload (THREE underscores per AWS convention)
+          echo '{"name": "SGAPostgresTools___sga_get_balance", "arguments": {"part_number": "TEST-001"}}' > /tmp/test_event.json
 
           aws lambda invoke \
             --function-name ${{ env.LAMBDA_FUNCTION_NAME }} \

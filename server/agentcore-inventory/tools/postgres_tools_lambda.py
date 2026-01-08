@@ -3,13 +3,13 @@ PostgreSQL MCP Tools Lambda Handler.
 
 This Lambda function handles tool invocations from AgentCore Gateway.
 Per AWS documentation (gateway-agent-integration.html), the Gateway sends
-tool calls with the format: {TargetName}__{ToolName}
+tool calls with the format: {TargetName}___{ToolName} (THREE underscores)
 
 Architecture:
     AgentCore Gateway -> Lambda (this) -> RDS Proxy -> Aurora PostgreSQL
 
 Tool Naming Convention:
-    Gateway sends: SGAPostgresTools__sga_list_inventory
+    Gateway sends: SGAPostgresTools___sga_list_inventory (3 underscores)
     Handler strips prefix and routes to appropriate function.
 
 Author: Faiston NEXO Team
@@ -49,7 +49,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         tool_name = event.get("name", "")
         arguments = event.get("arguments", {})
 
-        # Strip target prefix (SGAPostgresTools__)
+        # Strip target prefix (SGAPostgresTools___)
         if "__" in tool_name:
             actual_tool = tool_name.split("__")[-1]
         else:

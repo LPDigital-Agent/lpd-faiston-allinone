@@ -233,8 +233,9 @@ class SchemaProvider:
             mcp_client = self._get_mcp_client()
 
             # Synchronous call - no async/await needed
+            # Tool name format: {TargetName}___{tool_name} (THREE underscores per AWS MCP Gateway convention)
             result = mcp_client.call_tool(
-                tool_name="SGAPostgresTools__sga_get_schema_metadata",
+                tool_name="SGAPostgresTools___sga_get_schema_metadata",
                 arguments={}
             )
 
