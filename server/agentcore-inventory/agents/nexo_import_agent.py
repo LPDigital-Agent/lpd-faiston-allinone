@@ -257,6 +257,213 @@ class NexoImportAgent(BaseInventoryAgent):
         )
 
     # =========================================================================
+    # AUTONOMOUS Movement Type Inference (TRUE Agentic Pattern)
+    # =========================================================================
+
+    async def infer_movement_type(
+        self,
+        file_analysis: Dict[str, Any],
+        sample_data: List[Dict[str, Any]],
+        filename: str,
+    ) -> tuple:
+        """
+        AUTONOMOUSLY infer if this is ENTRADA (+) or SAÍDA (-) or AJUSTE.
+
+        This is TRUE agentic behavior: instead of asking the user, the agent
+        reasons about the movement type based on:
+        - Column semantics (entrada vs saída keywords)
+        - Data patterns (supplier vs customer, +/- quantities)
+        - Document context (NF de entrada vs romaneio de saída)
+        - Filename patterns (e.g., "SOLICITACOES_EXPEDICAO" = SAÍDA)
+
+        Philosophy: OBSERVE → THINK → DECIDE (without asking when confident)
+
+        Args:
+            file_analysis: Analyzed file structure
+            sample_data: First 10 rows of data for pattern detection
+            filename: Original filename for pattern hints
+
+        Returns:
+            tuple[str, float, str]: (movement_type, confidence, reasoning_trace)
+                - movement_type: "ENTRADA" | "SAIDA" | "AJUSTE"
+                - confidence: 0.0 to 1.0
+                - reasoning_trace: Explicit reasoning from Gemini
+        """
+        log_agent_action(
+            self.name, "infer_movement_type",
+            status="started",
+        )
+
+        # Extract column names from all sheets
+        all_columns = []
+        for sheet in file_analysis.get("sheets", []):
+            for col in sheet.get("columns", []):
+                all_columns.append(col.get("name", "").lower())
+
+        # Build comprehensive reasoning prompt
+        prompt = f"""Você é um especialista em logística e gestão de estoque com 20 anos de experiência.
+
+Analise este arquivo de importação e determine AUTONOMAMENTE se é:
+- **ENTRADA**: Itens chegando ao estoque (compra, devolução de cliente, transferência IN)
+- **SAIDA**: Itens saindo do estoque (venda, expedição, transferência OUT, romaneio)
+- **AJUSTE**: Correção de inventário (positivo ou negativo)
+
+## Nome do Arquivo
+`{filename}`
+
+## Colunas do Arquivo
+{json.dumps(all_columns, ensure_ascii=False, indent=2)}
+
+## Amostra de Dados (primeiras linhas)
+{json.dumps(sample_data[:5], ensure_ascii=False, indent=2)}
+
+## Seu Raciocínio (OBRIGATÓRIO - seja detalhista)
+
+### 1. OBSERVE - Análise do Nome do Arquivo
+- O nome contém palavras-chave como "expedição", "saída", "envio", "romaneio"? → SAÍDA
+- O nome contém "entrada", "recebimento", "compra", "nf"? → ENTRADA
+- O nome contém "ajuste", "inventário", "contagem"? → AJUSTE
+
+### 2. ANALISE as COLUNAS
+- Há coluna de FORNECEDOR/SUPPLIER/VENDEDOR? → Indica ENTRADA
+- Há coluna de CLIENTE/DESTINATÁRIO/CUSTOMER? → Indica SAÍDA
+- Há coluna de ENDEREÇO DE ENTREGA? → Indica SAÍDA
+- Há coluna de QUANTIDADE_AJUSTE ou DIFERENÇA? → Indica AJUSTE
+
+### 3. ANALISE os DADOS
+- As quantidades são todas positivas? → ENTRADA ou SAÍDA
+- Há quantidades mistas (positivas e negativas)? → AJUSTE
+- Há informações de transportadora/frete? → SAÍDA
+
+### 4. CONTEXTO SEMÂNTICO
+- Planilhas de "solicitação de expedição" são SEMPRE SAÍDA
+- Planilhas de "material recebido" são SEMPRE ENTRADA
+- Planilhas com "divergência" ou "diferença" são AJUSTE
+
+### 5. CONCLUSÃO FINAL
+Com base em toda a análise acima, qual é o tipo de movimento?
+
+## Responda APENAS em JSON válido:
+{{
+  "movement_type": "ENTRADA" | "SAIDA" | "AJUSTE",
+  "confidence": 0.0 a 1.0,
+  "reasoning": "Resumo em uma frase do raciocínio principal",
+  "evidence": [
+    "evidência 1 que suporta a conclusão",
+    "evidência 2 que suporta a conclusão",
+    "evidência 3 que suporta a conclusão"
+  ],
+  "alternatives_considered": [
+    {{"type": "OUTRO_TIPO", "confidence": 0.X, "why_rejected": "motivo"}}
+  ]
+}}
+"""
+
+        try:
+            # Use Gemini Thinking Mode for explicit reasoning
+            thinking_trace, response = await self.invoke_with_thinking(prompt)
+
+            # Parse JSON response
+            result = parse_json_safe(response)
+
+            movement_type = result.get("movement_type", "ENTRADA")
+            confidence = float(result.get("confidence", 0.5))
+            reasoning = result.get("reasoning", "")
+            evidence = result.get("evidence", [])
+
+            # Validate movement type
+            valid_types = {"ENTRADA", "SAIDA", "AJUSTE"}
+            if movement_type not in valid_types:
+                movement_type = "ENTRADA"  # Default safe fallback
+                confidence = 0.3  # Low confidence due to invalid response
+
+            # Combine thinking trace with structured reasoning
+            full_reasoning = f"""## Raciocínio do Gemini (Thinking Mode)
+{thinking_trace if thinking_trace else '(sem trace de thinking)'}
+
+## Conclusão Estruturada
+- **Tipo**: {movement_type}
+- **Confiança**: {confidence:.0%}
+- **Motivo**: {reasoning}
+
+## Evidências
+{chr(10).join(f'- {e}' for e in evidence)}
+"""
+
+            log_agent_action(
+                self.name, "infer_movement_type",
+                status="completed",
+                details={
+                    "movement_type": movement_type,
+                    "confidence": confidence,
+                },
+            )
+
+            return movement_type, confidence, full_reasoning
+
+        except Exception as e:
+            log_agent_action(
+                self.name, "infer_movement_type",
+                status="failed",
+                details={"error": str(e)[:100]},
+            )
+            # Safe fallback: ENTRADA with low confidence
+            return "ENTRADA", 0.3, f"Falha na inferência: {str(e)}"
+
+    def _extract_sample_data(
+        self,
+        file_content: bytes,
+        file_analysis: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract sample data rows from file for movement type inference.
+
+        Args:
+            file_content: Raw file content
+            file_analysis: Analyzed file structure
+
+        Returns:
+            List of dicts representing first 10 data rows
+        """
+        try:
+            # Lazy import to reduce cold start
+            from tools.sheet_analyzer import load_workbook_smart
+
+            wb = load_workbook_smart(file_content)
+            samples = []
+
+            # Get first sheet with data
+            sheets = file_analysis.get("sheets", [])
+            if not sheets:
+                return []
+
+            first_sheet = sheets[0]
+            sheet_name = first_sheet.get("name", "")
+            columns = [c.get("name", f"col_{i}") for i, c in enumerate(first_sheet.get("columns", []))]
+
+            # Read from workbook
+            if hasattr(wb, 'sheet_names'):  # pandas ExcelFile
+                import pandas as pd
+                df = pd.read_excel(wb, sheet_name=sheet_name, nrows=10)
+                samples = df.head(10).to_dict(orient="records")
+            elif hasattr(wb, 'sheetnames'):  # openpyxl Workbook
+                ws = wb[sheet_name]
+                for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=11, values_only=True)):
+                    if row_idx >= 10:
+                        break
+                    row_dict = {}
+                    for col_idx, value in enumerate(row):
+                        col_name = columns[col_idx] if col_idx < len(columns) else f"col_{col_idx}"
+                        row_dict[col_name] = str(value) if value is not None else ""
+                    samples.append(row_dict)
+
+            return samples
+
+        except Exception as e:
+            print(f"[NEXO] Warning: Failed to extract sample data: {e}")
+            return []
+
+    # =========================================================================
     # OBSERVE Phase: File Analysis
     # =========================================================================
 
@@ -1049,12 +1256,19 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
         s3_key: str,
         file_content: bytes,
         prior_knowledge: Optional[Dict[str, Any]] = None,
+        user_id: str = "anonymous",
     ) -> Dict[str, Any]:
         """
-        Full intelligent analysis flow (OBSERVE + THINK + ASK) - STATELESS.
+        Full intelligent analysis flow with TRUE Agentic Pattern - STATELESS.
 
-        This is the main entry point that orchestrates the analysis,
-        reasoning, and question generation phases.
+        Philosophy: OBSERVE → REMEMBER → THINK → DECIDE → (ASK only if needed)
+
+        This is the main entry point that orchestrates:
+        1. OBSERVE: Analyze file structure (sheets, columns, data)
+        2. REMEMBER: Query prior knowledge BEFORE reasoning (Memory-First!)
+        3. THINK: Infer movement type AUTONOMOUSLY using Gemini Thinking
+        4. DECIDE: Calculate confidence and determine if questions needed
+        5. ASK: Only generate questions for truly uncertain fields
 
         Returns FULL SESSION STATE to be stored by frontend.
 
@@ -1062,7 +1276,8 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
             filename: Original filename
             s3_key: S3 key where file is stored
             file_content: Raw file content
-            prior_knowledge: Previously learned patterns
+            prior_knowledge: Previously learned patterns (if provided externally)
+            user_id: User performing import (for memory queries)
 
         Returns:
             Complete analysis with FULL SESSION STATE
@@ -1072,57 +1287,369 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
         session = self._create_session(filename, s3_key)
         print(f"[NexoImportAgent] Session created: {session.session_id}")
 
-        # OBSERVE: Analyze file
+        # =====================================================================
+        # PHASE 1: OBSERVE - Analyze file structure
+        # =====================================================================
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="observation",
+            content=f"📁 Iniciando análise do arquivo '{filename}'",
+        ))
+
         print(f"[NexoImportAgent] OBSERVE phase - analyzing file...")
         analysis_result = await self.analyze_file(session, file_content)
-        print(f"[NexoImportAgent] OBSERVE result: success={analysis_result.get('success')}, error={analysis_result.get('error')}")
+        print(f"[NexoImportAgent] OBSERVE result: success={analysis_result.get('success')}")
+
         if not analysis_result.get("success"):
             return analysis_result
 
-        # Update session from result (in case analyze_file modified it)
+        # Update session from result
         if analysis_result.get("session"):
             session = self._restore_session(analysis_result["session"])
 
-        # THINK: Reason about mappings
-        print(f"[NexoImportAgent] THINK phase - reasoning about mappings...")
-        reasoning_result = await self.reason_about_mappings(
-            session,
-            prior_knowledge,
+        # =====================================================================
+        # PHASE 2: REMEMBER - Query prior knowledge BEFORE reasoning
+        # =====================================================================
+        # This is MEMORY-FIRST architecture: retrieve learned patterns BEFORE
+        # AI reasoning to provide context and boost confidence.
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="memory_retrieval",
+            content="🧠 Consultando memória episódica para padrões similares...",
+        ))
+
+        print(f"[NexoImportAgent] REMEMBER phase - querying prior knowledge...")
+
+        # Use provided prior_knowledge or fetch from LearningAgent
+        if not prior_knowledge:
+            try:
+                from agents.learning_agent import LearningAgent
+                learning_agent = LearningAgent()
+                prior_knowledge = await learning_agent.retrieve_prior_knowledge(
+                    user_id=user_id,
+                    filename=filename,
+                    file_analysis=session.file_analysis or {},
+                )
+                print(f"[NexoImportAgent] REMEMBER result: has_prior={prior_knowledge.get('has_prior_knowledge', False)}")
+            except Exception as e:
+                print(f"[NexoImportAgent] REMEMBER failed (non-critical): {e}")
+                prior_knowledge = {"has_prior_knowledge": False}
+
+        # Apply prior knowledge if found
+        if prior_knowledge.get("has_prior_knowledge"):
+            similar_count = len(prior_knowledge.get("similar_episodes", []))
+            suggested_mappings = prior_knowledge.get("suggested_mappings", {})
+            confidence_boost = prior_knowledge.get("confidence_boost", 0.0)
+
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="memory_hit",
+                content=f"✅ Encontrei {similar_count} imports similares! "
+                        f"Aplicando {len(suggested_mappings)} mapeamentos sugeridos.",
+            ))
+
+            # Pre-populate learned mappings from memory
+            for col, mapping_info in suggested_mappings.items():
+                if isinstance(mapping_info, dict):
+                    session.learned_mappings[col] = mapping_info.get("field", "")
+                else:
+                    session.learned_mappings[col] = str(mapping_info)
+        else:
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="memory_miss",
+                content="📝 Nenhum padrão similar encontrado. Analisando do zero.",
+            ))
+
+        # =====================================================================
+        # PHASE 3: THINK - Infer movement type AUTONOMOUSLY
+        # =====================================================================
+        # This is TRUE agentic behavior: instead of asking the user,
+        # the agent reasons about the movement type using Gemini Thinking.
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="thought",
+            content="🤔 Iniciando inferência autônoma do tipo de movimento...",
+        ))
+
+        print(f"[NexoImportAgent] THINK phase - inferring movement type AUTONOMOUSLY...")
+
+        # Extract sample data for inference
+        sample_data = self._extract_sample_data(file_content, session.file_analysis or {})
+
+        # Infer movement type using Gemini Thinking
+        movement_type, movement_confidence, movement_reasoning = await self.infer_movement_type(
+            file_analysis=session.file_analysis or {},
+            sample_data=sample_data,
+            filename=filename,
         )
-        print(f"[NexoImportAgent] THINK result: success={reasoning_result.get('success')}, error={reasoning_result.get('error')}")
+
+        print(f"[NexoImportAgent] THINK result: type={movement_type}, confidence={movement_confidence:.0%}")
+
+        # Store inference result in session
+        if session.file_analysis:
+            session.file_analysis["inferred_movement_type"] = movement_type
+            session.file_analysis["movement_type_confidence"] = movement_confidence
+            session.file_analysis["movement_reasoning"] = movement_reasoning
+
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="conclusion",
+            content=f"💡 Tipo de movimento inferido: **{movement_type}** "
+                    f"(confiança: {movement_confidence:.0%})",
+        ))
+
+        # =====================================================================
+        # PHASE 4: THINK - Reason about column mappings
+        # =====================================================================
+        print(f"[NexoImportAgent] THINK phase - reasoning about column mappings...")
+        reasoning_result = await self.reason_about_mappings(session, prior_knowledge)
+        print(f"[NexoImportAgent] THINK (mappings) result: success={reasoning_result.get('success')}")
+
         if not reasoning_result.get("success"):
             return reasoning_result
 
-        # Update session from result
+        # Update session from reasoning result
         if reasoning_result.get("session"):
             session = self._restore_session(reasoning_result["session"])
 
-        # ASK: Get questions if needed
-        if reasoning_result.get("needs_clarification"):
-            questions_result = await self.get_questions(session)
-            # Merge session state from questions result
-            final_session = questions_result.get("session", session_to_dict(session))
+        # =====================================================================
+        # PHASE 5: DECIDE - Should we ask questions or process autonomously?
+        # =====================================================================
+        # TRUE agentic decision: Only ask when truly uncertain
+        # High confidence (>=0.85): Process autonomously
+        # Medium confidence (0.60-0.85): Ask targeted questions only
+        # Low confidence (<0.60): Full HIL required
+
+        overall_confidence = self._calculate_overall_confidence(
+            session=session,
+            movement_confidence=movement_confidence,
+            prior_knowledge=prior_knowledge,
+        )
+
+        print(f"[NexoImportAgent] DECIDE phase: overall_confidence={overall_confidence:.0%}")
+
+        # Adaptive threshold from historical patterns
+        adaptive_threshold = 0.75  # Default
+        if prior_knowledge:
+            adaptive_threshold = prior_knowledge.get("adaptive_threshold", 0.75)
+
+        # Decision logic
+        if overall_confidence >= 0.85 and movement_confidence >= 0.90:
+            # HIGH CONFIDENCE: Process autonomously without questions
+            session.stage = ImportStage.PROCESSING
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="decision",
+                content=f"🚀 Confiança alta ({overall_confidence:.0%}). "
+                        f"Processando AUTONOMAMENTE sem perguntas.",
+            ))
+            # Apply inferred movement type
+            if session.file_analysis:
+                session.file_analysis["movement_type"] = movement_type
+
+            print(f"[NexoImportAgent] DECIDE: AUTONOMOUS processing (no questions)")
+
             return {
-                **questions_result,
-                "session": final_session,  # Full state for frontend
+                "success": True,
+                "session": session_to_dict(session),
+                "session_id": session.session_id,
+                "stage": session.stage.value,
                 "analysis": analysis_result.get("analysis"),
+                "suggested_mappings": reasoning_result.get("suggested_mappings"),
+                "confidence": reasoning_result.get("confidence"),
+                "ready_for_processing": True,
+                "autonomous_decision": True,
+                "inferred_movement_type": movement_type,
+                "movement_confidence": movement_confidence,
+                "reasoning": [
+                    {"type": r.step_type, "content": r.content}
+                    for r in session.reasoning_trace
+                ],
             }
 
-        # No questions needed - ready for processing
+        elif overall_confidence >= adaptive_threshold:
+            # MEDIUM CONFIDENCE: Ask only about movement type (not everything)
+            session.stage = ImportStage.QUESTIONING
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="decision",
+                content=f"⚖️ Confiança média ({overall_confidence:.0%}). "
+                        f"Perguntando apenas sobre campos incertos.",
+            ))
+
+            # Generate targeted questions (only for uncertain fields)
+            targeted_questions = self._generate_targeted_questions(
+                session=session,
+                movement_type=movement_type,
+                movement_confidence=movement_confidence,
+            )
+
+            print(f"[NexoImportAgent] DECIDE: TARGETED questions ({len(targeted_questions)} questions)")
+
+            # Add only targeted questions
+            session.questions = targeted_questions
+
+        else:
+            # LOW CONFIDENCE: Full HIL required
+            session.stage = ImportStage.QUESTIONING
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="decision",
+                content=f"🔍 Confiança baixa ({overall_confidence:.0%}). "
+                        f"Solicitando revisão humana completa.",
+            ))
+
+            print(f"[NexoImportAgent] DECIDE: FULL HIL required")
+
+            # Get all questions
+            questions_result = await self.get_questions(session)
+            if questions_result.get("session"):
+                session = self._restore_session(questions_result["session"])
+
+        # Return with questions
+        final_session = session_to_dict(session)
         return {
             "success": True,
-            "session": session_to_dict(session),  # Full state for frontend
+            "session": final_session,
             "session_id": session.session_id,
             "stage": session.stage.value,
             "analysis": analysis_result.get("analysis"),
             "suggested_mappings": reasoning_result.get("suggested_mappings"),
             "confidence": reasoning_result.get("confidence"),
-            "ready_for_processing": True,
+            "questions": [
+                {
+                    "id": q.id,
+                    "question": q.question,
+                    "context": q.context,
+                    "options": q.options,
+                    "importance": q.importance,
+                    "topic": q.topic,
+                    "column": q.column,
+                }
+                for q in session.questions
+            ],
+            "needs_clarification": len(session.questions) > 0,
+            "inferred_movement_type": movement_type,
+            "movement_confidence": movement_confidence,
             "reasoning": [
                 {"type": r.step_type, "content": r.content}
                 for r in session.reasoning_trace
             ],
         }
+
+    def _calculate_overall_confidence(
+        self,
+        session: ImportSession,
+        movement_confidence: float,
+        prior_knowledge: Optional[Dict[str, Any]] = None,
+    ) -> float:
+        """
+        Calculate overall confidence for autonomous processing decision.
+
+        Combines:
+        - Column mapping confidence (from Gemini reasoning)
+        - Movement type confidence (from autonomous inference)
+        - Historical match boost (from prior knowledge)
+
+        Args:
+            session: Current import session
+            movement_confidence: Confidence in movement type inference
+            prior_knowledge: Prior knowledge from memory
+
+        Returns:
+            Overall confidence score (0.0 to 1.0)
+        """
+        # Base confidence from session
+        base_confidence = 0.5
+        if session.confidence:
+            base_confidence = session.confidence.overall
+
+        # Weight factors
+        weights = {
+            "mapping": 0.4,      # Column mapping quality
+            "movement": 0.35,   # Movement type inference
+            "historical": 0.25, # Historical match
+        }
+
+        # Calculate weighted score
+        mapping_score = base_confidence
+        movement_score = movement_confidence
+
+        # Historical boost from prior knowledge
+        historical_score = 0.5  # Default (no history)
+        if prior_knowledge and prior_knowledge.get("has_prior_knowledge"):
+            historical_score = 0.7 + prior_knowledge.get("confidence_boost", 0.0)
+
+        overall = (
+            mapping_score * weights["mapping"] +
+            movement_score * weights["movement"] +
+            historical_score * weights["historical"]
+        )
+
+        return min(max(overall, 0.0), 1.0)
+
+    def _generate_targeted_questions(
+        self,
+        session: ImportSession,
+        movement_type: str,
+        movement_confidence: float,
+    ) -> List[NexoQuestion]:
+        """
+        Generate targeted questions only for uncertain fields.
+
+        TRUE agentic pattern: Don't ask about everything, only ask about
+        fields where the agent is genuinely uncertain.
+
+        Args:
+            session: Current import session
+            movement_type: Inferred movement type
+            movement_confidence: Confidence in inference
+
+        Returns:
+            List of targeted questions (fewer than full HIL)
+        """
+        questions = []
+
+        # Only ask about movement type if confidence is below 90%
+        if movement_confidence < 0.90:
+            questions.append(NexoQuestion(
+                id=generate_id("Q"),
+                question=f"Confirma que este arquivo é uma **{movement_type}**?",
+                context=f"O NEXO inferiu que este arquivo representa uma {movement_type} "
+                        f"com {movement_confidence:.0%} de confiança. "
+                        f"Confirme ou corrija se necessário.",
+                options=[
+                    {"label": "✅ Sim, é ENTRADA", "value": "ENTRADA"},
+                    {"label": "📤 Não, é SAÍDA", "value": "SAIDA"},
+                    {"label": "⚖️ É um AJUSTE de estoque", "value": "AJUSTE"},
+                ],
+                importance="critical",
+                topic="movement_type",
+            ))
+
+        # Ask about uncertain column mappings (only those with low confidence)
+        if session.file_analysis:
+            for sheet in session.file_analysis.get("sheets", []):
+                for col in sheet.get("columns", []):
+                    mapping_confidence = col.get("mapping_confidence", 0)
+                    if mapping_confidence < 0.6 and not col.get("suggested_mapping"):
+                        col_name = col.get("name", "")
+                        samples = col.get("sample_values", [])[:3]
+
+                        questions.append(NexoQuestion(
+                            id=generate_id("Q"),
+                            question=f"O que a coluna '{col_name}' representa?",
+                            context=f"Exemplos de valores: {', '.join(str(s) for s in samples)}",
+                            options=[
+                                {"label": "Part Number / SKU", "value": "part_number"},
+                                {"label": "Quantidade", "value": "quantity"},
+                                {"label": "Número de Série", "value": "serial_number"},
+                                {"label": "Localização", "value": "location"},
+                                {"label": "Descrição", "value": "description"},
+                                {"label": "Ignorar esta coluna", "value": "_ignore"},
+                            ],
+                            importance="high",
+                            topic="column_mapping",
+                            column=col_name,
+                        ))
+
+                        # Limit to 3 column questions
+                        if len([q for q in questions if q.topic == "column_mapping"]) >= 3:
+                            break
+
+        return questions
 
 
 # =============================================================================

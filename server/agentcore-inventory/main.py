@@ -1545,6 +1545,20 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
     project_id = payload.get("project_id")
     destination_location_id = payload.get("destination_location_id")
 
+    # TRUE Agentic Pattern: Use AI-inferred movement type instead of hardcoded value
+    # This supports NEXO's autonomous decision making (OBSERVE → THINK → DECIDE)
+    movement_type = payload.get("movement_type", "ENTRADA")  # Default fallback
+    inferred_movement_type = payload.get("inferred_movement_type")
+    if inferred_movement_type:
+        # Map NEXO's inference to PostgreSQL movement types
+        movement_type_map = {
+            "ENTRADA": "ENTRADA",
+            "SAIDA": "SAIDA",
+            "AJUSTE": "AJUSTE_POSITIVO",  # Default to positive for now
+            "SAÍDA": "SAIDA",  # Handle accent variation
+        }
+        movement_type = movement_type_map.get(inferred_movement_type.upper(), "ENTRADA")
+
     logger.info(f"[execute_import] Starting import {import_id} for file {filename}")
     logger.info(f"[execute_import] s3_key={s3_key}, column_mappings count={len(column_mappings)}")
 
@@ -1642,8 +1656,9 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
                 continue
 
             # Create movement via PostgreSQL client
+            # TRUE Agentic: Use AI-inferred movement_type (ENTRADA/SAIDA/AJUSTE)
             result = pg_client.create_movement(
-                movement_type="ENTRADA",
+                movement_type=movement_type,  # Uses NEXO's autonomous inference
                 part_number=part_number,
                 quantity=quantity,
                 destination_location_id=location,
@@ -2659,11 +2674,13 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
     print(f"[nexo_analyze_file] Starting analysis for: {filename}, s3_key: {s3_key}")
     print(f"[nexo_analyze_file] File data size: {len(file_data) if file_data else 0} bytes")
 
+    # Pass user_id for Memory-First architecture (retrieve prior knowledge)
     result = await agent.analyze_file_intelligently(
         filename=filename,
         s3_key=s3_key,
         file_content=file_data,
         prior_knowledge=prior_knowledge,
+        user_id=user_id,  # Required for TRUE agentic pattern (REMEMBER phase)
     )
 
     print(f"[nexo_analyze_file] Agent raw result: {result}")
@@ -2751,6 +2768,12 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
     session_data = result.get("session", {})
     import_session_id = result.get("session_id") or session_data.get("session_id", "")
 
+    # Extract TRUE agentic pattern fields
+    inferred_movement_type = result.get("inferred_movement_type")
+    movement_confidence = result.get("movement_confidence", 0.0)
+    autonomous_decision = result.get("autonomous_decision", False)
+    ready_for_processing = result.get("ready_for_processing", False)
+
     return {
         "success": True,
         "import_session_id": import_session_id,
@@ -2761,6 +2784,9 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
             "total_rows": analysis.get("total_rows", 0),
             "sheets": sheets,
             "recommended_strategy": analysis.get("recommended_strategy", "single_sheet"),
+            # TRUE agentic: include inferred movement type in analysis
+            "inferred_movement_type": inferred_movement_type,
+            "movement_type_confidence": movement_confidence,
         },
         "column_mappings": column_mappings,
         "overall_confidence": overall_confidence,
@@ -2769,6 +2795,11 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
         "user_id": user_id,
         "session_id": session_id,
         "session_state": session_data,  # Pass full session state for stateless architecture
+        # TRUE agentic pattern fields
+        "inferred_movement_type": inferred_movement_type,  # AI-inferred movement type
+        "movement_confidence": movement_confidence,        # Confidence in inference
+        "autonomous_decision": autonomous_decision,        # True if AI decided without questions
+        "ready_for_processing": ready_for_processing,     # True if can skip questions
     }
 
 

@@ -326,6 +326,108 @@ class BaseInventoryAgent:
 
         return False
 
+    async def invoke_with_thinking(
+        self,
+        prompt: str,
+        thinking_budget: int = 10000,
+        user_id: str = "system",
+        session_id: str = "default",
+    ) -> tuple:
+        """
+        Invoke Gemini with extended thinking/reasoning (TRUE Agentic Pattern).
+
+        This method enables Gemini's thinking mode, which allocates tokens
+        specifically for explicit reasoning before generating the final response.
+        The thinking trace provides full transparency into the agent's decision process.
+
+        Philosophy: This implements the THINK phase of OBSERVE → THINK → MEMORIZE → REASON → ACT
+
+        Args:
+            prompt: User prompt or query
+            thinking_budget: Maximum tokens for reasoning (default: 10,000)
+            user_id: User identifier (for memory)
+            session_id: Session identifier (for memory)
+
+        Returns:
+            tuple[str, str]: (thinking_trace, final_response)
+                - thinking_trace: The explicit reasoning process
+                - final_response: The final answer after reasoning
+        """
+        # Lazy imports to reduce cold start time
+        from google.genai import types
+        from google.adk.runners import Runner
+        from google.adk.sessions import InMemorySessionService
+
+        log_agent_action(self.name, "invoke_with_thinking", status="started")
+
+        try:
+            # Create session service and runner
+            session_service = InMemorySessionService()
+            runner = Runner(
+                agent=self.agent,
+                app_name=APP_NAME,
+                session_service=session_service,
+            )
+
+            # Create session BEFORE run_async
+            session = await session_service.create_session(
+                app_name=APP_NAME,
+                user_id=user_id,
+                session_id=session_id,
+            )
+
+            # Build content with thinking configuration
+            content = types.Content(
+                role="user",
+                parts=[types.Part(text=prompt)],
+            )
+
+            # Configure thinking mode for extended reasoning
+            # Note: ThinkingConfig is part of Gemini 3.0's advanced features
+            generation_config = types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(
+                    thinking_budget=thinking_budget,
+                ),
+            )
+
+            # Run agent with thinking enabled
+            thinking_trace = ""
+            final_response = ""
+
+            async for event in runner.run_async(
+                user_id=user_id,
+                session_id=session.id,
+                new_message=content,
+            ):
+                if hasattr(event, "content") and event.content:
+                    if hasattr(event.content, "parts"):
+                        for part in event.content.parts:
+                            # Gemini returns thinking in parts marked with 'thought' flag
+                            if hasattr(part, "thought") and part.thought:
+                                thinking_trace += part.text if hasattr(part, "text") else ""
+                            elif hasattr(part, "text") and part.text:
+                                final_response += part.text
+
+            log_agent_action(
+                self.name, "invoke_with_thinking",
+                status="completed",
+                details={
+                    "thinking_tokens": len(thinking_trace.split()),
+                    "response_tokens": len(final_response.split()),
+                },
+            )
+
+            return thinking_trace, final_response
+
+        except Exception as e:
+            log_agent_action(
+                self.name, "invoke_with_thinking",
+                status="failed",
+                details={"error": str(e)[:100]},
+            )
+            # Fallback: return empty thinking trace with error in response
+            return "", f"Error: {str(e)}"
+
     def format_hil_task_message(
         self,
         action_type: str,

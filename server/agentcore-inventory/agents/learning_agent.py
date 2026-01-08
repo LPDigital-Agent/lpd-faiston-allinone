@@ -523,7 +523,7 @@ class LearningAgent(BaseInventoryAgent):
         return reflections[:5]  # Return top 5
 
     # =========================================================================
-    # Adaptive Confidence
+    # Adaptive Confidence (TRUE Agentic Learning)
     # =========================================================================
 
     async def get_adaptive_threshold(
@@ -531,12 +531,17 @@ class LearningAgent(BaseInventoryAgent):
         user_id: str,
         filename: str,
         file_analysis: Dict[str, Any],
-    ) -> float:
+    ) -> Dict[str, Any]:
         """
-        Calculate adaptive confidence threshold based on history.
+        Calculate adaptive confidence threshold based on historical success.
 
-        Returns lower threshold for patterns that have been consistently
-        successful, and higher threshold for new or problematic patterns.
+        This implements TRUE agentic learning through reinforcement:
+        - Track success/failure patterns per user and file type
+        - Adjust threshold based on historical outcomes
+        - Learn from user corrections to become more cautious when needed
+        - Lower threshold for proven patterns (trust AI more)
+
+        Philosophy: Continuous improvement through outcome-based adaptation
 
         Args:
             user_id: User performing the import
@@ -544,13 +549,123 @@ class LearningAgent(BaseInventoryAgent):
             file_analysis: Current file analysis
 
         Returns:
-            Confidence threshold (0.0 to 1.0)
+            Dict with threshold and reasoning:
+            {
+                "threshold": float,
+                "reasoning": str,
+                "episode_count": int,
+                "success_rate": float,
+                "recent_corrections": int,
+            }
         """
-        # Default threshold
-        default_threshold = 0.75
+        base_threshold = 0.75
 
-        # Compute signature
+        # Compute signatures for matching
+        filename_pattern = self._extract_filename_pattern(filename)
         file_signature = self._compute_file_signature(file_analysis)
+
+        # Query historical episodes for this user
+        matching_episodes = []
+        similar_episodes = []
+
+        if user_id in self._episodes_cache:
+            for episode in self._episodes_cache[user_id]:
+                # Exact signature match
+                if episode.file_signature == file_signature:
+                    matching_episodes.append(episode)
+                # Similar filename pattern
+                elif episode.filename_pattern == filename_pattern:
+                    similar_episodes.append(episode)
+
+        # No history - be cautious with new patterns
+        if not matching_episodes and not similar_episodes:
+            return {
+                "threshold": 0.80,
+                "reasoning": "Padrão novo - sendo cauteloso",
+                "episode_count": 0,
+                "success_rate": 0.0,
+                "recent_corrections": 0,
+            }
+
+        # Combine matching and similar for analysis
+        all_relevant = matching_episodes + similar_episodes[:5]
+
+        if not all_relevant:
+            return {
+                "threshold": base_threshold,
+                "reasoning": "Histórico insuficiente",
+                "episode_count": 0,
+                "success_rate": 0.0,
+                "recent_corrections": 0,
+            }
+
+        # Calculate success rate
+        successful = sum(1 for ep in all_relevant if ep.success)
+        success_rate = successful / len(all_relevant) if all_relevant else 0
+
+        # Check for RECENT user corrections (last 5 imports)
+        # This is key for reinforcement learning: if user corrected AI recently,
+        # the system should be MORE cautious
+        recent_corrections = 0
+        for ep in all_relevant[:5]:
+            corrections = ep.user_corrections if hasattr(ep, 'user_corrections') else {}
+            if corrections and len(corrections) > 0:
+                recent_corrections += 1
+
+        # Adaptive threshold logic (reinforcement learning principle)
+        threshold = base_threshold
+        reasoning = ""
+
+        # Case 1: User corrected AI frequently in recent imports → MORE cautious
+        if recent_corrections >= 2:
+            threshold = 0.85
+            reasoning = f"Usuário corrigiu IA em {recent_corrections}/5 imports recentes - sendo mais cauteloso"
+
+        # Case 2: Proven pattern with 90%+ success and 10+ episodes → TRUST AI more
+        elif success_rate >= 0.90 and len(all_relevant) >= 10:
+            threshold = 0.65
+            reasoning = f"Padrão comprovado: {len(all_relevant)} imports com {success_rate:.0%} sucesso - confiando mais na IA"
+
+        # Case 3: Good track record (80%+) → slightly lower threshold
+        elif success_rate >= 0.80 and len(all_relevant) >= 5:
+            threshold = 0.70
+            reasoning = f"Bom histórico: {success_rate:.0%} sucesso em {len(all_relevant)} imports"
+
+        # Case 4: Mixed results (50-80%) → standard threshold
+        elif success_rate >= 0.50:
+            threshold = base_threshold
+            reasoning = f"Histórico misto: {success_rate:.0%} sucesso - usando threshold padrão"
+
+        # Case 5: Poor history (<50%) → MORE cautious
+        else:
+            threshold = 0.85
+            reasoning = f"Histórico problemático: apenas {success_rate:.0%} sucesso - requerendo confirmação"
+
+        return {
+            "threshold": threshold,
+            "reasoning": reasoning,
+            "episode_count": len(all_relevant),
+            "success_rate": success_rate,
+            "recent_corrections": recent_corrections,
+            "adaptive_threshold": threshold,  # Legacy compatibility
+        }
+
+    async def get_adaptive_threshold_simple(
+        self,
+        context: Dict[str, Any],
+    ) -> float:
+        """
+        Simple threshold getter for backward compatibility.
+
+        Args:
+            context: Dict with filename_pattern, file_type, user_id
+
+        Returns:
+            Confidence threshold (float)
+        """
+        user_id = context.get("user_id", "anonymous")
+        filename_pattern = context.get("filename_pattern", "")
+        file_signature = context.get("file_signature", "")
 
         # Check historical success for this pattern
         matching_episodes = []
@@ -559,26 +674,32 @@ class LearningAgent(BaseInventoryAgent):
             for episode in self._episodes_cache[user_id]:
                 if episode.file_signature == file_signature:
                     matching_episodes.append(episode)
+                elif episode.filename_pattern == filename_pattern:
+                    matching_episodes.append(episode)
 
         if not matching_episodes:
-            return default_threshold
+            return 0.75  # Default
 
-        # Calculate success rate for this pattern
+        # Calculate success rate
         successful = sum(1 for ep in matching_episodes if ep.success)
         success_rate = successful / len(matching_episodes)
 
-        # Adjust threshold based on success rate
-        if success_rate >= 0.9 and len(matching_episodes) >= 3:
-            # Highly reliable pattern - lower threshold (trust AI more)
-            return 0.60
-        elif success_rate >= 0.7:
-            # Good pattern - slightly lower threshold
+        # Check for recent corrections
+        recent_corrections = sum(
+            1 for ep in matching_episodes[:5]
+            if hasattr(ep, 'user_corrections') and ep.user_corrections
+        )
+
+        if recent_corrections >= 2:
+            return 0.85
+        if success_rate >= 0.90 and len(matching_episodes) >= 10:
+            return 0.65
+        if success_rate >= 0.80:
             return 0.70
-        elif success_rate < 0.5:
-            # Problematic pattern - higher threshold (require more confirmation)
+        if success_rate < 0.50:
             return 0.85
 
-        return default_threshold
+        return 0.75
 
     # =========================================================================
     # Helper Methods
@@ -724,6 +845,180 @@ class LearningAgent(BaseInventoryAgent):
                 lessons.append(f"Coluna '{column}' corresponde ao campo '{field}'")
 
         return lessons[:10]  # Limit to 10 lessons
+
+
+    # =========================================================================
+    # Feedback Loop: Reflection Generation (TRUE Agentic Learning)
+    # =========================================================================
+
+    async def generate_reflection(
+        self,
+        user_id: str,
+        filename_pattern: str,
+        recent_outcomes: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Generate cross-episode reflection for continuous improvement.
+
+        This implements TRUE agentic learning: after multiple imports,
+        the agent reflects on patterns and generates insights that
+        improve future performance.
+
+        Philosophy: LEARN phase - "What did I learn from this experience?"
+
+        Args:
+            user_id: User for whom to generate reflection
+            filename_pattern: File pattern to focus reflection on
+            recent_outcomes: Recent import outcomes (optional)
+
+        Returns:
+            Reflection with patterns, insights, and recommendations
+        """
+        log_agent_action(
+            self.name, "generate_reflection",
+            status="started",
+        )
+
+        # Get relevant episodes
+        relevant_episodes = []
+        if user_id in self._episodes_cache:
+            for episode in self._episodes_cache[user_id]:
+                if episode.filename_pattern == filename_pattern:
+                    relevant_episodes.append(episode)
+
+        if len(relevant_episodes) < 3:
+            return {
+                "has_reflection": False,
+                "reason": "Não há episódios suficientes para reflexão (mínimo: 3)",
+                "episode_count": len(relevant_episodes),
+            }
+
+        # Analyze patterns
+        successful = [ep for ep in relevant_episodes if ep.success]
+        failed = [ep for ep in relevant_episodes if not ep.success]
+        success_rate = len(successful) / len(relevant_episodes)
+
+        # Find common mappings in successful episodes
+        common_mappings = {}
+        for ep in successful:
+            for col, field in ep.column_mappings.items():
+                if col not in common_mappings:
+                    common_mappings[col] = {}
+                if field not in common_mappings[col]:
+                    common_mappings[col][field] = 0
+                common_mappings[col][field] += 1
+
+        # Find best mappings (most frequent in successful imports)
+        best_mappings = {}
+        for col, votes in common_mappings.items():
+            if votes:
+                best_field = max(votes.items(), key=lambda x: x[1])
+                if best_field[1] >= 2:  # At least 2 occurrences
+                    best_mappings[col] = best_field[0]
+
+        # Analyze user corrections
+        all_corrections = {}
+        for ep in relevant_episodes:
+            corrections = ep.user_corrections if hasattr(ep, 'user_corrections') else {}
+            for col, correction in corrections.items():
+                if col not in all_corrections:
+                    all_corrections[col] = []
+                all_corrections[col].append(correction)
+
+        # Frequent corrections = areas where AI needs improvement
+        problem_areas = []
+        for col, corrections in all_corrections.items():
+            if len(corrections) >= 2:
+                problem_areas.append({
+                    "column": col,
+                    "correction_count": len(corrections),
+                    "common_correction": max(set(corrections), key=corrections.count),
+                })
+
+        # Generate natural language reflection using Gemini
+        reflection_text = ""
+        try:
+            prompt = f"""Analise estes dados de imports e gere uma reflexão concisa:
+
+## Estatísticas
+- Total de imports: {len(relevant_episodes)}
+- Taxa de sucesso: {success_rate:.0%}
+- Padrão de arquivo: {filename_pattern}
+
+## Mapeamentos que funcionaram bem
+{json.dumps(best_mappings, ensure_ascii=False, indent=2)}
+
+## Áreas problemáticas (correções frequentes)
+{json.dumps(problem_areas, ensure_ascii=False, indent=2)}
+
+## Tarefa
+Gere uma reflexão em 2-3 frases sobre:
+1. O que o sistema aprendeu com estes imports
+2. O que pode ser melhorado
+3. Uma recomendação para próximos imports similares
+
+Responda em português brasileiro, de forma profissional mas acessível.
+"""
+            _, reflection_text = await self.invoke_with_thinking(prompt)
+        except Exception as e:
+            reflection_text = f"Reflexão automática indisponível: {str(e)[:50]}"
+
+        # Build reflection result
+        reflection = ImportReflection(
+            reflection_id=generate_id("REF"),
+            pattern=filename_pattern,
+            confidence=success_rate,
+            episode_count=len(relevant_episodes),
+            applicable_to=filename_pattern,
+            recommendation=reflection_text[:500] if reflection_text else "",
+        )
+
+        # Cache reflection
+        self._reflections_cache.append(reflection)
+        if len(self._reflections_cache) > 20:
+            self._reflections_cache = self._reflections_cache[-20:]
+
+        log_agent_action(
+            self.name, "generate_reflection",
+            entity_id=reflection.reflection_id,
+            status="completed",
+        )
+
+        return {
+            "has_reflection": True,
+            "reflection_id": reflection.reflection_id,
+            "pattern": filename_pattern,
+            "episode_count": len(relevant_episodes),
+            "success_rate": success_rate,
+            "best_mappings": best_mappings,
+            "problem_areas": problem_areas,
+            "reflection_text": reflection_text,
+            "recommendation": reflection.recommendation,
+        }
+
+    async def invoke_with_thinking(self, prompt: str) -> tuple:
+        """
+        Invoke base agent with thinking mode.
+
+        Wrapper that calls parent's invoke_with_thinking if available,
+        or falls back to regular invoke.
+
+        Args:
+            prompt: Prompt to send
+
+        Returns:
+            tuple[thinking_trace, response]
+        """
+        try:
+            # Try thinking mode first
+            if hasattr(super(), 'invoke_with_thinking'):
+                return await super().invoke_with_thinking(prompt)
+            else:
+                # Fallback to regular invoke
+                response = await self.invoke(prompt)
+                return "", response
+        except Exception as e:
+            return "", f"Error: {str(e)}"
 
 
 # =============================================================================
