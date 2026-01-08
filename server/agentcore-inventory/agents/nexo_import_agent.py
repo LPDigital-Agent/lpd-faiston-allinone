@@ -1629,6 +1629,8 @@ IMPORTANTE:
             for new_col in session.requested_new_columns:
                 if new_col.approved:
                     continue  # Already approved in previous round
+                if new_col.source_file_column in session.learned_mappings:
+                    continue  # Already decided (ignored, custom_fields, or mapped)
 
                 # Build options for column creation question
                 options = [
