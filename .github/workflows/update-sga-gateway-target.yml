@@ -242,83 +242,75 @@ jobs:
           print(f"Target ID: {TARGET_ID}")
           print(f"Tools to register: {len(TOOL_SCHEMA)}")
 
-          # Create boto3 client for AgentCore Control
-          # Note: The service name may vary - trying different names
-          try:
-              client = boto3.client("bedrock-agentcore-control", region_name=REGION)
-          except Exception as e:
-              print(f"bedrock-agentcore-control not available: {e}")
-              print("Trying alternative service names...")
+          # Use raw HTTP + SigV4 signing (boto3 client for bedrock-agentcore-control may not exist)
+          import requests
+          from botocore.auth import SigV4Auth
+          from botocore.awsrequest import AWSRequest
 
-              # Try with requests directly to the API
-              import requests
-              from botocore.auth import SigV4Auth
-              from botocore.awsrequest import AWSRequest
+          session = boto3.Session()
+          credentials = session.get_credentials().get_frozen_credentials()
 
-              session = boto3.Session()
-              credentials = session.get_credentials().get_frozen_credentials()
+          # AgentCore Control API endpoint (per AWS docs)
+          # https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_UpdateGatewayTarget.html
+          api_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com"
 
-              # AgentCore Control API endpoint (per AWS docs)
-              # https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_UpdateGatewayTarget.html
-              api_url = f"https://bedrock-agentcore-control.{REGION}.amazonaws.com"
+          # Update target endpoint - NOTE: trailing slash is REQUIRED per API spec
+          update_url = f"{api_url}/gateways/{GATEWAY_ID}/targets/{TARGET_ID}/"
 
-              # Update target endpoint - NOTE: trailing slash is REQUIRED per API spec
-              update_url = f"{api_url}/gateways/{GATEWAY_ID}/targets/{TARGET_ID}/"
-
-              # Request body - per UpdateGatewayTarget API reference
-              # The API uses PUT (not PATCH) and requires 'name' and 'targetConfiguration'
-              payload = {
-                  "name": TARGET_NAME,
-                  "targetConfiguration": {
-                      "lambda": {
-                          "lambdaArn": LAMBDA_ARN,
-                          "toolSchema": {
-                              "inlinePayload": TOOL_SCHEMA
-                          }
+          # Request body - per UpdateGatewayTarget API reference
+          # The API uses PUT (not PATCH) and requires 'name' and 'targetConfiguration'
+          payload = {
+              "name": TARGET_NAME,
+              "targetConfiguration": {
+                  "lambda": {
+                      "lambdaArn": LAMBDA_ARN,
+                      "toolSchema": {
+                          "inlinePayload": TOOL_SCHEMA
                       }
-                  },
-                  "credentialProviderConfigurations": [
-                      {"credentialProviderType": "GATEWAY_IAM_ROLE"}
-                  ]
-              }
-
-              body = json.dumps(payload)
-
-              # Create and sign request - using PUT per API spec
-              request = AWSRequest(
-                  method="PUT",
-                  url=update_url,
-                  data=body,
-                  headers={
-                      "Content-Type": "application/json",
-                      "Accept": "application/json"
                   }
-              )
+              },
+              "credentialProviderConfigurations": [
+                  {"credentialProviderType": "GATEWAY_IAM_ROLE"}
+              ]
+          }
 
-              SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(request)
+          body = json.dumps(payload)
 
-              print(f"\nSending PUT to: {update_url}")
-              print(f"Payload (first 1000 chars): {json.dumps(payload, indent=2)[:1000]}...")
+          # Create and sign request - using PUT per API spec
+          request = AWSRequest(
+              method="PUT",
+              url=update_url,
+              data=body,
+              headers={
+                  "Content-Type": "application/json",
+                  "Accept": "application/json"
+              }
+          )
 
-              response = requests.put(
-                  update_url,
-                  headers=dict(request.headers),
-                  data=body,
-                  timeout=60  # Longer timeout for update operation
-              )
+          SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(request)
 
-              print(f"\nResponse Status: {response.status_code}")
-              print(f"Response Body: {response.text}")
+          print(f"\nSending PUT to: {update_url}")
+          print(f"Payload (first 1000 chars): {json.dumps(payload, indent=2)[:1000]}...")
 
-              if response.status_code in [200, 202]:
-                  print("\n✅ Gateway Target updated successfully!")
-                  result = response.json()
-                  print(f"Target Name: {result.get('name', TARGET_NAME)}")
-                  print(f"Tools: {len(TOOL_SCHEMA)}")
-              else:
-                  print("\n❌ Failed to update Gateway Target")
-                  print(f"Error: {response.text}")
-                  exit(1)
+          response = requests.put(
+              update_url,
+              headers=dict(request.headers),
+              data=body,
+              timeout=60  # Longer timeout for update operation
+          )
+
+          print(f"\nResponse Status: {response.status_code}")
+          print(f"Response Body: {response.text[:2000]}")
+
+          if response.status_code in [200, 202]:
+              print("\n✅ Gateway Target updated successfully!")
+              result = response.json()
+              print(f"Target Name: {result.get('name', TARGET_NAME)}")
+              print(f"Tools: {len(TOOL_SCHEMA)}")
+          else:
+              print("\n❌ Failed to update Gateway Target")
+              print(f"Error: {response.text}")
+              exit(1)
           EOF
 
       - name: Verify Target Update
