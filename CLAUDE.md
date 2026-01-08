@@ -1156,3 +1156,51 @@ NEXT_PUBLIC_USER_POOL_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg  # faiston-client-pr
 ```
 
 **Files Modified**: `.github/workflows/deploy-frontend.yml`, `.github/workflows/deploy-agentcore-inventory.yml`
+
+### 22. MCP Gateway Lambda Event Format - Tool Name in Context, Not Event (January 2026)
+**Issue**: `"MCP error: Unknown tool: "` (empty string) after all previous fixes for 3 underscores
+**Root Cause**: Code was reading `event.get("name", "")` but per AWS documentation (gateway-add-target-lambda.html):
+1. **Event object**: Contains ONLY the tool arguments (properties from inputSchema)
+2. **Context object**: Contains `bedrockAgentCoreToolName` in `context.client_context.custom`
+
+The tool name is **NOT** in the event - it's in the Lambda context!
+
+**AWS Documentation Pattern**:
+```python
+# AWS official pattern from docs
+def lambda_handler(event, context):
+    delimiter = "___"
+
+    # Get the tool name from CONTEXT, not EVENT
+    originalToolName = context.client_context.custom['bedrockAgentCoreToolName']
+    toolName = originalToolName[originalToolName.index(delimiter) + len(delimiter):]
+```
+
+**Before (WRONG)**:
+```python
+tool_name = event.get("name", "")  # Returns "" because event has no "name"
+arguments = event.get("arguments", {})  # Wrong - event IS the arguments
+```
+
+**After (CORRECT)**:
+```python
+# Get tool name from context (MCP Gateway invocation)
+if hasattr(context, 'client_context') and context.client_context:
+    custom = getattr(context.client_context, 'custom', None)
+    if custom and isinstance(custom, dict):
+        tool_name = custom.get('bedrockAgentCoreToolName', '')
+
+# Fallback for direct invocation (testing)
+if not tool_name:
+    tool_name = event.get("name", "")
+
+# Event IS the arguments for MCP Gateway, nested for direct invocation
+if "arguments" in event:
+    arguments = event["arguments"]  # Direct invocation
+else:
+    arguments = event  # MCP Gateway - event IS the arguments
+```
+
+**Lesson Learned**: Always consult AWS documentation for Lambda event formats. MCP Gateway Lambda targets have a COMPLETELY DIFFERENT format from direct Lambda invocations.
+
+**Files Modified**: `server/agentcore-inventory/tools/postgres_tools_lambda.py`

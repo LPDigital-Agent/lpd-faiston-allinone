@@ -2,18 +2,21 @@
 PostgreSQL MCP Tools Lambda Handler.
 
 This Lambda function handles tool invocations from AgentCore Gateway.
-Per AWS documentation (gateway-agent-integration.html), the Gateway sends
-tool calls with the format: {TargetName}___{ToolName} (THREE underscores)
+Per AWS documentation (gateway-add-target-lambda.html):
+- Event object: Contains ONLY the tool arguments (properties from inputSchema)
+- Context object: Contains bedrockAgentCoreToolName in client_context.custom
 
 Architecture:
     AgentCore Gateway -> Lambda (this) -> RDS Proxy -> Aurora PostgreSQL
 
-Tool Naming Convention:
-    Gateway sends: SGAPostgresTools___sga_list_inventory (3 underscores)
+Tool Naming Convention (context.client_context.custom['bedrockAgentCoreToolName']):
+    Format: {TargetName}___{ToolName} (THREE underscores)
+    Example: SGAPostgresTools___sga_list_inventory
     Handler strips prefix and routes to appropriate function.
 
 Author: Faiston NEXO Team
 Date: January 2026
+Updated: January 2026 - Fix to read tool name from context, not event (per AWS docs)
 """
 
 import json
@@ -35,9 +38,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Lambda handler for AgentCore Gateway tool invocation.
 
+    Per AWS documentation (gateway-add-target-lambda.html):
+    - Event object: Contains ONLY the tool arguments (not tool name!)
+    - Context object: Contains bedrockAgentCoreToolName in client_context.custom
+
     Args:
-        event: Gateway tool call event with 'name' and 'arguments'
-        context: Lambda context
+        event: Tool arguments (properties from inputSchema)
+        context: Lambda context with client_context.custom metadata
 
     Returns:
         Tool execution result or error
@@ -45,18 +52,40 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     logger.info(f"Received event: {json.dumps(event)}")
 
     try:
-        # Extract tool name and arguments
-        tool_name = event.get("name", "")
-        arguments = event.get("arguments", {})
+        # Extract tool name from context (per AWS MCP Gateway documentation)
+        # The tool name is in context.client_context.custom['bedrockAgentCoreToolName']
+        # Format: {TargetName}___{ToolName} (THREE underscores)
+        tool_name = ""
+
+        # Try to get tool name from context (MCP Gateway invocation)
+        if hasattr(context, 'client_context') and context.client_context:
+            custom = getattr(context.client_context, 'custom', None)
+            if custom and isinstance(custom, dict):
+                tool_name = custom.get('bedrockAgentCoreToolName', '')
+                logger.info(f"Tool name from context: {tool_name}")
+
+        # Fallback: Try to get from event (direct invocation for testing)
+        if not tool_name:
+            tool_name = event.get("name", "")
+            if tool_name:
+                logger.info(f"Tool name from event (direct invocation): {tool_name}")
+
+        # For MCP Gateway: event IS the arguments (not nested under 'arguments')
+        # For direct invocation: arguments may be nested under 'arguments'
+        if "arguments" in event and isinstance(event.get("arguments"), dict):
+            arguments = event["arguments"]  # Direct invocation format
+        else:
+            arguments = event  # MCP Gateway format - event IS the arguments
 
         # Strip target prefix (SGAPostgresTools___)
         # AWS MCP Gateway convention uses THREE underscores: {TargetName}___{ToolName}
-        if "___" in tool_name:
-            actual_tool = tool_name.split("___", 1)[-1]
+        delimiter = "___"
+        if delimiter in tool_name:
+            actual_tool = tool_name.split(delimiter, 1)[-1]
         else:
             actual_tool = tool_name
 
-        logger.info(f"Executing tool: {actual_tool} with args: {arguments}")
+        logger.info(f"Executing tool: {actual_tool} with args: {json.dumps(arguments)}")
 
         # Route to appropriate handler
         handlers = {
