@@ -21,12 +21,17 @@ Date: January 2026
 """
 
 import hashlib
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+# Feature flag: Use MCP Gateway for schema queries (required when running in AgentCore)
+USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "false").lower() == "true"
 
 
 # =============================================================================
@@ -142,10 +147,29 @@ class SchemaProvider:
 
         self._cache: Dict[str, Any] = {}
         self._cache_timestamp: float = 0.0
-        self._postgres_client = None  # Lazy initialization
+        self._postgres_client = None  # Lazy initialization (direct connection)
+        self._mcp_client = None       # Lazy initialization (MCP Gateway)
+        self._use_mcp = USE_POSTGRES_MCP
 
         SchemaProvider._initialized = True
-        logger.info("[SchemaProvider] Initialized (singleton)")
+        logger.info(f"[SchemaProvider] Initialized (singleton, use_mcp={self._use_mcp})")
+
+    def _get_mcp_client(self):
+        """Get or create MCP Gateway client (lazy initialization)."""
+        if self._mcp_client is None:
+            try:
+                from tools.mcp_gateway_client import MCPGatewayClientFactory
+
+                def get_access_token():
+                    """Get JWT access token for Gateway auth."""
+                    return os.environ.get("AGENTCORE_ACCESS_TOKEN", "")
+
+                self._mcp_client = MCPGatewayClientFactory.create_from_env(get_access_token)
+                logger.info("[SchemaProvider] MCP Gateway client initialized")
+            except Exception as e:
+                logger.error(f"[SchemaProvider] Failed to create MCP client: {e}")
+                raise
+        return self._mcp_client
 
     def _get_client(self):
         """Get or create PostgreSQL client (lazy initialization)."""
@@ -164,14 +188,25 @@ class SchemaProvider:
         return age < self.CACHE_TTL_SECONDS
 
     def _refresh_cache(self) -> None:
-        """Refresh schema cache from database."""
-        client = self._get_client()
+        """
+        Refresh schema cache from database.
+
+        Uses MCP Gateway if USE_POSTGRES_MCP=true (required for AgentCore),
+        otherwise connects directly to PostgreSQL.
+        """
         try:
-            metadata = client.get_schema_metadata()
+            if self._use_mcp:
+                # Use MCP Gateway to query schema (AgentCore path)
+                metadata = self._refresh_via_mcp()
+            else:
+                # Direct PostgreSQL connection (Lambda path)
+                client = self._get_client()
+                metadata = client.get_schema_metadata()
+
             self._cache = metadata
             self._cache_timestamp = time.time()
             logger.info(
-                f"[SchemaProvider] Cache refreshed: "
+                f"[SchemaProvider] Cache refreshed via {'MCP' if self._use_mcp else 'direct'}: "
                 f"{len(metadata.get('tables', {}))} tables, "
                 f"{len(metadata.get('enums', {}))} enums"
             )
@@ -180,6 +215,57 @@ class SchemaProvider:
             # Keep stale cache if refresh fails
             if not self._cache:
                 raise
+
+    def _refresh_via_mcp(self) -> Dict[str, Any]:
+        """
+        Fetch schema metadata via MCP Gateway.
+
+        Calls the sga_get_schema_metadata tool through the Gateway.
+        Uses asyncio.run() to bridge sync→async since SchemaProvider is sync.
+
+        Returns:
+            Schema metadata dictionary
+        """
+        import asyncio
+
+        async def _async_fetch():
+            mcp_client = self._get_mcp_client()
+            async with mcp_client.connect() as connected_client:
+                result = await connected_client.call_tool(
+                    tool_name="SGAPostgresTools__sga_get_schema_metadata",
+                    arguments={}
+                )
+                return result
+
+        try:
+            # Bridge sync→async
+            # Check if we're already in an event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # If we're in an async context, use nest_asyncio or a thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, _async_fetch())
+                    result = future.result(timeout=30)
+            except RuntimeError:
+                # No running loop, safe to use asyncio.run()
+                result = asyncio.run(_async_fetch())
+
+            if not result:
+                raise ValueError("Empty response from MCP Gateway")
+
+            # Result should already be parsed by mcp_gateway_client.call_tool()
+            if isinstance(result, dict):
+                if "error" in result:
+                    raise ValueError(f"MCP tool error: {result['error']}")
+                if "tables" in result:
+                    return result
+
+            raise ValueError(f"Unexpected MCP response format: {type(result)}")
+
+        except Exception as e:
+            logger.error(f"[SchemaProvider] MCP refresh failed: {e}")
+            raise
 
     def _ensure_cache(self) -> None:
         """Ensure cache is populated and valid."""

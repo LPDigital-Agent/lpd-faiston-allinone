@@ -59,6 +59,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
 
         # Route to appropriate handler
         handlers = {
+            # Data operations
             "sga_list_inventory": handle_list_inventory,
             "sga_get_balance": handle_get_balance,
             "sga_search_assets": handle_search_assets,
@@ -67,6 +68,10 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "sga_get_pending_tasks": handle_get_pending_tasks,
             "sga_create_movement": handle_create_movement,
             "sga_reconcile_sap": handle_reconcile_sap,
+            # Schema introspection (for NEXO Import schema-aware validation)
+            "sga_get_schema_metadata": handle_get_schema_metadata,
+            "sga_get_table_columns": handle_get_table_columns,
+            "sga_get_enum_values": handle_get_enum_values,
         }
 
         if actual_tool not in handlers:
@@ -344,3 +349,110 @@ def handle_reconcile_sap(arguments: Dict[str, Any]) -> Dict[str, Any]:
         sap_data=sap_data,
         include_serials=arguments.get("include_serials", False)
     )
+
+
+# =============================================================================
+# Schema Introspection Handlers (for NEXO Import schema-aware validation)
+# =============================================================================
+# These tools enable AgentCore agents to query PostgreSQL schema metadata
+# via MCP Gateway. Required because AgentCore runs outside VPC and cannot
+# directly connect to RDS Proxy.
+# =============================================================================
+
+
+def handle_get_schema_metadata(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get complete schema metadata for all SGA import-related tables.
+
+    This is the main entry point for SchemaProvider to fetch all schema
+    knowledge in a single call.
+
+    Returns:
+        Dictionary with:
+        - tables: Dict[table_name, List[column_info]]
+        - enums: Dict[enum_name, List[values]]
+        - foreign_keys: Dict[table_name, List[fk_info]]
+        - required_columns: Dict[table_name, List[required_column_names]]
+        - table_list: List of available table names
+        - timestamp: ISO timestamp of retrieval
+    """
+    from postgres_client import SGAPostgresClient
+
+    client = SGAPostgresClient()
+
+    try:
+        metadata = client.get_schema_metadata()
+        logger.info(
+            f"Schema metadata retrieved: {len(metadata.get('tables', {}))} tables, "
+            f"{len(metadata.get('enums', {}))} enums"
+        )
+        return metadata
+    except Exception as e:
+        logger.error(f"Failed to get schema metadata: {e}")
+        return {"error": str(e)}
+
+
+def handle_get_table_columns(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get column metadata for a specific table.
+
+    Args:
+        table_name: Name of the table (required)
+        schema_name: PostgreSQL schema (default: "sga")
+
+    Returns:
+        List of column metadata dictionaries with:
+        - name: Column name
+        - data_type: PostgreSQL data type
+        - character_maximum_length: Max length for VARCHAR
+        - is_nullable: YES/NO
+        - column_default: Default value
+        - udt_name: User-defined type name (for ENUMs)
+        - is_primary_key: Boolean
+    """
+    from postgres_client import SGAPostgresClient
+
+    client = SGAPostgresClient()
+
+    table_name = arguments.get("table_name")
+    if not table_name:
+        return {"error": "table_name is required"}
+
+    schema_name = arguments.get("schema_name", "sga")
+
+    try:
+        columns = client.get_table_columns(table_name, schema_name)
+        logger.info(f"Retrieved {len(columns)} columns for {schema_name}.{table_name}")
+        return {"columns": columns, "table_name": table_name, "schema_name": schema_name}
+    except Exception as e:
+        logger.error(f"Failed to get table columns: {e}")
+        return {"error": str(e)}
+
+
+def handle_get_enum_values(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Get valid values for a PostgreSQL ENUM type.
+
+    Args:
+        enum_name: Name of the ENUM type (required)
+
+    Returns:
+        Dictionary with:
+        - enum_name: The ENUM type name
+        - values: List of valid enum values
+    """
+    from postgres_client import SGAPostgresClient
+
+    client = SGAPostgresClient()
+
+    enum_name = arguments.get("enum_name")
+    if not enum_name:
+        return {"error": "enum_name is required"}
+
+    try:
+        values = client.get_enum_values(enum_name)
+        logger.info(f"Retrieved {len(values)} values for enum {enum_name}")
+        return {"enum_name": enum_name, "values": values}
+    except Exception as e:
+        logger.error(f"Failed to get enum values: {e}")
+        return {"error": str(e)}

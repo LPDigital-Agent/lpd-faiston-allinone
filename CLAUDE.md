@@ -994,3 +994,58 @@ logger.info(f"[AUDIT] action={action} session_id={session_id} user={user} latenc
 - Latency tracking for performance monitoring
 
 **Files Modified**: `server/agentcore-academy/main.py`, `server/agentcore-inventory/main.py`, `server/agentcore-portal/main.py`
+
+### 18. NEXO Import Schema Validation - Table Not Found (January 2026)
+**Issue**: After user answers NEXO's questions and approves import, error: `"Tabela 'pending_entry_items' não encontrada no schema PostgreSQL"`
+**Root Cause**: SchemaProvider tries to connect directly to Aurora PostgreSQL using `SGAPostgresClient`, but AgentCore Runtime runs in AWS-managed infrastructure **OUTSIDE the customer VPC** - it cannot reach RDS Proxy.
+
+**Architecture Gap**:
+```
+AgentCore Runtime (AWS-managed, no VPC access)
+    ↓ SGAPostgresClient → ❌ FAILS (no network path to RDS Proxy)
+
+Solution: MCP Gateway bridges the gap
+AgentCore Runtime → MCP Gateway → Lambda (in VPC) → RDS Proxy → Aurora
+```
+
+**Fix (3 parts)**:
+
+1. **Added schema introspection tools to MCP Lambda** (`postgres_tools_lambda.py`):
+```python
+handlers = {
+    # ... existing data tools ...
+    # NEW: Schema introspection (for NEXO Import)
+    "sga_get_schema_metadata": handle_get_schema_metadata,
+    "sga_get_table_columns": handle_get_table_columns,
+    "sga_get_enum_values": handle_get_enum_values,
+}
+```
+
+2. **Updated SchemaProvider to use MCP Gateway** (`schema_provider.py`):
+```python
+USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "false").lower() == "true"
+
+def _refresh_cache(self) -> None:
+    if self._use_mcp:
+        # Use MCP Gateway (AgentCore path)
+        metadata = self._refresh_via_mcp()
+    else:
+        # Direct PostgreSQL (Lambda path)
+        client = self._get_client()
+        metadata = client.get_schema_metadata()
+```
+
+3. **Enabled MCP in deploy workflow** (`deploy-agentcore-inventory.yml`):
+```yaml
+--env USE_POSTGRES_MCP=true \  # Was false
+```
+
+**Deployment Steps**:
+1. Deploy `postgres_tools_lambda.py` via `deploy-sga-postgres-lambda.yml`
+2. Deploy AgentCore inventory via `deploy-agentcore-inventory.yml`
+3. Verify schema migration was applied via `migrate-sga-schema.yml`
+
+**Files Modified**:
+- `server/agentcore-inventory/tools/postgres_tools_lambda.py` (added schema handlers)
+- `server/agentcore-inventory/tools/schema_provider.py` (MCP Gateway support)
+- `.github/workflows/deploy-agentcore-inventory.yml` (USE_POSTGRES_MCP=true)

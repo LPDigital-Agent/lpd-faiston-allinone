@@ -136,7 +136,7 @@ jobs:
             --env HIL_TASKS_TABLE=faiston-one-sga-hil-tasks-prod \
             --env AUDIT_LOG_TABLE=faiston-one-sga-audit-log-prod \
             --env DOCUMENTS_BUCKET=faiston-one-sga-documents-prod \
-            --env USE_POSTGRES_MCP=false \
+            --env USE_POSTGRES_MCP=true \
             --env AGENTCORE_GATEWAY_ID=faiston-one-sga-gateway-prod-qbnlm3ao63 \
             --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp \
             --env GIT_COMMIT_SHA=${{ github.sha }} \
@@ -274,12 +274,12 @@ jobs:
           echo "| User Pool | \`us-east-2_lkBXr4kjy\` (faiston-users-prod) |" >> $GITHUB_STEP_SUMMARY
           echo "| Client ID | \`7ovjm09dr94e52mpejvbu9v1cg\` (faiston-client-prod) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**PostgreSQL MCP Gateway (Sprint 4):**" >> $GITHUB_STEP_SUMMARY
+          echo "**PostgreSQL MCP Gateway (ENABLED):**" >> $GITHUB_STEP_SUMMARY
           echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Gateway ID | \`faiston-one-sga-gateway-prod-qbnlm3ao63\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Target Name | \`SGAPostgresTools\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| USE_POSTGRES_MCP | \`false\` (set to true to enable) |" >> $GITHUB_STEP_SUMMARY
+          echo "| USE_POSTGRES_MCP | \`true\` (schema queries via MCP Gateway) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**5 AI Agents:**" >> $GITHUB_STEP_SUMMARY
           echo "- EstoqueControlAgent - Core inventory movements" >> $GITHUB_STEP_SUMMARY
