@@ -1630,7 +1630,12 @@ IMPORTANTE:
                 if new_col.approved:
                     continue  # Already approved in previous round
                 if new_col.source_file_column in session.learned_mappings:
-                    continue  # Already decided (ignored, custom_fields, or mapped)
+                    # FIX (January 2026): Check if it's a FINAL decision or just a pending marker
+                    mapping_value = session.learned_mappings[new_col.source_file_column]
+                    # __new_column__: markers are PENDING, not final - still need approval!
+                    # Only skip if it's a real column, _ignore, __custom_fields__, or __create_column__
+                    if not mapping_value.startswith("__new_column__:"):
+                        continue  # Already decided (ignored, custom_fields, or mapped)
 
                 # Build options for column creation question
                 options = [
