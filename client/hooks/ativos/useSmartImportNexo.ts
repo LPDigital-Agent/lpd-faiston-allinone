@@ -56,6 +56,18 @@ const RE_ANALYZING_MESSAGES = [
   'Confirmando tipos de dados...',
 ];
 
+/**
+ * Extract human-readable message from validation error.
+ * Backend returns objects like { field, message, severity } but we need just the message.
+ */
+const formatValidationError = (error: unknown): string => {
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+};
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -510,8 +522,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         // Check for schema validation errors (pre-validation against PostgreSQL)
         if (result.data?.validation_errors && result.data.validation_errors.length > 0) {
           console.warn('[NEXO] Schema validation failed:', result.data.validation_errors);
-          const validationMsg = `Validação de schema falhou:\n${result.data.validation_errors.join('\n')}`;
-          throw new Error(validationMsg);
+          const errorList = result.data.validation_errors.map(formatValidationError).join('\n• ');
+          throw new Error(`Validação de schema falhou:\n• ${errorList}`);
         }
 
         // Extract error message from backend response
@@ -639,7 +651,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         // Show specific validation errors if available (Phase 2 fix)
         if (result.data?.validation_errors && result.data.validation_errors.length > 0) {
           console.warn('[NEXO] Schema validation failed:', result.data.validation_errors);
-          const errorList = result.data.validation_errors.join('\n• ');
+          const errorList = result.data.validation_errors.map(formatValidationError).join('\n• ');
           throw new Error(`Validação de schema falhou:\n• ${errorList}`);
         }
         throw new Error(result.data?.error || 'Configuração não está pronta');
