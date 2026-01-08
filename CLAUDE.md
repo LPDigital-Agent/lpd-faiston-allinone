@@ -471,6 +471,11 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
   - 13 tables, 110 indexes, 8 materialized views
   - MCP Gateway + Lambda MCP tools (8 tools working)
   - VPC with private subnets, S3/Secrets Manager/RDS endpoints
+- ✅ **Schema-Aware Import (January 2026)**: Agents OBSERVE PostgreSQL schema before analyzing files
+  - Dynamic column matching replaces 50+ hardcoded patterns
+  - Gemini prompts include target table schema + ENUM values
+  - Pre-execution validation prevents invalid mappings
+  - Learned mappings tracked by schema_version
 - ⏳ Phase 4: SAP API Integration (requires SAP credentials)
 
 ### SGA Backend Agents (10)
@@ -487,13 +492,17 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `nexo_import_agent.py` - **NEXO Intelligent Import** with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
 - `base_agent.py` - Base agent class with common utilities
 
-### SGA Tools (5)
+### SGA Tools (9)
 `server/agentcore-inventory/tools/`:
 - `dynamodb_client.py` - DynamoDB operations
 - `s3_client.py` - S3 presigned URLs with SigV4
 - `nf_parser.py` - NF XML/PDF parsing
 - `hil_workflow.py` - Human-in-the-Loop tasks
 - `sheet_analyzer.py` - **Multi-sheet XLSX analysis** for NEXO Intelligent Import
+- `postgres_client.py` - PostgreSQL/Aurora operations with schema introspection
+- `schema_provider.py` - **Schema-Aware Import** cached metadata provider (5-min TTL)
+- `schema_column_matcher.py` - Dynamic column matcher with fuzzy matching + confidence scores
+- `schema_validator.py` - Pre-execution validation against PostgreSQL schema
 
 ### SGA Contexts (6)
 `client/contexts/ativos/`:
@@ -540,25 +549,34 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 ### NEXO Intelligent Import (January 2026)
 TRUE Agentic AI-First import with ReAct pattern. NEXO guides the user through the import flow intelligently.
 
-**Philosophy**: OBSERVE → THINK → ASK → LEARN → ACT
-1. **OBSERVE**: Analyze file structure (multi-sheet XLSX, column headers, data patterns)
-2. **THINK**: Explicit reasoning about column mappings, generate confidence scores
-3. **ASK**: Request clarification when uncertain (Human-in-the-Loop questions)
-4. **LEARN**: Store successful patterns for future imports (AgentCore Memory)
-5. **ACT**: Execute import with learned mappings
+**Philosophy**: OBSERVE_SCHEMA → OBSERVE_FILE → THINK → VALIDATE → ASK → LEARN → ACT
+1. **OBSERVE_SCHEMA**: Query PostgreSQL for table structure, ENUMs, constraints (NEW - Schema-Aware)
+2. **OBSERVE_FILE**: Analyze file structure (multi-sheet XLSX, column headers, data patterns)
+3. **THINK**: Explicit reasoning WITH schema context, generate confidence scores
+4. **VALIDATE**: Pre-execution validation against PostgreSQL schema (NEW)
+5. **ASK**: Request clarification when uncertain (Human-in-the-Loop questions)
+6. **LEARN**: Store successful patterns WITH schema_version for future imports
+7. **ACT**: Execute import with validated, schema-aware mappings
 
-**Backend Actions (5 new)**:
-- `nexo_analyze_file` - Multi-sheet analysis with reasoning trace
+**Backend Actions (6)**:
+- `nexo_analyze_file` - Multi-sheet analysis with reasoning trace + schema context
 - `nexo_get_questions` - Generate clarification questions
 - `nexo_submit_answers` - Process user answers
-- `nexo_learn_from_import` - Store patterns for future
-- `nexo_prepare_processing` - Final configuration before import
+- `nexo_learn_from_import` - Store patterns with schema_version for future
+- `nexo_prepare_processing` - Final configuration with schema validation
+- `get_import_schema` - Returns PostgreSQL schema for frontend/prompts (NEW)
+
+**Schema-Aware Features (January 2026)**:
+- Dynamic column matching replaces hardcoded patterns
+- Gemini prompts include target table schema + valid ENUM values
+- Pre-import validation catches invalid column mappings
+- Learned mappings filtered by schema_version (prevents stale suggestions)
 
 **Frontend Flow**:
 ```
 Upload → SmartImportNexoPanel → [NEXO analyzing...] →
-  → Show reasoning trace → [Questions if uncertain] →
-  → User answers → Prepare → Execute → Learn
+  → Show reasoning trace (with schema context) → [Questions if uncertain] →
+  → User answers → Validate against schema → Prepare → Execute → Learn
 ```
 
 ### SGA Terraform Resources
@@ -848,3 +866,39 @@ for row_data in all_rows:
 **Lesson Learned**: The `ImportAgent` class was created before the PostgreSQL migration was mandated. When adding new features, always verify the datastore being used matches the CLAUDE.md requirements.
 
 **Files Fixed**: `main.py` (`_execute_import` function)
+
+### 15. Schema-Aware NEXO Import (January 2026)
+**Issue**: NEXO agents used ~50 hardcoded column patterns and could suggest mappings to columns that don't exist in PostgreSQL
+**Root Cause**: Agents had ZERO knowledge of the actual PostgreSQL schema. Column patterns were static strings that couldn't adapt to schema changes.
+**Symptoms**:
+1. Agents suggested mappings like `"material" → "part_number"` but `part_number` might not exist in target table
+2. ENUM values (movement_type, asset_status) were not validated before import
+3. Learned mappings became stale after schema migrations
+
+**Fix**: Implemented **Schema-Aware Import** architecture:
+```python
+# New flow: OBSERVE_SCHEMA → OBSERVE_FILE → THINK → VALIDATE → ACT → LEARN
+# 1. Query PostgreSQL information_schema for table structure
+schema = provider.get_table_schema("pending_entry_items")
+
+# 2. Inject schema context into Gemini prompts
+prompt = f"## TARGET POSTGRESQL SCHEMA\n{schema_context}\n..."
+
+# 3. Validate mappings BEFORE processing
+validation = validator.validate_mappings(mappings, target_table)
+if not validation.is_valid:
+    return {"success": False, "validation_errors": errors}
+
+# 4. Store schema_version with learned episodes
+episode.schema_version = provider.get_schema_version(target_table)
+```
+
+**New Components**:
+- `schema_provider.py` - Cached schema metadata with 5-min TTL
+- `schema_column_matcher.py` - Dynamic fuzzy matching with confidence scores
+- `schema_validator.py` - Pre-execution validation (column existence, ENUMs, FKs)
+
+**Lesson Learned**: AI agents should OBSERVE their environment (database schema) before making decisions. Hardcoded patterns violate the AI-First principle of adaptability.
+
+**Files Created**: `schema_provider.py`, `schema_column_matcher.py`, `schema_validator.py`
+**Files Modified**: `postgres_client.py`, `sheet_analyzer.py`, `csv_parser.py`, `nexo_import_agent.py`, `learning_agent.py`, `main.py`

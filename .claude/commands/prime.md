@@ -323,13 +323,18 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
   - VPC with private subnets + S3/Secrets Manager/RDS endpoints
   - MCP Gateway + Lambda MCP tools (8 tools working)
   - Schema migration workflow via Lambda bridge (GitHub Actions)
+- ✅ **Schema-Aware Import (January 2026)**: Agents OBSERVE PostgreSQL schema before analyzing files
+  - Dynamic column matching replaces 50+ hardcoded patterns
+  - Gemini prompts include target table schema + ENUM values
+  - Pre-execution validation prevents invalid mappings
+  - Learned mappings tracked by schema_version
 - ⏳ Phase 4: SAP API Integration (pending credentials)
 
 ### SGA Key Components
 | Category | Components |
 |----------|------------|
 | **Backend Agents (11)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, **nexo_import** (stateless), base |
-| **Backend Tools (5)** | dynamodb_client, s3_client, nf_parser, hil_workflow, **sheet_analyzer** |
+| **Backend Tools (9)** | dynamodb_client, s3_client, nf_parser, hil_workflow, sheet_analyzer, postgres_client, **schema_provider**, **schema_column_matcher**, **schema_validator** |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
 | **Hooks (17)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, useSmartImporter, **useSmartImportNexo** |
 | **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch, **SmartImportNexoPanel** |
