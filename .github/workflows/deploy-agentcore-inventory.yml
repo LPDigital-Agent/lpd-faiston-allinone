@@ -159,9 +159,11 @@ jobs:
       # =========================================================================
       - name: Configure JWT Authorizer
         env:
-          # Faiston One Cognito (faiston-users-prod) - from GitHub Secrets
-          COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID }}
-          COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
+          # Faiston One Cognito - HARDCODED to ensure consistency
+          # These are NOT secrets - they appear in frontend JS and JWT tokens
+          # faiston-users-prod / faiston-client-prod
+          COGNITO_USER_POOL_ID: us-east-2_lkBXr4kjy
+          COGNITO_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg
           # Known runtime ID from successful deployment
           AGENT_RUNTIME_ID: faiston_asset_management-uSuLPsFQNH
         run: |
