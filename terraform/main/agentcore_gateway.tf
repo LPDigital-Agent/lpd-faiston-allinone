@@ -259,6 +259,42 @@ locals {
           include_serials = { type = "boolean", default = false }
         }
       }
+    },
+    # =============================================================================
+    # Schema Introspection Tools (for NEXO Import schema-aware validation)
+    # Added January 2026 - Issue #17: SigV4 Auth + Schema Tools
+    # =============================================================================
+    {
+      name        = "sga_get_schema_metadata"
+      description = "Obtém metadados completos do schema PostgreSQL para validação de importação NEXO"
+      input_schema = {
+        type = "object"
+        properties = {}
+        description = "Retorna tabelas, colunas, ENUMs, FKs e constraints do schema SGA"
+      }
+    },
+    {
+      name        = "sga_get_table_columns"
+      description = "Obtém metadados das colunas de uma tabela específica"
+      input_schema = {
+        type     = "object"
+        required = ["table_name"]
+        properties = {
+          table_name  = { type = "string", description = "Nome da tabela PostgreSQL" }
+          schema_name = { type = "string", default = "sga", description = "Schema PostgreSQL (default: sga)" }
+        }
+      }
+    },
+    {
+      name        = "sga_get_enum_values"
+      description = "Obtém valores válidos de um ENUM PostgreSQL"
+      input_schema = {
+        type     = "object"
+        required = ["enum_name"]
+        properties = {
+          enum_name = { type = "string", description = "Nome do tipo ENUM PostgreSQL" }
+        }
+      }
     }
   ]
 }
