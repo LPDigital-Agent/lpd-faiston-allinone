@@ -287,7 +287,9 @@ jobs:
               }
           )
 
-          SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(request)
+          # Service name for SigV4 is "bedrock-agentcore" (NOT "bedrock-agentcore-control")
+          # Per AWS error: "Credential should be scoped to correct service: 'bedrock-agentcore'"
+          SigV4Auth(credentials, "bedrock-agentcore", REGION).add_auth(request)
 
           print(f"\nSending PUT to: {update_url}")
           print(f"Payload (first 1000 chars): {json.dumps(payload, indent=2)[:1000]}...")
