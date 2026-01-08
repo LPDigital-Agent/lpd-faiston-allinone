@@ -246,8 +246,8 @@ lpd-faiston-allinone/
 ├── server/                 # Python backend
 │   ├── agentcore-academy/ # Faiston Academy AgentCore (19 actions)
 │   ├── agentcore-inventory/ # SGA Inventory AgentCore (30+ actions)
-│   │   ├── agents/        # 10 Google ADK Agents
-│   │   └── tools/         # dynamodb, s3, nf_parser, hil
+│   │   ├── agents/        # 14 Google ADK Agents (January 2026)
+│   │   └── tools/         # 18 tools (postgres, schema, s3, hil, etc.)
 │   └── agentcore-portal/  # Portal NEXO Orchestrator (news, A2A delegation)
 ├── terraform/             # AWS Infrastructure as Code
 │   └── main/              # All AWS resources (28+ .tf files)
@@ -328,13 +328,21 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
   - Gemini prompts include target table schema + ENUM values
   - Pre-execution validation prevents invalid mappings
   - Learned mappings tracked by schema_version
+- ✅ **NEXO Re-Analyzing UX (January 2026)**: Enhanced progress visibility during Gemini re-reasoning
+  - Re-analyzing stage with orange gradient and rotating messages
+  - Validation error objects properly formatted for display
+  - `re_reasoning_applied` field added to backend response
+- ✅ **Unified Audit Logging (January 2026)**: Standardized observability across all AgentCore runtimes
+  - Centralized CloudWatch log groups
+  - Consistent structured logging format
+  - Latency tracking for performance monitoring
 - ⏳ Phase 4: SAP API Integration (pending credentials)
 
 ### SGA Key Components
 | Category | Components |
 |----------|------------|
-| **Backend Agents (11)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, **nexo_import** (stateless), base |
-| **Backend Tools (9)** | dynamodb_client, s3_client, nf_parser, hil_workflow, sheet_analyzer, postgres_client, **schema_provider**, **schema_column_matcher**, **schema_validator** |
+| **Backend Agents (14)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, **nexo_import** (stateless), **learning**, **equipment_research**, observation, base |
+| **Backend Tools (18)** | postgres_client, dynamodb_client (legacy), s3_client, nf_parser, hil_workflow, sheet_analyzer, csv_parser, file_detector, **schema_provider**, **schema_column_matcher**, **schema_validator**, database_adapter, gateway_adapter, mcp_gateway_client, document_downloader, knowledge_base_retrieval_tool, web_research_tool, postgres_tools_lambda |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
 | **Hooks (17)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, useSmartImporter, **useSmartImportNexo** |
 | **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch, **SmartImportNexoPanel** |

@@ -177,8 +177,8 @@ lpd-faiston-allinone/
 │   │   └── tools/         # Agent tools (elevenlabs, heygen, youtube)
 │   ├── agentcore-inventory/ # SGA Inventory AgentCore agents
 │   │   ├── main.py        # BedrockAgentCoreApp entrypoint (30+ actions)
-│   │   ├── agents/        # 10 Google ADK Agents
-│   │   └── tools/         # 4 tools (dynamodb, s3, nf_parser, hil)
+│   │   ├── agents/        # 14 Google ADK Agents (updated January 2026)
+│   │   └── tools/         # 18 tools (postgres, schema, s3, hil, etc.)
 │   └── agentcore-portal/  # Portal NEXO Orchestrator agents
 │       ├── main.py        # BedrockAgentCoreApp entrypoint
 │       └── agents/        # News, NEXO orchestrator agents
@@ -478,7 +478,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
   - Learned mappings tracked by schema_version
 - ⏳ Phase 4: SAP API Integration (requires SAP credentials)
 
-### SGA Backend Agents (10)
+### SGA Backend Agents (14)
 `server/agentcore-inventory/agents/`:
 - `estoque_control_agent.py` - Core +/- movements
 - `intake_agent.py` - NF PDF/XML/Image extraction (Gemini Vision OCR)
@@ -490,19 +490,31 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - `reverse_agent.py` - Returns/reverse logistics management
 - `import_agent.py` - CSV/Excel bulk import processing
 - `nexo_import_agent.py` - **NEXO Intelligent Import** with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
+- `learning_agent.py` - **Pattern Learning** stores successful import mappings with schema_version
+- `equipment_research_agent.py` - Equipment documentation research with Bedrock KB
+- `observation_agent.py` - Observation pattern for data analysis
 - `base_agent.py` - Base agent class with common utilities
 
-### SGA Tools (9)
+### SGA Tools (18)
 `server/agentcore-inventory/tools/`:
-- `dynamodb_client.py` - DynamoDB operations
+- `dynamodb_client.py` - DynamoDB operations (legacy, being phased out)
+- `postgres_client.py` - PostgreSQL/Aurora operations with schema introspection
 - `s3_client.py` - S3 presigned URLs with SigV4
 - `nf_parser.py` - NF XML/PDF parsing
 - `hil_workflow.py` - Human-in-the-Loop tasks
 - `sheet_analyzer.py` - **Multi-sheet XLSX analysis** for NEXO Intelligent Import
-- `postgres_client.py` - PostgreSQL/Aurora operations with schema introspection
+- `csv_parser.py` - CSV file parsing and column detection
+- `file_detector.py` - File type detection (XML/PDF/CSV/XLSX/image)
 - `schema_provider.py` - **Schema-Aware Import** cached metadata provider (5-min TTL)
 - `schema_column_matcher.py` - Dynamic column matcher with fuzzy matching + confidence scores
 - `schema_validator.py` - Pre-execution validation against PostgreSQL schema
+- `database_adapter.py` - Unified database adapter interface
+- `gateway_adapter.py` - AgentCore Gateway adapter for MCP operations
+- `mcp_gateway_client.py` - MCP Gateway HTTP client
+- `document_downloader.py` - Document download and processing
+- `knowledge_base_retrieval_tool.py` - Bedrock Knowledge Base retrieval
+- `web_research_tool.py` - Web research for equipment documentation
+- `postgres_tools_lambda.py` - PostgreSQL MCP tools Lambda handler
 
 ### SGA Contexts (6)
 `client/contexts/ativos/`:
@@ -902,3 +914,83 @@ episode.schema_version = provider.get_schema_version(target_table)
 
 **Files Created**: `schema_provider.py`, `schema_column_matcher.py`, `schema_validator.py`
 **Files Modified**: `postgres_client.py`, `sheet_analyzer.py`, `csv_parser.py`, `nexo_import_agent.py`, `learning_agent.py`, `main.py`
+
+### 16. NEXO Re-Analyzing Progress and Validation Errors (January 2026)
+**Issue**: After user answers questions, three problems occurred:
+1. `re_reasoning_applied: undefined` - Backend didn't return this field
+2. "Configuração não está pronta" error - Generic error instead of validation details
+3. No progress visibility - Frozen UI for 15-30 seconds during Gemini re-reasoning
+
+**Root Cause**: Backend called `_re_reason_with_answers()` but didn't include result in response. Validation errors were objects `{field, message, severity}` but frontend did `.join()` expecting strings. No loading state for `re-analyzing` stage.
+
+**Fix**: Three-phase implementation:
+```python
+# Phase 1: Backend - Add re_reasoning_applied tracking
+re_reasoning_result = await self._re_reason_with_answers(session, answers)
+re_reasoning_applied = "error" not in re_reasoning_result
+
+return {
+    "success": True,
+    "session": session_to_dict(session),
+    "re_reasoning_applied": re_reasoning_applied,  # NEW
+    "ready_for_processing": True,
+}
+```
+
+```typescript
+// Phase 2: Frontend - Format validation error objects
+const formatValidationError = (error: unknown): string => {
+  if (typeof error === 'string') return error;
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+};
+
+// Show specific errors instead of generic message
+if (result.data?.validation_errors?.length) {
+  const errors = result.data.validation_errors.map(formatValidationError);
+  throw new Error(`Validação de schema falhou:\n• ${errors.join('\n• ')}`);
+}
+```
+
+```typescript
+// Phase 3: Frontend - Add re-analyzing progress stage
+updateProgress('re-analyzing', 70, 'NEXO reanalisando com suas respostas...', 're-think');
+
+// Rotating messages during Gemini call (15-30s)
+const RE_ANALYZING_MESSAGES = [
+  'NEXO refinando mapeamentos...',
+  'Validando contra schema PostgreSQL...',
+  'Aplicando suas respostas...',
+  // ...
+];
+
+const progressInterval = setInterval(() => {
+  setState(prev => ({
+    ...prev,
+    progress: { percent: prev.progress.percent + 2, message: RE_ANALYZING_MESSAGES[idx] },
+  }));
+}, 2000);
+```
+
+**Visual Changes**:
+- Orange gradient for re-analyzing stage (`from-orange-500 to-red-500`)
+- Rotating progress messages every 2 seconds
+- Progress bar animates from 70% → 90%
+
+**Files Modified**: `nexo_import_agent.py`, `useSmartImportNexo.ts`, `SmartImportNexoPanel.tsx`, `sgaAgentcore.ts`
+
+### 17. Unified Audit Logging for AgentCore (January 2026)
+**Issue**: No centralized observability for AgentCore agent invocations across all three runtimes (Academy, Inventory, Portal)
+**Fix**: Added standardized audit logging to all AgentCore `main.py` entrypoints:
+```python
+# Standardized log format for all agent actions
+logger.info(f"[AUDIT] action={action} session_id={session_id} user={user} latency_ms={latency}")
+```
+**Benefits**:
+- Centralized CloudWatch log groups per runtime
+- Consistent structured logging across all agents
+- Latency tracking for performance monitoring
+
+**Files Modified**: `server/agentcore-academy/main.py`, `server/agentcore-inventory/main.py`, `server/agentcore-portal/main.py`

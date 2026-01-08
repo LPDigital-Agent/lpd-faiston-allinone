@@ -129,7 +129,7 @@ lpd-faiston-allinone/
 │   └── services/          # API clients (AgentCore)
 ├── server/                 # Python backend
 │   ├── agentcore-academy/ # Academy agents (19 actions)
-│   ├── agentcore-inventory/ # SGA agents (30+ actions)
+│   ├── agentcore-inventory/ # SGA agents (30+ actions, 14 agents, 18 tools)
 │   └── agentcore-portal/  # Portal NEXO agents
 ├── terraform/             # AWS Infrastructure as Code
 │   └── main/              # All AWS resources
@@ -156,13 +156,18 @@ Educational platform with AI-powered learning features:
 
 ### SGA Inventory (Gestao de Estoque)
 
-Asset/inventory management system:
+Asset/inventory management system with AI-First architecture:
+- **NEXO Intelligent Import**: TRUE agentic import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
+- **Schema-Aware Import**: Dynamic column matching via PostgreSQL introspection
 - Multi-source entry (NF, OCR, SAP, Manual)
-- Smart Import (auto-detect file types)
+- Smart Import (auto-detect XML/PDF/CSV/XLSX/JPG/PNG/TXT)
 - Expedition with AI guidance
 - Reverse logistics
 - SAP reconciliation
 - Analytics dashboard
+
+**Backend**: 14 agents, 18 tools (PostgreSQL, schema validation, S3, HIL)
+**Frontend**: 6 contexts, 17 hooks, 25+ pages
 
 **Location**: `/ferramentas/ativos/estoque/`
 
@@ -206,6 +211,8 @@ This platform follows security-first development practices:
 | `deploy-agentcore-academy.yml` | Push/Manual | Academy agents |
 | `deploy-agentcore-inventory.yml` | Push/Manual | SGA agents |
 | `deploy-agentcore-portal.yml` | Push/Manual | Portal NEXO agents |
+| `deploy-sga-postgres-lambda.yml` | Push/Manual | PostgreSQL MCP tools Lambda |
+| `migrate-sga-schema.yml` | Manual | Apply PostgreSQL schema via Lambda bridge |
 
 ---
 
@@ -235,4 +242,4 @@ This platform follows security-first development practices:
 
 ---
 
-*Last updated: January 2026*
+*Last updated: January 8, 2026*
