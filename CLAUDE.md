@@ -201,6 +201,9 @@ This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.a
   - YOU MUST **ASK FOR EXPLICIT APPROVAL**
   - YOU MUST **EXPLAIN WHY**
 
+---
+- CLAUDE.md HYGIENE (MANDATORY): Root `CLAUDE.md` is GLOBAL POLICIES ONLY. Routes/components/endpoints/known-issues MUST go to `docs/` or module `CLAUDE.md` files. Do NOT bloat root memory.
+
 <!-- ===================================================== -->
 <!-- 🔒 END OF IMMUTABLE BLOCK                             -->
 <!-- ===================================================== -->
