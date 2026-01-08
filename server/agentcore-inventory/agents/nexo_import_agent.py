@@ -77,6 +77,18 @@ class NexoQuestion:
 
 
 @dataclass
+class RequestedNewColumn:
+    """A column requested by user that doesn't exist in schema."""
+    name: str                           # Sanitized column name (snake_case)
+    original_name: str                  # Original name from user instruction
+    user_intent: str                    # User's explanation of what this column should store
+    inferred_type: str = "TEXT"         # PostgreSQL type inferred from data
+    sample_values: List[str] = field(default_factory=list)  # Sample data for type inference
+    source_file_column: str = ""        # Original column name in import file
+    approved: bool = False              # Whether admin approved creation
+
+
+@dataclass
 class ImportSession:
     """State for an intelligent import session."""
     session_id: str
@@ -90,6 +102,8 @@ class ImportSession:
     learned_mappings: Dict[str, str] = field(default_factory=dict)
     # FIX (January 2026): Store "Outros:" user instructions for AI interpretation
     ai_instructions: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    # FEATURE (January 2026): Dynamic schema evolution - columns user wants to create
+    requested_new_columns: List[RequestedNewColumn] = field(default_factory=list)
     confidence: Optional[ConfidenceScore] = None
     error: Optional[str] = None
     created_at: str = field(default_factory=now_iso)
@@ -211,6 +225,49 @@ class NexoImportAgent(BaseInventoryAgent):
             except Exception as e:
                 logger.warning(f"[NexoImportAgent] Schema validator unavailable: {e}")
         return self._schema_validator
+
+    def _sanitize_column_name(self, name: str) -> str:
+        """
+        Sanitize user-provided column name to valid PostgreSQL identifier.
+
+        Security: Prevents SQL injection and ensures PostgreSQL compatibility.
+
+        Args:
+            name: Raw column name from user/AI
+
+        Returns:
+            Sanitized snake_case column name with 'import_' prefix
+        """
+        import re
+
+        if not name:
+            return "import_unknown"
+
+        # Convert to lowercase
+        sanitized = name.lower().strip()
+
+        # Replace spaces and special chars with underscore
+        sanitized = re.sub(r'[^a-z0-9_]', '_', sanitized)
+
+        # Remove consecutive underscores
+        sanitized = re.sub(r'_+', '_', sanitized)
+
+        # Remove leading/trailing underscores
+        sanitized = sanitized.strip('_')
+
+        # Ensure starts with letter (PostgreSQL requirement)
+        if sanitized and sanitized[0].isdigit():
+            sanitized = f"col_{sanitized}"
+
+        # Add prefix to distinguish user-created columns
+        if not sanitized.startswith('import_'):
+            sanitized = f"import_{sanitized}"
+
+        # Limit length (PostgreSQL max is 63, we use 50 for safety)
+        if len(sanitized) > 50:
+            sanitized = sanitized[:50]
+
+        return sanitized or "import_unknown"
 
     def _get_schema_context(self, target_table: str = "pending_entry_items") -> str:
         """
@@ -385,6 +442,19 @@ class NexoImportAgent(BaseInventoryAgent):
             ) if state.get("confidence") and isinstance(state["confidence"], dict) else None,
             # FIX (January 2026): Restore AI instructions for "Outros:" answers
             ai_instructions=state.get("ai_instructions", {}),
+            # FEATURE (January 2026): Restore requested new columns for dynamic schema evolution
+            requested_new_columns=[
+                RequestedNewColumn(
+                    name=col.get("name", ""),
+                    original_name=col.get("original_name", ""),
+                    user_intent=col.get("user_intent", ""),
+                    inferred_type=col.get("inferred_type", "TEXT"),
+                    sample_values=col.get("sample_values", []),
+                    source_file_column=col.get("source_file_column", ""),
+                    approved=col.get("approved", False),
+                )
+                for col in state.get("requested_new_columns", [])
+            ],
             error=state.get("error"),
             created_at=state.get("created_at", now_iso()),
             updated_at=now_iso(),
@@ -1142,6 +1212,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                     session.learned_mappings[q.column] = f"__ai_pending__:{q.id}"
                 else:
                     session.learned_mappings[q.column] = answer
+            elif q.topic == "column_creation" and q.column:
+                # FEATURE: Handle column creation decisions
+                await self._handle_column_creation_answer(session, q.column, answer)
             elif q.topic == "sheet_selection":
                 if session.file_analysis:
                     session.file_analysis["selected_sheets"] = answer
@@ -1219,6 +1292,83 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             "re_reasoning_applied": re_reasoning_applied,
         }
 
+    async def _handle_column_creation_answer(
+        self,
+        session: ImportSession,
+        file_column: str,
+        answer: str,
+    ) -> None:
+        """
+        Handle user's answer to column creation question.
+
+        Possible answers:
+        - "create:{column_name}" - Admin approved creating new column
+        - "custom_fields" - Store in JSONB custom_fields column
+        - "map_existing" - User wants to map to existing column (generates follow-up)
+        - "_ignore" - Ignore this column
+        - Existing column name - Direct mapping to existing column
+
+        Args:
+            session: Current import session
+            file_column: Column name from import file
+            answer: User's answer value
+        """
+        # Find the RequestedNewColumn for this file_column
+        target_new_col = None
+        for new_col in session.requested_new_columns:
+            if new_col.source_file_column == file_column:
+                target_new_col = new_col
+                break
+
+        if answer.startswith("create:"):
+            # Admin approved column creation
+            column_name = answer.split(":", 1)[1]
+
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="action",
+                content=f"Usuário aprovou criação do campo '{column_name}'",
+            ))
+
+            # Mark as approved (will be created during import execution)
+            if target_new_col:
+                target_new_col.approved = True
+
+            # Mark mapping as pending creation
+            session.learned_mappings[file_column] = f"__create_column__:{column_name}"
+
+        elif answer == "custom_fields":
+            # Store in JSONB custom_fields
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Coluna '{file_column}' será armazenada em custom_fields (JSONB)",
+            ))
+            session.learned_mappings[file_column] = "__custom_fields__"
+
+        elif answer == "_ignore":
+            # Ignore this column
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Coluna '{file_column}' será ignorada",
+            ))
+            session.learned_mappings[file_column] = "_ignore"
+
+        elif answer == "map_existing":
+            # User wants to select from existing columns - needs follow-up question
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="thought",
+                content=f"Usuário quer mapear '{file_column}' para campo existente - aguardando seleção",
+            ))
+            # Keep as pending - will generate follow-up question
+            session.learned_mappings[file_column] = f"__map_existing__:{file_column}"
+
+        else:
+            # Direct mapping to an existing column
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Mapeando '{file_column}' → '{answer}'",
+            ))
+            session.learned_mappings[file_column] = answer
+
     async def _re_reason_with_answers(
         self,
         session: ImportSession,
@@ -1293,6 +1443,31 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                                     content=f"Interpretado: '{file_col}' → '{db_col}'",
                                 ))
 
+                # FEATURE: Process requested new columns (dynamic schema evolution)
+                requested_cols = result.get("requested_new_columns", [])
+                if isinstance(requested_cols, list) and requested_cols:
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="observation",
+                        content=f"Detectado {len(requested_cols)} campo(s) que não existem no schema",
+                    ))
+                    for col_info in requested_cols:
+                        if isinstance(col_info, dict):
+                            new_col = RequestedNewColumn(
+                                name=self._sanitize_column_name(col_info.get("name", "")),
+                                original_name=col_info.get("original_name", col_info.get("name", "")),
+                                user_intent=col_info.get("user_intent", ""),
+                                inferred_type=col_info.get("inferred_type", "TEXT"),
+                                source_file_column=col_info.get("source_file_column", ""),
+                            )
+                            session.requested_new_columns.append(new_col)
+                            session.reasoning_trace.append(ReasoningStep(
+                                step_type="thought",
+                                content=f"Usuário quer campo '{new_col.name}' ({new_col.inferred_type}): {new_col.user_intent}",
+                            ))
+                            # Mark as pending column creation decision
+                            if new_col.source_file_column:
+                                session.learned_mappings[new_col.source_file_column] = f"__new_column__:{new_col.name}"
+
                 session.reasoning_trace.append(ReasoningStep(
                     step_type="conclusion",
                     content=f"Reanálise completa. Confiança: {new_confidence:.0%}",
@@ -1353,13 +1528,16 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 TAREFA CRÍTICA: Você DEVE interpretar cada instrução acima e determinar:
 1. Qual coluna do schema PostgreSQL corresponde à intenção do usuário
 2. Se o usuário mencionou múltiplos campos (ex: "Cliente e localidade"), mapeie para o campo principal
-3. Se não conseguir determinar, use "_ignore" para ignorar a coluna
+3. SE O USUÁRIO QUER UM CAMPO QUE NÃO EXISTE NO SCHEMA:
+   - Retorne em "requested_new_columns" com o nome sugerido e tipo inferido
+   - NÃO use "_ignore" se o usuário explicitamente quer salvar esse dado
 
 Exemplos de interpretação:
-- "import isto como ticket_flux" → mapear para "ticket_flux" (se existir no schema)
+- "import isto como ticket_flux" → SE ticket_flux EXISTE: mapear. SE NÃO EXISTE: requested_new_columns
 - "colocado no campo Cliente" → mapear para "client_code" ou similar
 - "numero da Nota Fiscal" → mapear para "nf_number" ou similar
 - "deve ser de status" → mapear para "status" (se existir no schema)
+- "este é o numero do chamado no ServiceNow" → SE não existe: requested_new_columns com nome sugerido
 """
 
         prompt = f"""Você é NEXO reanalisando um arquivo de importação COM as respostas do usuário.
@@ -1392,6 +1570,15 @@ Com base nas respostas do usuário:
     "thoughts": ["Seu raciocínio sobre as respostas e interpretações..."],
     "refined_mappings": {{"coluna_arquivo": "coluna_db"}},
     "interpreted_instructions": {{"coluna_arquivo": "coluna_db_interpretada"}},
+    "requested_new_columns": [
+        {{
+            "name": "nome_snake_case_sugerido",
+            "original_name": "nome_que_usuario_pediu",
+            "user_intent": "explicação do que o usuário quer armazenar",
+            "inferred_type": "TEXT ou INTEGER ou TIMESTAMP etc",
+            "source_file_column": "nome_da_coluna_no_arquivo"
+        }}
+    ],
     "confidence": 0.85,
     "needs_more_questions": false,
     "uncertain_fields": []
@@ -1399,10 +1586,13 @@ Com base nas respostas do usuário:
 ```
 
 IMPORTANTE:
-- SOMENTE use colunas que existem no schema PostgreSQL acima
-- Para instruções "Outros:", extraia a INTENÇÃO do usuário e mapeie para a coluna correta
-- Se a coluna mencionada NÃO EXISTIR no schema, use o campo mais próximo ou "_ignore"
-- Se não tiver certeza, inclua o campo em "uncertain_fields"
+- SOMENTE use colunas que existem no schema PostgreSQL em "refined_mappings" e "interpreted_instructions"
+- Para instruções "Outros:", extraia a INTENÇÃO do usuário
+- SE o usuário pede um campo que NÃO EXISTE no schema:
+  * Adicione em "requested_new_columns" com nome em snake_case e tipo inferido
+  * NÃO mapeie para "_ignore" se o usuário explicitamente quer salvar o dado
+  * O sistema vai perguntar ao usuário se quer criar esse campo
+- Se não tiver certeza sobre um campo existente, inclua em "uncertain_fields"
 """
         return prompt
 
@@ -1414,10 +1604,9 @@ IMPORTANTE:
         """
         Generate follow-up questions based on re-reasoning result.
 
-        Only generates questions if:
-        1. Confidence is still below 0.8
-        2. There are uncertain fields identified by Gemini
-        3. We haven't exceeded max question rounds
+        Generates questions for:
+        1. COLUMN CREATION: User requested fields that don't exist in schema (CRITICAL)
+        2. UNCERTAIN FIELDS: Low confidence mappings that need clarification
 
         Args:
             session: Current import session
@@ -1427,6 +1616,65 @@ IMPORTANTE:
             List of follow-up questions (empty if none needed)
         """
         questions = []
+
+        # =====================================================================
+        # PRIORITY 1: Column Creation Questions (Dynamic Schema Evolution)
+        # These are CRITICAL - user explicitly requested non-existent fields
+        # =====================================================================
+        if session.requested_new_columns:
+            provider = self._get_schema_provider()
+            schema = provider.get_table_schema("pending_entry_items") if provider else None
+            existing_options = self._build_schema_aware_options(schema) if schema else []
+
+            for new_col in session.requested_new_columns:
+                if new_col.approved:
+                    continue  # Already approved in previous round
+
+                # Build options for column creation question
+                options = [
+                    {
+                        "value": f"create:{new_col.name}",
+                        "label": f"✅ Criar campo '{new_col.name}' ({new_col.inferred_type})",
+                    },
+                    {
+                        "value": "custom_fields",
+                        "label": "📦 Armazenar em campos personalizados (JSONB)",
+                    },
+                    {
+                        "value": "_ignore",
+                        "label": "❌ Ignorar esta coluna",
+                    },
+                ]
+
+                # Add "map to existing" option with schema-aware options
+                if existing_options:
+                    options.insert(2, {
+                        "value": "map_existing",
+                        "label": "🔄 Mapear para campo existente",
+                    })
+
+                questions.append(NexoQuestion(
+                    id=generate_id("CC"),  # CC = Column Creation
+                    question=f"O campo '{new_col.original_name}' não existe no banco de dados. O que deseja fazer?",
+                    context=(
+                        f"Sua intenção: {new_col.user_intent}\n"
+                        f"Nome sugerido: {new_col.name}\n"
+                        f"Tipo de dado: {new_col.inferred_type}\n\n"
+                        "⚠️ NOTA: Criar novos campos requer permissão de administrador."
+                    ),
+                    options=options,
+                    importance="critical",
+                    topic="column_creation",
+                    column=new_col.source_file_column,
+                ))
+
+            # If we have column creation questions, return them first
+            if questions:
+                return questions
+
+        # =====================================================================
+        # PRIORITY 2: Uncertain Fields (only if no column creation pending)
+        # =====================================================================
 
         # Check if Gemini explicitly said more questions needed
         if not re_reasoning_result.get("needs_more_questions", False):
@@ -2416,6 +2664,19 @@ def session_to_dict(session: ImportSession) -> Dict[str, Any]:
         "learned_mappings": session.learned_mappings,
         # FIX (January 2026): Include AI instructions for "Outros:" answers
         "ai_instructions": session.ai_instructions,
+        # FEATURE (January 2026): Dynamic schema evolution - columns user wants to create
+        "requested_new_columns": [
+            {
+                "name": col.name,
+                "original_name": col.original_name,
+                "user_intent": col.user_intent,
+                "inferred_type": col.inferred_type,
+                "sample_values": col.sample_values,
+                "source_file_column": col.source_file_column,
+                "approved": col.approved,
+            }
+            for col in session.requested_new_columns
+        ],
         "confidence": session.confidence.to_dict() if session.confidence else None,
         "error": session.error,
         "created_at": session.created_at,
