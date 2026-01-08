@@ -211,8 +211,9 @@ This platform follows security-first development practices:
 | `deploy-agentcore-academy.yml` | Push/Manual | Academy agents |
 | `deploy-agentcore-inventory.yml` | Push/Manual | SGA agents |
 | `deploy-agentcore-portal.yml` | Push/Manual | Portal NEXO agents |
-| `deploy-sga-postgres-lambda.yml` | Push/Manual | PostgreSQL MCP tools Lambda |
+| `deploy-sga-postgres-lambda.yml` | Push/Manual | PostgreSQL MCP tools Lambda (11 tools) |
 | `migrate-sga-schema.yml` | Manual | Apply PostgreSQL schema via Lambda bridge |
+| `update-sga-gateway-target.yml` | Manual | Update MCP Gateway Target tool definitions |
 
 ---
 

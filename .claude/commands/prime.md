@@ -80,8 +80,9 @@ aws sts get-caller-identity --profile faiston-aio
 | `deploy-agentcore-academy.yml` | Push/Manual | Deploy Academy agents (JWT Auth via secrets + boto3 control client) |
 | `deploy-agentcore-inventory.yml` | Push/Manual | Deploy SGA agents (JWT Auth via secrets + boto3 control client) |
 | `deploy-agentcore-portal.yml` | Push/Manual | Deploy Portal NEXO agents (JWT Auth via secrets + boto3 control client) |
-| `deploy-sga-postgres-lambda.yml` | Push/Manual | Deploy PostgreSQL MCP tools Lambda |
+| `deploy-sga-postgres-lambda.yml` | Push/Manual | Deploy PostgreSQL MCP tools Lambda (11 tools) |
 | `migrate-sga-schema.yml` | Manual | Apply PostgreSQL schema via Lambda bridge |
+| `update-sga-gateway-target.yml` | Manual | Update MCP Gateway Target tool definitions |
 
 ---
 
@@ -336,13 +337,17 @@ Asset management system at `/ferramentas/ativos/estoque/`. Complete product impl
   - Centralized CloudWatch log groups
   - Consistent structured logging format
   - Latency tracking for performance monitoring
+- ✅ **MCP Gateway Lambda Fix (January 2026)**: Corrected tool name extraction from context
+  - Per AWS docs, tool name is in `context.client_context.custom['bedrockAgentCoreToolName']`
+  - Event contains ONLY tool arguments, NOT tool name
+  - Maintained backward compatibility for direct invocation (testing)
 - ⏳ Phase 4: SAP API Integration (pending credentials)
 
 ### SGA Key Components
 | Category | Components |
 |----------|------------|
 | **Backend Agents (14)** | estoque_control, intake, reconciliacao, compliance, comunicacao, expedition, carrier, reverse, import, **nexo_import** (stateless), **learning**, **equipment_research**, observation, base |
-| **Backend Tools (18)** | postgres_client, dynamodb_client (legacy), s3_client, nf_parser, hil_workflow, sheet_analyzer, csv_parser, file_detector, **schema_provider**, **schema_column_matcher**, **schema_validator**, database_adapter, gateway_adapter, mcp_gateway_client, document_downloader, knowledge_base_retrieval_tool, web_research_tool, postgres_tools_lambda |
+| **Backend Tools (18)** | postgres_client, dynamodb_client (legacy), s3_client, nf_parser, hil_workflow, sheet_analyzer, csv_parser, file_detector, **schema_provider** (MCP), **schema_column_matcher**, **schema_validator**, database_adapter, gateway_adapter, mcp_gateway_client (SigV4), document_downloader, knowledge_base_retrieval_tool, web_research_tool, postgres_tools_lambda (11 MCP tools) |
 | **Contexts** | AssetManagement, InventoryOperations, InventoryCount, NexoEstoque, TaskInbox, OfflineSync |
 | **Hooks (17)** | useAssets, useMovements, useLocations, usePartNumbers, useNFReader, useSerialScanner, useImageOCR, useSAPImport, useManualEntry, useBulkImport, useSmartImporter, **useSmartImportNexo** |
 | **NEXO AI** | NexoCopilot, NexoSearchBar, UnifiedSearch, **SmartImportNexoPanel** |

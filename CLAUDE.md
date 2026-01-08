@@ -1,1206 +1,206 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.ai/code`) when working in this repository.
 
-> **Memory Architecture**: This file contains ONLY essential instructions.
-> Context-specific documentation is in subdirectory CLAUDE.md files (lazy-loaded).
-
----
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-- FAISTON ONE (MANDATORY CONTEXT): Faiston ONE is a **100% AUTONOMOUS** and **GENERATIVE** AI agent system. The agents are intelligent: they automate cognitive tasks, learn from context/feedback, provide opinions/recommendations, and improve processes — acting like a “human operator” in Faiston’s operations. They continuously improve their **memory and knowledge** using **reinforcement learning techniques** (feedback-driven optimization) and other learning loops aligned with the platform’s architecture. This is NOT a traditional client-server microservices system. It is a **100% AI-FIRST** platform; if you do not understand what AI-FIRST means, you MUST research it and fully understand it before designing or implementing anything.
+> **MEMORY ARCHITECTURE (CRITICAL):**  
+> This root `CLAUDE.md` contains **ONLY essential global rules**.  
+> Context-specific or module-level details MUST live in subdirectory `CLAUDE.md` files (lazy-loaded).
 
 ---
 
-- BUGFIX & CONSISTENCY CHECK (MANDATORY): When fixing **ANY bug, issue, typo, naming error, logic flaw, or configuration problem**, you MUST NOT apply a partial or local fix. After making a correction, you MUST review and validate the **ENTIRE codebase** (code, imports, constants, configs, tests, scripts, docs) to ensure the same issue does **NOT** exist anywhere else. A fix is considered **INCOMPLETE** until global consistency is verified. If you are unsure whether all occurrences were fixed → **STOP AND ASK BEFORE PROCEEDING**.
+<!-- ===================================================== -->
+<!-- 🔒 IMMUTABLE BLOCK – DO NOT MODIFY OR REMOVE 🔒       -->
+<!-- THIS SECTION IS PERMANENT AND NON-NEGOTIABLE          -->
+<!-- ANY CHANGE, REMOVAL, OR REWRITE IS STRICTLY FORBIDDEN -->
+<!-- ===================================================== -->
+
+## 🔒 [IMMUTABLE][DO-NOT-REMOVE][AI-FIRST][AGENTIC][GOOGLE-ADK][BEDROCK-AGENTCORE]
 
 ---
 
----
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## Primary Instructions
-- NEVER create files on root unless necessary
-- ALL documentation in `docs/` folder
-- Be extremely concise in commits and interactions
-- Always create plans before implementation
-## GitHub & Git
-- Primary method: GitHub CLI
-- Branch prefix: `fabio/`
-## SubAgents and Skills
-- ALWAYS use cluade code SubAgents and Skills for parallel execution
-- Use `prompt-engineer` SubAgent to improve prompts
----
+## 🧠 FAISTON ONE — MANDATORY CONTEXT
 
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## Authentication Policy
-- **NO AWS Amplify** - EVER
-- **Cognito**: PRIMARY authentication method (direct API, no SDK)
+- **FAISTON ONE** is a **100% AUTONOMOUS** and **GENERATIVE** AI agent system.
+- Agents:
+  - Automate cognitive tasks
+  - Learn from context and feedback
+  - Provide opinions and recommendations
+  - Continuously improve processes
+- Agents improve **memory and knowledge** using **reinforcement learning techniques** and learning loops aligned with the platform architecture.
 
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## AWS Configuration
-- **MANDATORY** to Deploy for Developer:
-  - AWS Account ID: 377311924364\
-  - AWS Regionb: us-east-2 
-  
+- This is **NOT** a traditional client-server or microservices system.
+- This is a **100% AI-FIRST** and **AGENTIC** platform.
+- If you do NOT understand what **AI-FIRST** means, you MUST research and fully understand it **BEFORE** designing or implementing anything.
+
 ---
 
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## Infrastructure Policy (MANDATORY)
-### NEVER DO:
-1. Create AWS resources via CloudFormation/SAM - use ONLY Terraform
-2. Create parallel environments (prod vs prod-v2) - consolidate FIRST
-3. Duplicate CORS - lives ONLY in `terraform/main/locals.tf`
-4. Hardcode AWS values - use Terraform variables/locals
-5. Deploy from local console - use ONLY GitHub Actions CI/CD
-### ALWAYS DO:
-1. Check existing resources BEFORE creating:
-2. Use Terraform for ALL AWS resources
-3. Update `terraform/main/locals.tf` for CORS changes
-4. Run `terraform plan` via GitHub Actions before apply
+## 🐛 BUGFIX & CONSISTENCY CHECK — MANDATORY
+
+- When fixing **ANY bug, issue, typo, naming error, logic flaw, or configuration problem**, you MUST NOT apply a partial or local fix.
+- After making a correction, you MUST validate the **ENTIRE codebase**:
+  - code
+  - imports
+  - constants
+  - configs
+  - tests
+  - scripts
+  - documentation
+- A fix is **INCOMPLETE** until global consistency is verified.
+- If unsure → **STOP AND ASK BEFORE PROCEEDING**.
+
 ---
 
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## Additional Global Policies (MANDATORY)
-- MCP ACCESS POLICY (MANDATORY): ALL MCP tools/servers MUST be accessed ONLY via **AWS Bedrock AgentCore Gateway** (single MCP endpoint). DO NOT connect agents directly to external MCP servers or tool endpoints; use MCP operations (`tools/list`, `tools/call`) through the Gateway URL.
-- DOCUMENTATION CHECK (MANDATORY): Before implementing ANY AWS/AgentCore/MCP code or IaC, Claude Code MUST consult **MCP AWS Documentation** (AgentCore + Gateway) AND **MCP Context7 documentation** to validate APIs, best practices, and current usage. If docs conflict or are unclear → STOP and ASK.
-- LAMBDA RUNTIME POLICY (MANDATORY): ALL AWS Lambda functions MUST use **architecture: arm64** and **runtime: Python 3.13**. No exceptions unless explicitly approved by me.
-- TERRAFORM DOCS (MANDATORY): For ANY Terraform work related to AgentCore, ALWAYS consult the official Terraform Registry docs FIRST (source of truth) — including:
+## 🧠 CONTEXT WINDOW MANAGEMENT — MANDATORY
+
+- When the active context window exceeds approximately **60%** (long session, many files loaded, degraded recall):
+  1. **STOP**
+  2. Re-read this `CLAUDE.md`
+  3. Restate active constraints and the current PLAN
+  4. Use `/compact` to preserve decisions
+  5. If needed, `/clear` and then `/prime`
+
+---
+
+## 🚫 NON-AGENT ARCHITECTURE IS FORBIDDEN
+
+- USING **AI AGENTS IS 100% MANDATORY**.
+- DO NOT design or implement traditional serverless Lambda microservices.
+- DO NOT use client-server, REST-only, or function-oriented architectures.
+- Lambda is allowed **ONLY** as an execution substrate required by **AWS Bedrock AgentCore**.
+- IF you are about to design a “normal Lambda service” → **STOP IMMEDIATELY**.
+
+---
+
+## 🔐 AUTHENTICATION POLICY — MANDATORY
+
+- **NO AWS AMPLIFY** — EVER.
+- **Amazon Cognito** is the PRIMARY authentication method.
+- Direct API usage only.
+- NO SDK abstractions.
+
+---
+
+## ☁️ AWS CONFIGURATION — MANDATORY
+
+- AWS Account ID: `377311924364`
+- AWS Region: `us-east-2`
+
+---
+
+## 🏗️ INFRASTRUCTURE POLICY — MANDATORY
+
+### ❌ NEVER DO
+1. CloudFormation or SAM (Terraform ONLY)
+2. Parallel environments without consolidation
+3. Duplicate CORS (ONLY in `terraform/main/locals.tf`)
+4. Hardcoded AWS values
+5. Local deployments
+
+### ✅ ALWAYS DO
+1. Use Terraform for **ALL AWS resources**
+2. Apply **ALL CORS changes ONLY** in `terraform/main/locals.tf`
+3. Run `terraform plan` via GitHub Actions **BEFORE** apply
+
+---
+
+## 🌍 ADDITIONAL GLOBAL POLICIES — MANDATORY
+
+- **MCP ACCESS POLICY:**  
+  ALL MCP tools and servers MUST be accessed ONLY via **AWS Bedrock AgentCore Gateway**.
+
+- **DOCUMENTATION CHECK POLICY:**  
+  Before implementing ANY AWS, AgentCore, MCP, or IaC code, you MUST consult:
+  - AWS AgentCore documentation
+  - MCP AWS documentation
+  - MCP Context7 documentation  
+  If unclear → **STOP AND ASK**.
+
+- **LAMBDA RUNTIME POLICY:**  
+  ALL AWS Lambda functions MUST use:
+  - Architecture: `arm64`
+  - Runtime: `Python 3.13`
+
+- **TERRAFORM DOCS POLICY:**  
+  Use the official Terraform Registry as source of truth:
   - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagentcore_gateway
   - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagentcore_agent_runtime
-  - and other relevant AWS/AgentCore resources in the same registry before writing/updating IaC.
-- SDLC + CLEAN CODE (MANDATORY): Você MUST seguir as melhores práticas de mercado de **SDLC (Software Development Life Cycle)** e aplicar **Clean Code** (padrões consistentes, code reviews, testes automatizados, CI/CD, lint/format, logging, docs mínimos). Código MUST ser state-of-the-art e maintainable.
-- SECURITY / PENTEST-READY (MANDATORY): Esta plataforma MUST ser construída com postura **security-first** e estar pronta para pentest (zero “quick hacks”). Você MUST alinhar implementação e validações com as referências oficiais:
-  - OWASP: https://owasp.org/
-  - NIST CSF: https://www.nist.gov/cyberframework
-  - MITRE ATT&CK: https://attack.mitre.org/
-  - CWE: https://cwe.mitre.org/
-  - SANS: https://www.sans.org/
-  - CIS: https://www.cisecurity.org/
-  - AWS Security: https://aws.amazon.com/security/
-  - AWS Well-Architected Security Pillar: https://aws.amazon.com/architecture/well-architected/security/
-  - Microsoft SDL: https://www.microsoft.com/security/sdl
-- INVENTORY DATASTORE (CRITICAL – DO NOT MISUNDERSTAND): The **Inventory table (Inventory)** MUST be stored in **AWS Aurora PostgreSQL (RDS)**.  
-  **DO NOT USE DynamoDB** for Inventory data.  
-  This is **NOT OPTIONAL**, **NOT A DESIGN CHOICE**, and **NOT SUBJECT TO INTERPRETATION**.  
-  Any design, schema, query, agent, or service that assumes Inventory lives in DynamoDB is **WRONG** and MUST be corrected immediately.
 
----
-## Project Overview
+- **SDLC + CLEAN CODE:**  
+  Follow state-of-the-art SDLC and Clean Code practices:
+  - code reviews
+  - automated tests
+  - CI/CD
+  - linting/formatting
+  - maintainable code
 
-**Faiston One** - AI-First All-in-One Intranet Portal for Faiston employees. The platform is commanded by the AI assistant **NEXO** which orchestrates all interactions, integrations, and automations.
+- **SECURITY / PENTEST-READY:**  
+  Platform MUST be security-first and aligned with:
+  - OWASP
+  - NIST CSF
+  - MITRE ATT&CK
+  - CIS
+  - AWS Security
+  - AWS Well-Architected Security Pillar
+  - Microsoft SDL
 
-> **Nomenclatura:** "Faiston One" = plataforma/portal, "NEXO" = assistente de IA
-
-**Status**: Phase 1 (Foundation) - Building core infrastructure and UI/UX
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Frontend | Next.js 15 (App Router), TypeScript, Tailwind CSS 4.0, shadcn/ui |
-| Backend | Python 3.12+, Google ADK v1.0, AWS Lambda |
-| AI Runtime | AWS Bedrock AgentCore (Runtime + Memory + Gateway) |
-| Agent Protocol | A2A (Agent-to-Agent) for multi-agent orchestration |
-| Infrastructure | AWS (Terraform only), GitHub Actions CI/CD |
-| Auth | Amazon Cognito + Microsoft Entra (SSO) |
-
-## Critical Rules
-
-### Infrastructure (MANDATORY)
-
-1. **NEVER deploy from local console** - use ONLY GitHub Actions CI/CD
-2. **NEVER create AWS resources via CloudFormation/SAM** - use ONLY Terraform
-3. **ALWAYS use Terraform** for ALL AWS resources
-4. **ALWAYS run `terraform plan` before `terraform apply`** via GitHub Actions
-
-### Brand Identity (MANDATORY)
-
-The Faiston brand guidelines in `docs faiston/manual_Faiston_FINAL.pdf` must be followed strictly:
-
-```css
-/* Primary Colors */
---faiston-bg-primary: #151720;     /* Dark background (official) */
---faiston-blue-dark: #2226C0;      /* Blue gradient start */
---faiston-blue-light: #00FAFB;     /* Cyan */
---faiston-magenta-dark: #960A9C;   /* Magenta gradient start */
---faiston-magenta-light: #FD5665;  /* Coral */
-
-/* Typography */
---font-display: 'Cocogoose Pro';   /* Logo/brand only */
---font-heading: 'Roboto Slab';     /* Titles */
---font-body: 'Roboto Light';       /* Body text */
-```
-
-Logo files: `docs faiston/Logotipo_Faiston_*.png`
-
-## Project Structure
-
-```
-lpd-faiston-allinone/
-├── .claude/                 # Claude Code configuration
-│   ├── commands/           # Slash commands (/commit, /prime, etc.)
-│   └── skills/             # Specialist skills (adk-agentcore-architect, ui-ux-designer, etc.)
-├── docs faiston/           # Brand assets and guidelines
-├── product-development/    # PRD, feature docs, JTBD
-│   ├── current-feature/    # Active feature documentation
-│   └── resources/         # Templates and product overview
-├── client/                 # Next.js 15 frontend (App Router)
-│   ├── app/               # App Router pages
-│   ├── components/        # React components
-│   │   ├── ui/           # shadcn/ui library (15+ components)
-│   │   └── ferramentas/  # Ferramentas modules
-│   │       ├── academy/  # Faiston Academy (migrated from Hive Academy)
-│   │       │   ├── classroom/  # 14 floating panels
-│   │       │   └── dashboard/  # 5 dashboard components
-│   │       └── ativos/   # Asset Management (SGA 2.0)
-│   │           └── estoque/    # Inventory management
-│   │               ├── mobile/  # 3 PWA components
-│   │               └── nexo/    # 4 NEXO AI components
-│   ├── contexts/          # React contexts
-│   │   ├── Academy*       # 3 Academy contexts
-│   │   └── ativos/        # 6 SGA contexts
-│   ├── hooks/             # Custom hooks
-│   │   ├── academy/      # 12 Academy-specific hooks
-│   │   └── ativos/       # 16 SGA-specific hooks
-│   ├── lib/               # Utilities
-│   │   ├── academy/      # Academy types, constants
-│   │   └── ativos/       # SGA types, constants
-│   └── services/          # API clients
-│       ├── agentcoreBase.ts     # Factory base for all AgentCore services
-│       ├── academyAgentcore.ts  # Academy AgentCore (uses base)
-│       ├── sgaAgentcore.ts      # SGA AgentCore (uses base)
-│       └── portalAgentcore.ts   # Portal AgentCore (uses base)
-├── server/                 # Python backend
-│   ├── agentcore-academy/ # Faiston Academy AgentCore agents
-│   │   ├── main.py        # BedrockAgentCoreApp entrypoint (19 actions)
-│   │   ├── agents/        # Google ADK Agents (NEXO, flashcards, etc.)
-│   │   └── tools/         # Agent tools (elevenlabs, heygen, youtube)
-│   ├── agentcore-inventory/ # SGA Inventory AgentCore agents
-│   │   ├── main.py        # BedrockAgentCoreApp entrypoint (30+ actions)
-│   │   ├── agents/        # 14 Google ADK Agents (updated January 2026)
-│   │   └── tools/         # 18 tools (postgres, schema, s3, hil, etc.)
-│   └── agentcore-portal/  # Portal NEXO Orchestrator agents
-│       ├── main.py        # BedrockAgentCoreApp entrypoint
-│       └── agents/        # News, NEXO orchestrator agents
-└── terraform/             # AWS Infrastructure as Code
-    └── main/              # All AWS resources
-        ├── Cognito, CloudFront, IAM
-        ├── DynamoDB (academy + 3 SGA tables)
-        └── S3 (6 buckets: academy + sga)
-```
-
-## GitHub Actions Workflows
-
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| `terraform.yml` | Push to `terraform/**` or manual | Plan on PR, Apply on merge to main |
-| `deploy-frontend.yml` | Push to `client/**` | Build Next.js and sync to S3 + CloudFront |
-| `deploy-agentcore-academy.yml` | Push to `server/agentcore-academy/**` or manual | Deploy Academy agents to Bedrock AgentCore |
-| `deploy-agentcore-inventory.yml` | Push to `server/agentcore-inventory/**` or manual | Deploy SGA Inventory agents to Bedrock AgentCore |
-| `deploy-agentcore-portal.yml` | Push to `server/agentcore-portal/**` or manual | Deploy Portal NEXO agents to Bedrock AgentCore |
-| `deploy-sga-postgres-lambda.yml` | Push to `tools/postgres_tools_lambda.py` or manual | Deploy PostgreSQL MCP tools Lambda |
-| `migrate-sga-schema.yml` | Manual only | Run PostgreSQL schema migrations |
-| `update-sga-gateway-target.yml` | Manual only | Update MCP Gateway Target tool definitions |
-
-## Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `/prime` | Load project context (adapted from Hive Academy) |
-| `/commit` | Create well-formatted commits |
-| `/create-prd` | Create Product Requirements Document |
-| `/ultra-think` | Deep analysis and problem solving |
-| `/sync-project` | Synchronize all project documentation |
-
----
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## Available Skills
-Use these skills for specialized tasks:
-- **adk-agentcore-architect**: Google ADK agents, AWS Bedrock AgentCore, A2A protocol
-- **ui-ux-designer**: Component design, Tailwind CSS, glassmorphism, accessibility
-- **frontend-builder**: Next.js, React, TypeScript components
-- **backend-architect**: Python FastAPI, Lambda, DynamoDB
-- **ai-engineer**: LLM integration, prompt engineering, agent design
-
----
-## Architecture Reference
-
-```
-Frontend (Next.js 15 - CloudFront + S3)
-    │
-    ├── AWS Cognito + Microsoft Entra (Authentication)
-    │
-    └── AWS Bedrock AgentCore
-            │
-            ├── AgentCore Runtime
-            │   └── NEXO Orchestrator Agent (Google ADK)
-            │       ├── NewsAgent (RSS/API aggregation)
-            │       ├── CalendarAgent (Microsoft Graph)
-            │       └── TeamsAgent (Microsoft Graph)
-            │
-            ├── AgentCore Memory (session + long-term)
-            │
-            └── AgentCore Gateway (MCP Servers)
-                ├── Microsoft Graph MCP
-                ├── News RSS MCP
-                └── Internal APIs MCP
-```
-
-## Development Notes
-
-- **UI Design**: Follow state-of-the-art 2025 patterns (Bento Grid, Glassmorphism, Optimistic UI, Command Palette)
-- **AI-First**: Every feature should leverage NEXO AI assistant
-- **Office 365 Integration**: Teams messages + Outlook Calendar via Microsoft Graph API
-- **News Aggregation**: Tech news (Cloud, AI) from Brazil and international sources
+- **INVENTORY DATASTORE — CRITICAL:**  
+  Inventory data MUST live in **AWS Aurora PostgreSQL (RDS)**.  
+  **DO NOT USE DynamoDB**.  
+  Any assumption otherwise is **WRONG** and MUST be fixed.
 
 ---
 
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-- MUST MANDATORY use ONLY **Gemini 3.0 Family** models (**Pro or Flash**).
-- USING ANY OTHER MODEL, VERSION, OR FAMILY IS **STRICTLY FORBIDDEN**.
-- MUST MUST MANDATORY use **Agent Architecture** for **ALL microservices**, **WHEN IT MAKES SENSE**.
-  - “MAKES SENSE” means the service involves **reasoning, orchestration, decision-making, autonomy, learning, memory, workflows, or multi-step execution**.
-- If it DOES NOT MAKE SENSE:
-  - you MUST still design the service using **Agentic AI Architecture** based on **Google ADK, A2A, MCP, A2P, and Memory**.
-  - In this case, you MUST **STOP** and **ASK ME** to **VALIDATE AND APPROVE** the architectural decision **BEFORE IMPLEMENTING ANY CODE**.
-- ONLY IF I explicitly approve NOT using Agentic Architecture:
-  - you MUST then implement the service using **microservices**, **serverless**, and **event-driven architecture**.
-- ANY ASSUMPTION ABOUT ARCHITECTURE **WITHOUT MY EXPLICIT APPROVAL** IS **NOT ALLOWED**.
-- MUST MANDATORY use the **A2A Python SDK** located at:  
-  https://github.com/a2aproject/a2a-python
-- MUST MANDATORY use the **Google ADK Framework**, strictly following **OFFICIAL DOCUMENTATION**, including but not limited to:
-  - https://google.github.io/adk-docs/
-  - https://developers.googleblog.com/en/agent-development-kit-easy-to-build-multi-agent-applications/
-  - https://docs.cloud.google.com/agent-builder/agent-development-kit/overview
-  - https://cloud.google.com/blog/topics/developers-practitioners/build-your-first-adk-agent-workforce
-  - https://github.com/google/adk-python
-- MUST ONLY use **GEMINI 3 FAMILY MODELS**, as defined in **Google Official Documentation**:
-  - https://ai.google.dev/gemini-api/docs/models
-  - https://ai.google.dev/gemini-api/docs/gemini-3
-- USING OLDER GEMINI VERSIONS, EXPERIMENTAL MODELS, OR UNLISTED VARIANTS IS **NOT PERMITTED**.
-#### HARD STOP & FAILURE CONDITIONS
-- IF ANY RULE ABOVE CANNOT BE MET:
-  - YOU MUST **STOP IMMEDIATELY**.
-  - YOU MUST **EXPLAIN WHY**.
-  - YOU MUST **ASK FOR EXPLICIT APPROVAL OR GUIDANCE** BEFORE CONTINUING.
-- DO NOT AUTOFIX.
-- DO NOT SUBSTITUTE TECHNOLOGIES.
-- DO NOT SIMPLIFY THE ARCHITECTURE WITHOUT PERMISSION.
-#### DEFAULT BEHAVIOR
-- WHEN IN DOUBT → **ASK ME FIRST**.
-- WHEN A CHOICE EXISTS → **PRESENT OPTIONS AND TRADE-OFFS**.
-- WHEN A SHORTCUT EXISTS → **DO NOT TAKE IT WITHOUT APPROVAL**.
+## 🚨 AGENTCORE COLD START LIMIT — CRITICAL
 
-> **Memory Architecture**: This file contains ONLY essential instructions.
-> Context-specific documentation is in subdirectory CLAUDE.md files (lazy-loaded).
-- NEVER create files on root unless necessary
-- ALL documentation in `docs/` folder
-- Be extremely concise in commits and interactions
-- Always create plans before implementation
+- Cold start limit: **30 seconds**
+- Violations cause **HTTP 424** and break AI features.
 
----
-
-## Key Documentation
-
-- **PRD**  
-  `product-development/current-feature/PRD.md`  
-  Complete product requirements and scope.
-
-- **Brand Guide**  
-  `docs faiston/manual_Faiston_FINAL.pdf`  
-  Visual identity rules (colors, typography, spacing, logo usage).
-
-- **AgentCore Guide**  
-  `.claude/skills/adk-agentcore-architect/IMPLEMENTATION_GUIDE.md`  
-  AgentCore architecture + implementation rules.
-
----
-
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## 🚨 Cold Start Limit (30 seconds) — CRITICAL
-AgentCore has a **30-SECOND COLD START LIMIT**.  
-Exceeding this causes **HTTP 424 errors** and **BREAKS ALL AI FEATURES**.
 ### ❌ NEVER DO
-1. Add heavy dependencies to `requirements.txt`  
-   Examples: `trafilatura`, `beautifulsoup4`, `lxml`, `Pillow`, or anything similar/heavy.
-2. Add imports to `agents/__init__.py` or `tools/__init__.py`  
-   These files **MUST remain EMPTY**.
-3. Import agents at module level  
-   Each Google ADK import may take ~**5–6 seconds** and will destroy cold start.
+1. Heavy dependencies (`lxml`, `beautifulsoup4`, etc.)
+2. Imports in `agents/__init__.py` or `tools/__init__.py`
+3. Agent imports at module level
+
 ### ✅ ALWAYS DO
-1. Keep `requirements.txt` minimal
-   Current baseline: `google-adk`, `google-genai`, `bedrock-agentcore`, `elevenlabs`
-2. Use **lazy imports** in `main.py`
-   Import each agent **ONLY inside** its handler function.
-3. Check AWS AgentCore pre-installed packages BEFORE adding any dependency
-   Do not ship packages that already exist in the runtime.
-4. Use Python stdlib for XML parsing (`xml.etree.ElementTree`)
-   **NEVER use lxml** - it's a heavy C extension that violates cold start limits.
-
----
-## DO NOT REMOVE
-### Important (Never Change or replace it)
-## Important Notes (DO NOT DELETE)
-- All docs MUST stay in `docs/` folder (NOT root).
-- Only essential files are allowed in root: `package.json`, configs, `CLAUDE.md`, `README.md`.
-- ALL deployments via GitHub Actions — **NEVER local console**.
-- TypeScript strict mode: **DISABLED** (rapid prototyping).
-- Antes de criar, atualizar ou fazer qualquer análise de agentes usando o AgentCore,  
-  MUST consultar o documento: `@docs/AgentCore/IMPLEMENTATION_GUIDE.md`.
-- BE CAREFUL with Brazilian Portuguese in UI text and scripts (voices/videos).  
-  Accent marks are MANDATORY (ex: “ação”, “técnico”, “integração”).
-- MUST USE Claude Skills available in all tasks.
-- ATTENTION AND MANDATORY:  
-  A documentação oficial da AWS mostra que o AgentCore Runtime já tem dezenas de bibliotecas pré-instaladas.  
-  Antes de adicionar qualquer dependência ao deploy package, VALIDAR se já não existe no runtime.
-- MUST USE MCP Context7 to check documentation and ensure best practices before implementing any function or code.
-- USE best practices for the SDLC (Software Development Life Cycle):  
-  comments in all code + Clean Code principles.
-- MUST MANDATORY when creating ANY Terraform:  
-  check MCP Terraform to ensure best practices and latest stable modules/providers.
-- MUST check `/docs/Claude Code/` and apply best practices for prompts and working with Claude Code in ALL tasks.
-
----
-## Faiston Academy Module
-
-Migrated from Hive Academy to `/ferramentas/academy/`. Educational platform with AI-powered learning features.
-
-### Academy Components (Sprint 4 Complete)
-
-**Classroom Panels (14):**
-- `FloatingPanel` - Draggable/resizable container with macOS-style controls
-- `PanelTitleBar` - Traffic light buttons (close/minimize/maximize)
-- `ClassroomToolbar` - Panel toggle buttons
-- `VideoPlayerPanel` - YouTube player with transcript sync
-- `NexoAIPanel` - AI tutor chat (renamed from Sasha)
-- `TranscriptionPanel` - Video transcript with timestamp navigation
-- `FlashcardsPanel` - AI-generated study cards
-- `MindMapPanel` - Hierarchical concept visualization
-- `AudioClassPanel` - ElevenLabs TTS podcast-style lessons
-- `SlideDeckPanel` - AI-generated slide presentations
-- `LibraryPanel` - Materials + YouTube recommendations
-- `NotesEditorPanel` - Auto-save notes with localStorage
-- `ExtraClassPanel` - HeyGen personalized video lessons
-- `ReflectionModal` - Learning reflection with AI feedback
-
-**Dashboard Components (5):**
-- `CourseCard` - Course thumbnail with progress
-- `CourseCarousel` - Horizontal scrollable course list
-- `CoachNexoCard` - AI coach recommendations
-- `MetricCard` - Stat display with trend indicators
-- `LearningMapSection` - Learning journey progress
-
-### Academy Hooks (12)
-`client/hooks/academy/`: useNexoAI, useFlashcards, useMindMap, useAudioClass, useSlideDeck, useReflection, useFloatingPanel, useExtraClass, useVideoClass, useYouTubeRecommendations, useLibrary, index
-
-### Academy Services (1)
-- `academyAgentcore.ts` - AgentCore Runtime invocation with JWT auth (uses agentcoreBase.ts factory)
-
-> **Note**: `academyCognito.ts` was **removed** (January 2026) as dead code - all auth uses `authService.ts`
-
-### Academy Contexts (3)
-- `AcademyClassroomContext` - Panel state, current episode
-- `AcademyTrainingContext` - NEXO Tutor custom trainings
-- `AcademyZoomContext` - Live class with Zoom SDK
-
-### Key Adaptations (Hive → Faiston)
-- Renamed "Sasha" → "NEXO" throughout
-- Colors: cyan/purple → `var(--faiston-magenta-mid)` / `var(--faiston-blue-mid)`
-- Storage keys: `hive_` → `faiston_academy_`
-- Router: react-router-dom → Next.js useRouter
-- IDs: number → string (for Next.js params)
-
-### Sprint 4 TypeScript Fixes (January 2026)
-Components and utilities added to fix build errors:
-
-**New shadcn/ui Components:**
-- `client/components/ui/textarea.tsx` - Textarea form control
-- `client/components/ui/slider.tsx` - Slider input control
-- `client/components/ui/markdown-content.tsx` - Markdown rendering with react-markdown
-- `client/components/ui/use-toast.ts` - Toast notification hook
-- `client/components/ui/skeleton.tsx` - Loading placeholder with pulse animation (added January 2026)
-
-**New Hooks:**
-- `client/hooks/academy/useLibrary.ts` - Library file management
-
-**New Type Declarations:**
-- `client/types/zoom-videosdk.d.ts` - Zoom Video SDK types for dynamic import
-
-**Hook API Pattern:**
-All Academy hooks use **object-based parameters**:
-```tsx
-// CORRECT
-useMindMap({ courseId, episodeId, episodeTitle, onSeek });
-
-// WRONG (positional args)
-useMindMap(courseId, episodeId, episodeTitle, onSeek);
-```
-
-**Type Re-exports:**
-Hooks that import types must re-export them for consumers:
-```tsx
-// At end of hook file
-export type { MindMapNode } from '@/lib/academy/types';
-export { DECK_ARCHETYPES } from '@/lib/academy/constants';
-```
-
----
-## SGA Inventory Module (Gestao de Estoque)
-
-Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full product (not MVP) with AI-powered features.
-
-### SGA Implementation Progress (January 2026)
-- ✅ Sprint 1: Terraform Infrastructure (DynamoDB x3, S3, IAM)
-- ✅ Sprint 2: Backend Core Agents (EstoqueControl, Intake)
-- ✅ Sprint 3: Backend Advanced Agents (Reconciliacao, Compliance, Comunicacao)
-- ✅ Sprint 4: Frontend Foundation (contexts x6, hooks x12, services)
-- ✅ Sprint 5: Frontend Pages (15+ pages: dashboard, cadastros, movimentacoes, inventario)
-- ✅ Sprint 6: Movement Forms (entrada, saida, transferencia, reserva, ajuste)
-- ✅ Sprint 7: NEXO Copilot (NexoCopilot, NexoSearchBar, UnifiedSearch)
-- ✅ Sprint 8: Mobile/PWA (MobileScanner, MobileChecklist, ConfirmationButton)
-- ✅ Audit: ADK/AgentCore compliance (95% - lxml fixed, memory strategies pending)
-- ✅ SGA 2.0 Phase 1-3: Expedição Inteligente, Cotação de Frete, Reversa, Analytics, Reconciliação SAP
-- ✅ Wiki User Guide: 14 sections documenting all SGA features
-- ✅ UI Refinement: QuickActions redesigned to compact full-width layout
-- ✅ Unified Entry: Multi-source material entry (NF, Image OCR, SAP Export, Manual)
-- ✅ **Smart Import (January 2026)**: Universal file importer with auto-detect (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
-- ✅ **NEXO Intelligent Import (January 2026)**: TRUE Agentic AI-First import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
-- ✅ **NEXO Stateless Architecture (January 2026)**: Frontend-stateful + backend-stateless pattern for AgentCore serverless compatibility
-- ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
-  - Aurora Serverless v2 cluster with RDS Proxy
-  - 13 tables, 110 indexes, 8 materialized views
-  - MCP Gateway + Lambda MCP tools (11 tools: 8 data + 3 schema introspection)
-  - VPC with private subnets, S3/Secrets Manager/RDS endpoints
-- ✅ **Schema-Aware Import (January 2026)**: Agents OBSERVE PostgreSQL schema before analyzing files
-  - Dynamic column matching replaces 50+ hardcoded patterns
-  - Gemini prompts include target table schema + ENUM values
-  - Pre-execution validation prevents invalid mappings
-  - Learned mappings tracked by schema_version
-- ⏳ Phase 4: SAP API Integration (requires SAP credentials)
-
-### SGA Backend Agents (14)
-`server/agentcore-inventory/agents/`:
-- `estoque_control_agent.py` - Core +/- movements
-- `intake_agent.py` - NF PDF/XML/Image extraction (Gemini Vision OCR)
-- `reconciliacao_agent.py` - Divergence detection
-- `compliance_agent.py` - Policy validation
-- `comunicacao_agent.py` - Notifications
-- `expedition_agent.py` - AI-guided shipping with SAP format
-- `carrier_agent.py` - Freight quotation and carrier comparison
-- `reverse_agent.py` - Returns/reverse logistics management
-- `import_agent.py` - CSV/Excel bulk import processing
-- `nexo_import_agent.py` - **NEXO Intelligent Import** with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
-- `learning_agent.py` - **Pattern Learning** stores successful import mappings with schema_version
-- `equipment_research_agent.py` - Equipment documentation research with Bedrock KB
-- `observation_agent.py` - Observation pattern for data analysis
-- `base_agent.py` - Base agent class with common utilities
-
-### SGA Tools (18)
-`server/agentcore-inventory/tools/`:
-- `dynamodb_client.py` - DynamoDB operations (legacy, being phased out)
-- `postgres_client.py` - PostgreSQL/Aurora operations with schema introspection
-- `s3_client.py` - S3 presigned URLs with SigV4
-- `nf_parser.py` - NF XML/PDF parsing
-- `hil_workflow.py` - Human-in-the-Loop tasks
-- `sheet_analyzer.py` - **Multi-sheet XLSX analysis** for NEXO Intelligent Import
-- `csv_parser.py` - CSV file parsing and column detection
-- `file_detector.py` - File type detection (XML/PDF/CSV/XLSX/image)
-- `schema_provider.py` - **Schema-Aware Import** cached metadata provider (5-min TTL)
-- `schema_column_matcher.py` - Dynamic column matcher with fuzzy matching + confidence scores
-- `schema_validator.py` - Pre-execution validation against PostgreSQL schema
-- `database_adapter.py` - Unified database adapter interface
-- `gateway_adapter.py` - AgentCore Gateway adapter for MCP operations
-- `mcp_gateway_client.py` - MCP Gateway HTTP client
-- `document_downloader.py` - Document download and processing
-- `knowledge_base_retrieval_tool.py` - Bedrock Knowledge Base retrieval
-- `web_research_tool.py` - Web research for equipment documentation
-- `postgres_tools_lambda.py` - PostgreSQL MCP tools Lambda handler
-
-### SGA Contexts (6)
-`client/contexts/ativos/`:
-- `AssetManagementContext` - Global state, filters
-- `InventoryOperationsContext` - Movement operations
-- `InventoryCountContext` - Physical counting sessions
-- `NexoEstoqueContext` - AI assistant state
-- `TaskInboxContext` - HIL approval tasks
-- `OfflineSyncContext` - PWA offline queue
-
-### SGA Hooks (17)
-`client/hooks/ativos/`:
-- `useAssets`, `useAssetDetail` - Asset queries
-- `useMovements`, `useMovementMutations`, `useMovementValidation` - Movement operations
-- `useLocations`, `usePartNumbers`, `useProjects` - Master data
-- `useBalanceQuery`, `useNFReader`, `useSerialScanner` - Utilities
-- `useImageOCR` - Image OCR for scanned NF photos via Gemini Vision
-- `useSAPImport` - SAP CSV/XLSX import with full asset creation
-- `useManualEntry` - Manual entry without source document
-- `useBulkImport` - Bulk CSV/Excel import processing
-- `useSmartImporter` - Universal auto-detect importer (XML/PDF/CSV/XLSX/JPG/PNG/TXT)
-- `useSmartImportNexo` - **NEXO Intelligent Import** hook (5-phase flow: upload → analyze → question → review → import)
-
-### SGA Frontend Pages (25+)
-`client/app/(main)/ferramentas/ativos/estoque/`:
-- `page.tsx` - Operations hub with unified ModuleNavigation (8 items), Task Inbox, Recent Assets (refactored January 2026)
-- `[id]/page.tsx` - Asset detail with timeline
-- `lista/page.tsx` - Asset list with filters
-- `cadastros/` - Part numbers, locations, projects (3 pages)
-- `movimentacoes/` - Entrada, saida, transferencia, reserva, ajuste, importar (7 pages)
-- `inventario/` - Campaigns, counting sessions, novo (3 pages)
-- `expedicao/` - AI-guided expedition + cotacao (2 pages)
-- `reversa/` - Reverse logistics management
-- `analytics/` - Accuracy KPI dashboard
-- `reconciliacao/sap/` - SAP comparison and divergence resolution
-- `wiki/` - User guide with 14 sections (updated January 2026)
-
-### SGA Components
-**NEXO AI (5):** `NexoCopilot`, `NexoSearchBar`, `UnifiedSearch`, `SmartImportNexoPanel`, index
-**Mobile/PWA (3):** `MobileScanner`, `MobileChecklist`, `ConfirmationButton`
-**Smart Import (7):** `SmartUploadZone`, `SmartPreview`, `NFPreview`, `SpreadsheetPreview`, `TextPreview`, `PendingEntriesList`, index
-**Legacy Tabs (4):** `EntradaNFTab`, `EntradaImagemTab`, `EntradaSAPTab`, `EntradaManualTab` (deprecated, kept for reference)
-
-### NEXO Intelligent Import (January 2026)
-TRUE Agentic AI-First import with ReAct pattern. NEXO guides the user through the import flow intelligently.
-
-**Philosophy**: OBSERVE_SCHEMA → OBSERVE_FILE → THINK → VALIDATE → ASK → LEARN → ACT
-1. **OBSERVE_SCHEMA**: Query PostgreSQL for table structure, ENUMs, constraints (NEW - Schema-Aware)
-2. **OBSERVE_FILE**: Analyze file structure (multi-sheet XLSX, column headers, data patterns)
-3. **THINK**: Explicit reasoning WITH schema context, generate confidence scores
-4. **VALIDATE**: Pre-execution validation against PostgreSQL schema (NEW)
-5. **ASK**: Request clarification when uncertain (Human-in-the-Loop questions)
-6. **LEARN**: Store successful patterns WITH schema_version for future imports
-7. **ACT**: Execute import with validated, schema-aware mappings
-
-**Backend Actions (6)**:
-- `nexo_analyze_file` - Multi-sheet analysis with reasoning trace + schema context
-- `nexo_get_questions` - Generate clarification questions
-- `nexo_submit_answers` - Process user answers
-- `nexo_learn_from_import` - Store patterns with schema_version for future
-- `nexo_prepare_processing` - Final configuration with schema validation
-- `get_import_schema` - Returns PostgreSQL schema for frontend/prompts (NEW)
-
-**Schema-Aware Features (January 2026)**:
-- Dynamic column matching replaces hardcoded patterns
-- Gemini prompts include target table schema + valid ENUM values
-- Pre-import validation catches invalid column mappings
-- Learned mappings filtered by schema_version (prevents stale suggestions)
-
-**Frontend Flow**:
-```
-Upload → SmartImportNexoPanel → [NEXO analyzing...] →
-  → Show reasoning trace (with schema context) → [Questions if uncertain] →
-  → User answers → Validate against schema → Prepare → Execute → Learn
-```
-
-### SGA Terraform Resources
-`terraform/main/`:
-- `dynamodb_sga_inventory.tf` - Main inventory table (6 GSIs)
-- `dynamodb_sga_hil.tf` - Human-in-the-Loop tasks
-- `dynamodb_sga_audit.tf` - Audit log
-- `s3_sga_documents.tf` - NF and evidence storage
-- `iam_sga_agentcore.tf` - AgentCore IAM policies
-- `cloudfront.tf` - CDN with URL rewriter function for Next.js static export
-
-### Terraform State Management (January 2026)
-Remote state is enabled with S3 backend and DynamoDB locking:
-- **State bucket**: `faiston-terraform-state` (us-east-2, versioned, encrypted)
-- **Lock table**: `faiston-terraform-locks` (DynamoDB)
-- **State path**: `faiston-one/terraform.tfstate`
-- **Resources imported**: 74 AWS resources (CloudFront, S3 x6, DynamoDB x4, IAM, SSM)
-
-### CloudFront URL Rewriter (CRITICAL)
-Next.js static export with `trailingSlash: true` requires a CloudFront Function to rewrite URLs.
-S3 REST API (via OAC) doesn't support automatic `index.html` resolution.
-
-**Function**: `faiston-one-url-rewriter` (viewer-request)
-- `/path` → `/path/index.html`
-- `/path/` → `/path/index.html`
-- `/path.js` → unchanged (file extension)
-
-Without this function, navigation to modules like `/ferramentas/ativos/dashboard` fails and shows root dashboard.
-
-### Static Export Pattern (IMPORTANT)
-For dynamic routes (`[id]`, `[slug]`) with `output: 'export'`:
-```tsx
-// page.tsx - Server Component
-import { ClientComponent } from './ClientComponent';
-
-export async function generateStaticParams(): Promise<{ id: string }[]> {
-  return [{ id: '_' }];  // Placeholder for SPA fallback
-}
-
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  return <ClientComponent id={id} />;
-}
-```
-```tsx
-// ClientComponent.tsx - Client Component
-'use client';
-export function ClientComponent({ id }: { id: string }) {
-  // All client-side logic here
-}
-```
+1. Minimal `requirements.txt`
+2. Lazy imports inside handlers
+3. Use Python stdlib (`xml.etree.ElementTree`)
+4. Check AgentCore pre-installed libraries
 
 ---
 
-## Known Issues & Fixes (January 2026)
+## 📌 PRIMARY INSTRUCTIONS
 
-### 1. S3 Bucket Tags - No Commas Allowed
-**Issue**: AWS S3 bucket tags reject values containing commas
-**Fix**: Use hyphens instead of commas in tag values
-```hcl
-# WRONG
-Purpose = "NF files, evidence photos, and documents"
+- NEVER create files in root unless absolutely necessary
+- ALL documentation lives in `docs/`
+- Be extremely concise
+- ALWAYS create a PLAN before implementation
 
-# CORRECT
-Purpose = "NF files - evidence photos - documents"
-```
+## Git & GitHub
 
-### 2. CloudFront Function Naming After Import
-**Issue**: When importing existing CloudFront Functions to Terraform, name mismatch causes destroy/recreate cycle that fails (function in use)
-**Fix**: Use explicit hardcoded name matching AWS resource, not pattern-based names
-```hcl
-# After import, use exact AWS name
-name = "faiston-one-url-rewriter"  # NOT ${local.name_prefix}-url-rewriter
-```
+- Use GitHub CLI
+- Branch prefix: `fabio/`
 
-### 3. Terraform State Lock Cleanup
-**Issue**: State lock remains after failed plan/apply
-**Fix**: `terraform force-unlock <LOCK_ID>`
+## SubAgents & Skills
 
-### 4. AgentCore Memory Mode
-**Issue**: `mode=read_write` fails with "STM is read only"
-**Fix**: Use `memory_manager(mode=MemoryMode.READ_ONLY)` for now (write pending AWS fix)
+- ALWAYS use Claude Code SubAgents and Skills
+- Use `prompt-engineer` SubAgent to improve prompts
 
-### 5. Button UX Global Fix (January 2026)
-**Issue**: All buttons lacked cursor feedback, hover states, and click effects
-**Fix**: Updated `button.tsx` CVA and `globals.css` with:
-- `cursor: pointer` global for all clickable elements
-- Hover: `brightness(1.1)` + `translateY(-0.5)`
-- Active/Press: `scale(0.98)` with 34ms duration (2 frames at 60fps)
-- `motion-reduce:` variants for accessibility
-```tsx
-// button.tsx now includes these classes
-"cursor-pointer",
-"hover:-translate-y-0.5 hover:brightness-110",
-"active:scale-[0.98] active:brightness-95 active:duration-[34ms]",
-"motion-reduce:transition-none"
-```
+---
 
-### 6. Smart Import TypeScript Patterns (January 2026)
-**Issue**: TypeScript exhaustiveness checks on discriminated unions in preview components
-**Fix**: Use type guards and explicit casts for fallback cases
-```typescript
-// Type guards for discriminated union
-export function isNFImportResult(preview: SmartImportPreview): preview is NFImportResult {
-  return ['nf_xml', 'nf_pdf', 'nf_image'].includes(preview.source_type);
-}
+## 🚨 ENFORCEMENT RULE
 
-// Fallback for never type (unreachable but needed for exhaustiveness)
-const unknownPreview = preview as SmartImportPreview;
-```
-**Also**: Lucide icons don't accept `title` prop - use `aria-label` instead
+- IF ANY PART OF THIS IMMUTABLE BLOCK IS:
+  - Modified
+  - Removed
+  - Rewritten
+  - Summarized
+  - Relocated
 
-### 7. Portal AgentCore Discriminated Unions (January 2026)
-**Issue**: TypeScript errors when accessing `DailySummarySection.data` properties like `total_articles` or `tip`
-**Fix**: Use discriminated union types and explicit type assertions
-```typescript
-// In portalAgentcore.ts - define specific data types
-export interface NewsSectionData { total_articles: number; categories?: string[]; }
-export interface TipsSectionData { tip: string; category?: string; }
-export type DailySummarySectionData = NewsSectionData | CalendarSectionData | TeamsSectionData | TipsSectionData;
+  THEN:
+  - YOU MUST **STOP IMMEDIATELY**
+  - YOU MUST **ASK FOR EXPLICIT APPROVAL**
+  - YOU MUST **EXPLAIN WHY**
 
-// In consumer components - use type assertions
-const newsData = newsSection?.data as NewsSectionData | undefined;
-const newsCount = newsData?.total_articles || 2;
-```
-
-### 8. Estoque Page Navigation Consolidation (January 2026)
-**Issue**: Estoque page had two separate navigation sections (Quick Actions + Bottom Nav) causing UX confusion and duplication
-**Fix**: Unified both into single `ModuleNavigation` component with 8 items:
-- Lista de Ativos, Movimentações, Expedição, Reversa, Inventário, Cadastros, Analytics, Reconciliação SAP
-- KPIs removed (already in Gestão de Ativos Dashboard)
-- Grid: 2 cols mobile → 3 cols sm → 4 cols lg
-- Compact cards with icon + label + description
-
-### 9. AgentCore Service Factory Pattern (January 2026)
-**Issue**: ~450 lines of duplicated code across 3 AgentCore services (retry, session, error handling, SSE parsing)
-**Fix**: Created `agentcoreBase.ts` with factory function `createAgentCoreService(config)`:
-```typescript
-// Factory pattern eliminates duplication
-const academyService = createAgentCoreService({
-  arn: ACADEMY_AGENTCORE_ARN,
-  sessionStorageKey: 'faiston_academy_session',
-  logPrefix: '[Academy AgentCore]',
-  sessionPrefix: 'session',
-});
-export const invokeAgentCore = academyService.invoke;
-```
-**Benefits**:
-- Unified retry logic with exponential backoff (502, 503, 504)
-- Session management using browser sessionStorage
-- SSE (Server-Sent Events) response parsing
-- JWT Bearer token authentication via `getAccessToken()`
-
-### 10. JWT Authorizer GitHub Secrets (January 2026)
-**Issue**: Cognito credentials hardcoded in GitHub workflow files
-**Fix**: Moved to GitHub Secrets:
-- `COGNITO_USER_POOL_ID` → `us-east-2_lkBXr4kjy` (faiston-users-prod)
-- `COGNITO_CLIENT_ID` → `7ovjm09dr94e52mpejvbu9v1cg` (faiston-client-prod)
-All 3 AgentCore deploy workflows now use `${{ secrets.COGNITO_USER_POOL_ID }}` and `${{ secrets.COGNITO_CLIENT_ID }}`
-
-### 11. AgentCore Control API SigV4 Signing (January 2026)
-**Issue**: Raw SigV4 signing with `botocore.auth.SigV4Auth` failed with "Unable to determine service/operation name to be authorized"
-**Cause**: The Bedrock AgentCore Control API requires specific service name and API version for signing that isn't simply the subdomain
-**Fix**: Use boto3's native client instead of raw HTTP + SigV4:
-```python
-# WRONG - Raw SigV4 signing fails
-from botocore.auth import SigV4Auth
-SigV4Auth(credentials, "bedrock-agentcore-control", REGION).add_auth(request)
-
-# CORRECT - boto3 client handles signing automatically
-client = boto3.client("bedrock-agentcore-control", region_name=REGION)
-response = client.list_agent_runtimes()
-current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
-client.update_agent_runtime(**update_params)
-```
-**Affected workflows**: All 3 AgentCore deploy workflows (academy, inventory, portal)
-
-### 12. NEXO Import Stateless Architecture (January 2026)
-**Issue**: "Falha ao processar respostas" error in Smart Import - sessions stored in Lambda in-memory dict were lost across cold starts or multiple instances
-**Root Cause**: AgentCore serverless creates new instances each invocation; `self._sessions = {}` doesn't persist
-**Original Fix (DEPRECATED)**: DynamoDB persistence with TTL
-**Final Fix**: **Frontend Stateful + Backend Stateless** architecture:
-```typescript
-// Frontend maintains full session state in React
-interface NexoSessionState {
-  session_id: string;
-  filename: string;
-  s3_key: string;
-  stage: string;
-  file_analysis?: Record<string, unknown>;
-  reasoning_trace: Array<ReasoningStep>;
-  questions: Array<NexoQuestion>;
-  answers: Record<string, string>;
-  learned_mappings: Record<string, string>;
-  // ... timestamps
-}
-
-// Each API call receives/returns full state
-const result = await nexoSubmitAnswers({
-  session_state: updatedSessionState,  // Full state
-  answers: state.answers,
-});
-```
-```python
-# Backend serializes/deserializes via session_to_dict() / _restore_session()
-def session_to_dict(self, session: ImportSession) -> Dict:
-    """Serialize session for frontend persistence."""
-    return {
-        "session_id": session.session_id,
-        "filename": session.filename,
-        "s3_key": session.s3_key,
-        "stage": session.stage,
-        # ... full state
-    }
-```
-**Benefits**: No DynamoDB dependency, complies with "inventory table for inventory items only" rule, scales infinitely
-**Files Updated**: `sgaAgentcore.ts`, `useSmartImportNexo.ts`, `useSmartImporter.ts`, `nexo_import_agent.py`, `main.py`
-
-### 13. NEXO Import Serialization Mismatches (January 2026)
-**Issue**: Multiple serialization format mismatches between frontend TypeScript and backend Python caused runtime errors:
-1. `KeyError: 'level'` - ConfidenceScore used wrong field names
-2. `ValueError: 'analysis_complete' is not a valid ImportStage` - Invalid enum value
-3. `KeyError: 'step'` - reasoning_trace used wrong field name
-
-**Root Cause**: Frontend and backend evolved independently, creating schema drift in the stateless architecture
-**Fix**: Aligned all serialization formats:
-
-```typescript
-// Frontend ConfidenceScore format (CORRECT)
-// Must match Python ConfidenceScore dataclass fields
-confidence: {
-  overall: number;           // NOT 'level' or 'score'
-  extraction_quality: number;
-  evidence_strength: number;
-  historical_match: number;
-  risk_level: string;        // NOT 'reason'
-  factors: string[];
-  requires_hil: boolean;
-}
-
-// Stage must be valid Python ImportStage enum value
-// Valid: analyzing, reasoning, questioning, awaiting, learning, processing, complete
-// INVALID: 'analysis_complete' (was being sent incorrectly)
-stage: data.questions?.length > 0 ? 'questioning' : 'processing';
-
-// reasoning_trace must use 'type' field
-// Python main.py was transforming to 'step' but frontend expects 'type'
-reasoning_trace: [{ type: 'observation', content: '...', timestamp: '...' }]
-```
-
-**Lesson Learned**: When implementing stateless architecture across language boundaries (TypeScript ↔ Python), create a **shared schema contract document** defining:
-1. All field names and types
-2. Valid enum values
-3. Nullable vs required fields
-4. Default values for missing fields
-
-**Files Fixed**: `useSmartImportNexo.ts`, `useSmartImporter.ts`, `sgaAgentcore.ts`, `nexo_import_agent.py`, `main.py`
-
-### 14. NEXO Import Using DynamoDB Instead of PostgreSQL (January 2026)
-**Issue**: NEXO Smart Import "completed" instantly without actually importing items - UI showed success but no data was inserted
-**Root Cause**: `ImportAgent` in `import_agent.py` used `SGADynamoDBClient` for all database operations, violating the CLAUDE.md mandate that **ALL inventory data MUST go to Aurora PostgreSQL**
-**Symptoms**:
-1. Import "completed" in < 1 second for 1400+ items (impossible for real DB writes)
-2. No PostgreSQL movements created
-3. DynamoDB tables likely didn't exist or had wrong schema, silently failing
-
-**Fix**: Rewrote `_execute_import()` in `main.py` to use `SGAPostgresClient` directly:
-```python
-# OLD - Using DynamoDB via ImportAgent (WRONG)
-agent = create_import_agent()  # Uses SGADynamoDBClient internally
-result = await agent.execute_import(...)
-
-# NEW - Using PostgreSQL directly (CORRECT per CLAUDE.md)
-from tools.postgres_client import SGAPostgresClient
-pg_client = SGAPostgresClient()
-
-for row_data in all_rows:
-    result = pg_client.create_movement(
-        movement_type="ENTRADA",
-        part_number=part_number,
-        quantity=quantity,
-        destination_location_id=location,
-        # ...
-    )
-```
-
-**Lesson Learned**: The `ImportAgent` class was created before the PostgreSQL migration was mandated. When adding new features, always verify the datastore being used matches the CLAUDE.md requirements.
-
-**Files Fixed**: `main.py` (`_execute_import` function)
-
-### 15. Schema-Aware NEXO Import (January 2026)
-**Issue**: NEXO agents used ~50 hardcoded column patterns and could suggest mappings to columns that don't exist in PostgreSQL
-**Root Cause**: Agents had ZERO knowledge of the actual PostgreSQL schema. Column patterns were static strings that couldn't adapt to schema changes.
-**Symptoms**:
-1. Agents suggested mappings like `"material" → "part_number"` but `part_number` might not exist in target table
-2. ENUM values (movement_type, asset_status) were not validated before import
-3. Learned mappings became stale after schema migrations
-
-**Fix**: Implemented **Schema-Aware Import** architecture:
-```python
-# New flow: OBSERVE_SCHEMA → OBSERVE_FILE → THINK → VALIDATE → ACT → LEARN
-# 1. Query PostgreSQL information_schema for table structure
-schema = provider.get_table_schema("pending_entry_items")
-
-# 2. Inject schema context into Gemini prompts
-prompt = f"## TARGET POSTGRESQL SCHEMA\n{schema_context}\n..."
-
-# 3. Validate mappings BEFORE processing
-validation = validator.validate_mappings(mappings, target_table)
-if not validation.is_valid:
-    return {"success": False, "validation_errors": errors}
-
-# 4. Store schema_version with learned episodes
-episode.schema_version = provider.get_schema_version(target_table)
-```
-
-**New Components**:
-- `schema_provider.py` - Cached schema metadata with 5-min TTL
-- `schema_column_matcher.py` - Dynamic fuzzy matching with confidence scores
-- `schema_validator.py` - Pre-execution validation (column existence, ENUMs, FKs)
-
-**Lesson Learned**: AI agents should OBSERVE their environment (database schema) before making decisions. Hardcoded patterns violate the AI-First principle of adaptability.
-
-**Files Created**: `schema_provider.py`, `schema_column_matcher.py`, `schema_validator.py`
-**Files Modified**: `postgres_client.py`, `sheet_analyzer.py`, `csv_parser.py`, `nexo_import_agent.py`, `learning_agent.py`, `main.py`
-
-### 16. NEXO Re-Analyzing Progress and Validation Errors (January 2026)
-**Issue**: After user answers questions, three problems occurred:
-1. `re_reasoning_applied: undefined` - Backend didn't return this field
-2. "Configuração não está pronta" error - Generic error instead of validation details
-3. No progress visibility - Frozen UI for 15-30 seconds during Gemini re-reasoning
-
-**Root Cause**: Backend called `_re_reason_with_answers()` but didn't include result in response. Validation errors were objects `{field, message, severity}` but frontend did `.join()` expecting strings. No loading state for `re-analyzing` stage.
-
-**Fix**: Three-phase implementation:
-```python
-# Phase 1: Backend - Add re_reasoning_applied tracking
-re_reasoning_result = await self._re_reason_with_answers(session, answers)
-re_reasoning_applied = "error" not in re_reasoning_result
-
-return {
-    "success": True,
-    "session": session_to_dict(session),
-    "re_reasoning_applied": re_reasoning_applied,  # NEW
-    "ready_for_processing": True,
-}
-```
-
-```typescript
-// Phase 2: Frontend - Format validation error objects
-const formatValidationError = (error: unknown): string => {
-  if (typeof error === 'string') return error;
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    return (error as { message: string }).message;
-  }
-  return String(error);
-};
-
-// Show specific errors instead of generic message
-if (result.data?.validation_errors?.length) {
-  const errors = result.data.validation_errors.map(formatValidationError);
-  throw new Error(`Validação de schema falhou:\n• ${errors.join('\n• ')}`);
-}
-```
-
-```typescript
-// Phase 3: Frontend - Add re-analyzing progress stage
-updateProgress('re-analyzing', 70, 'NEXO reanalisando com suas respostas...', 're-think');
-
-// Rotating messages during Gemini call (15-30s)
-const RE_ANALYZING_MESSAGES = [
-  'NEXO refinando mapeamentos...',
-  'Validando contra schema PostgreSQL...',
-  'Aplicando suas respostas...',
-  // ...
-];
-
-const progressInterval = setInterval(() => {
-  setState(prev => ({
-    ...prev,
-    progress: { percent: prev.progress.percent + 2, message: RE_ANALYZING_MESSAGES[idx] },
-  }));
-}, 2000);
-```
-
-**Visual Changes**:
-- Orange gradient for re-analyzing stage (`from-orange-500 to-red-500`)
-- Rotating progress messages every 2 seconds
-- Progress bar animates from 70% → 90%
-
-**Files Modified**: `nexo_import_agent.py`, `useSmartImportNexo.ts`, `SmartImportNexoPanel.tsx`, `sgaAgentcore.ts`
-
-### 17. Unified Audit Logging for AgentCore (January 2026)
-**Issue**: No centralized observability for AgentCore agent invocations across all three runtimes (Academy, Inventory, Portal)
-**Fix**: Added standardized audit logging to all AgentCore `main.py` entrypoints:
-```python
-# Standardized log format for all agent actions
-logger.info(f"[AUDIT] action={action} session_id={session_id} user={user} latency_ms={latency}")
-```
-**Benefits**:
-- Centralized CloudWatch log groups per runtime
-- Consistent structured logging across all agents
-- Latency tracking for performance monitoring
-
-**Files Modified**: `server/agentcore-academy/main.py`, `server/agentcore-inventory/main.py`, `server/agentcore-portal/main.py`
-
-### 18. NEXO Import Schema Validation - Table Not Found (January 2026)
-**Issue**: After user answers NEXO's questions and approves import, error: `"Tabela 'pending_entry_items' não encontrada no schema PostgreSQL"`
-**Root Cause**: SchemaProvider tries to connect directly to Aurora PostgreSQL using `SGAPostgresClient`, but AgentCore Runtime runs in AWS-managed infrastructure **OUTSIDE the customer VPC** - it cannot reach RDS Proxy.
-
-**Architecture Gap**:
-```
-AgentCore Runtime (AWS-managed, no VPC access)
-    ↓ SGAPostgresClient → ❌ FAILS (no network path to RDS Proxy)
-
-Solution: MCP Gateway bridges the gap
-AgentCore Runtime → MCP Gateway → Lambda (in VPC) → RDS Proxy → Aurora
-```
-
-**Fix (3 parts)**:
-
-1. **Added schema introspection tools to MCP Lambda** (`postgres_tools_lambda.py`):
-```python
-handlers = {
-    # ... existing data tools ...
-    # NEW: Schema introspection (for NEXO Import)
-    "sga_get_schema_metadata": handle_get_schema_metadata,
-    "sga_get_table_columns": handle_get_table_columns,
-    "sga_get_enum_values": handle_get_enum_values,
-}
-```
-
-2. **Updated SchemaProvider to use MCP Gateway** (`schema_provider.py`):
-```python
-USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "false").lower() == "true"
-
-def _refresh_cache(self) -> None:
-    if self._use_mcp:
-        # Use MCP Gateway (AgentCore path)
-        metadata = self._refresh_via_mcp()
-    else:
-        # Direct PostgreSQL (Lambda path)
-        client = self._get_client()
-        metadata = client.get_schema_metadata()
-```
-
-3. **Enabled MCP in deploy workflow** (`deploy-agentcore-inventory.yml`):
-```yaml
---env USE_POSTGRES_MCP=true \  # Was false
-```
-
-**Deployment Steps**:
-1. Deploy `postgres_tools_lambda.py` via `deploy-sga-postgres-lambda.yml`
-2. Deploy AgentCore inventory via `deploy-agentcore-inventory.yml`
-3. Verify schema migration was applied via `migrate-sga-schema.yml`
-
-**Files Modified**:
-- `server/agentcore-inventory/tools/postgres_tools_lambda.py` (added schema handlers)
-- `server/agentcore-inventory/tools/schema_provider.py` (MCP Gateway support)
-- `.github/workflows/deploy-agentcore-inventory.yml` (USE_POSTGRES_MCP=true)
-
-### 19. MCP Gateway Authentication - SigV4 vs Bearer Tokens (January 2026)
-**Issue**: After enabling MCP Gateway for schema queries, error: `"Access token provider returned empty token"`
-**Root Cause**: MCPGatewayClient code used `Authorization: Bearer {token}` pattern with `AGENTCORE_ACCESS_TOKEN` env var, but:
-1. AgentCore Gateway is configured with `authorizerType: AWS_IAM` (not JWT)
-2. `AGENTCORE_ACCESS_TOKEN` env var doesn't exist
-3. Per AWS Well-Architected Framework: "Use IAM roles for service-to-service communication, NOT static credentials or tokens"
-
-**Architecture Context**:
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  INBOUND AUTHENTICATION (User → Gateway)                        │
-├─────────────────────────────────────────────────────────────────┤
-│  Option 1: JWT Bearer Token (for external users/frontend)       │
-│  - Authorization: Bearer {jwt_token}                            │
-│  - Requires Cognito/IdP configured                              │
-│                                                                 │
-│  Option 2: AWS IAM (SigV4) ← OUR CASE                          │
-│  - For AWS services/identities                                  │
-│  - Requires SigV4 signed request                                │
-│  - Uses IAM credentials automatically                           │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Fix**: Replaced Bearer token pattern with AWS SigV4 signing using `botocore.auth.SigV4Auth`:
-```python
-# OLD (wrong - Bearer token for IAM Gateway)
-headers = {"Authorization": f"Bearer {access_token}"}
-
-# NEW (correct - SigV4 signing with IAM credentials)
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-import boto3
-
-session = boto3.Session()
-credentials = session.get_credentials().get_frozen_credentials()
-request = AWSRequest(method="POST", url=gateway_url, data=payload)
-SigV4Auth(credentials, "bedrock-agentcore", region).add_auth(request)
-```
-
-**Also Simplified**: Changed from async MCP library to synchronous `requests` + SigV4Auth, avoiding complex asyncio bridging.
-
-**Files Modified**:
-- `server/agentcore-inventory/tools/mcp_gateway_client.py` (complete rewrite with SigV4)
-- `server/agentcore-inventory/tools/gateway_adapter.py` (async→sync methods)
-- `server/agentcore-inventory/tools/schema_provider.py` (removed token provider)
-- `server/agentcore-inventory/main.py` (simplified get_database_adapter)
-
-**IAM Permission Required** (already in `iam_sga_agentcore.tf`):
-```hcl
-actions = ["bedrock-agentcore:InvokeGateway"]
-resources = ["arn:aws:bedrock-agentcore:${region}:${account}:gateway/*"]
-```
-
-**Strands Agents Evaluation** (also completed):
-Compared Strands Agents vs Google ADK frameworks. Conclusion: Keep Google ADK because:
-1. Extended Thinking feature works (critical for NEXO Import)
-2. 14+ agents already implemented and tested
-3. Migration effort (3-4 weeks) doesn't justify marginal gains
-4. Strands is v0.1.x (less mature than ADK)
-
-### 20. MCP Gateway Tool Naming Convention - 3 Underscores (January 2026)
-**Issue**: `"MCP error: Unknown tool: SGAPostgresTools__sga_get_schema_metadata"` after enabling MCP Gateway for schema queries
-**Root Cause**: AWS MCP Gateway uses **THREE underscores** (`___`) between TargetName and ToolName, but code was using **TWO underscores** (`__`).
-
-**Pattern**:
-```
-WRONG:  SGAPostgresTools__sga_get_balance   (2 underscores)
-CORRECT: SGAPostgresTools___sga_get_balance  (3 underscores)
-```
-
-**Where it was wrong**:
-- `schema_provider.py:237` - HARDCODED tool name (not using `_tool_name()` method)
-- `mcp_gateway_client.py` - Examples in docstrings
-- `gateway_adapter.py` - All docstring examples
-- `postgres_tools_lambda.py` - Comments
-- `.github/workflows/deploy-sga-postgres-lambda.yml` - Test payload
-
-**Fix**: Updated all 5 files to use 3 underscores consistently.
-
-**Lesson Learned**: When fixing a pattern in one file, ALWAYS use `grep` to search the ENTIRE codebase for the same wrong pattern. The `gateway_adapter.py` had the correct `_tool_name()` method using `___`, but `schema_provider.py` bypassed it with a hardcoded string.
-
-**Files Modified**: `schema_provider.py`, `mcp_gateway_client.py`, `gateway_adapter.py`, `postgres_tools_lambda.py`, `deploy-sga-postgres-lambda.yml`
-
-### 21. Cognito Secrets Mismatch Between Frontend and AgentCore (January 2026)
-**Issue**: HTTP 403 Forbidden on ALL AgentCore Runtime invocations after JWT Authorizer was configured
-**Root Cause**: Frontend and AgentCore workflows used DIFFERENT GitHub Secrets:
-- Frontend used: `NEXT_PUBLIC_USER_POOL_ID`, `NEXT_PUBLIC_USER_POOL_CLIENT_ID`
-- Backend used: `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`
-- These secrets may have had different values or didn't exist at all
-
-**Fix**: HARDCODED the Cognito values directly in both workflows (they are NOT secrets - they appear in frontend JS and JWT tokens):
-```yaml
-# Cognito values - HARDCODED for consistency
-NEXT_PUBLIC_USER_POOL_ID: us-east-2_lkBXr4kjy      # faiston-users-prod
-NEXT_PUBLIC_USER_POOL_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg  # faiston-client-prod
-```
-
-**Files Modified**: `.github/workflows/deploy-frontend.yml`, `.github/workflows/deploy-agentcore-inventory.yml`
-
-### 22. MCP Gateway Lambda Event Format - Tool Name in Context, Not Event (January 2026)
-**Issue**: `"MCP error: Unknown tool: "` (empty string) after all previous fixes for 3 underscores
-**Root Cause**: Code was reading `event.get("name", "")` but per AWS documentation (gateway-add-target-lambda.html):
-1. **Event object**: Contains ONLY the tool arguments (properties from inputSchema)
-2. **Context object**: Contains `bedrockAgentCoreToolName` in `context.client_context.custom`
-
-The tool name is **NOT** in the event - it's in the Lambda context!
-
-**AWS Documentation Pattern**:
-```python
-# AWS official pattern from docs
-def lambda_handler(event, context):
-    delimiter = "___"
-
-    # Get the tool name from CONTEXT, not EVENT
-    originalToolName = context.client_context.custom['bedrockAgentCoreToolName']
-    toolName = originalToolName[originalToolName.index(delimiter) + len(delimiter):]
-```
-
-**Before (WRONG)**:
-```python
-tool_name = event.get("name", "")  # Returns "" because event has no "name"
-arguments = event.get("arguments", {})  # Wrong - event IS the arguments
-```
-
-**After (CORRECT)**:
-```python
-# Get tool name from context (MCP Gateway invocation)
-if hasattr(context, 'client_context') and context.client_context:
-    custom = getattr(context.client_context, 'custom', None)
-    if custom and isinstance(custom, dict):
-        tool_name = custom.get('bedrockAgentCoreToolName', '')
-
-# Fallback for direct invocation (testing)
-if not tool_name:
-    tool_name = event.get("name", "")
-
-# Event IS the arguments for MCP Gateway, nested for direct invocation
-if "arguments" in event:
-    arguments = event["arguments"]  # Direct invocation
-else:
-    arguments = event  # MCP Gateway - event IS the arguments
-```
-
-**Lesson Learned**: Always consult AWS documentation for Lambda event formats. MCP Gateway Lambda targets have a COMPLETELY DIFFERENT format from direct Lambda invocations.
-
-**Files Modified**: `server/agentcore-inventory/tools/postgres_tools_lambda.py`
+<!-- ===================================================== -->
+<!-- 🔒 END OF IMMUTABLE BLOCK                             -->
+<!-- ===================================================== -->
