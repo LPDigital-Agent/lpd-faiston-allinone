@@ -50,8 +50,9 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         arguments = event.get("arguments", {})
 
         # Strip target prefix (SGAPostgresTools___)
-        if "__" in tool_name:
-            actual_tool = tool_name.split("__")[-1]
+        # AWS MCP Gateway convention uses THREE underscores: {TargetName}___{ToolName}
+        if "___" in tool_name:
+            actual_tool = tool_name.split("___", 1)[-1]
         else:
             actual_tool = tool_name
 
