@@ -38,6 +38,25 @@ import {
 } from '@/services/sgaAgentcore';
 
 // =============================================================================
+// Constants - Rotating Messages for Re-Analysis (Phase 3 fix)
+// =============================================================================
+
+/**
+ * Rotating loading messages shown during re-analysis with Gemini.
+ * User sees these while waiting 15-30 seconds for AI processing.
+ */
+const RE_ANALYZING_MESSAGES = [
+  'NEXO refinando mapeamentos...',
+  'Validando contra schema PostgreSQL...',
+  'Aplicando suas respostas...',
+  'Reavaliando confiança...',
+  'Verificando colunas obrigatórias...',
+  'Consultando padrões aprendidos...',
+  'Analisando consistência dos dados...',
+  'Confirmando tipos de dados...',
+];
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -50,6 +69,7 @@ export type NexoImportStage =
   | 'recalling'      // NEXO recalling prior knowledge (RECALL)
   | 'analyzing'      // NEXO analyzing file (OBSERVE + THINK)
   | 'questioning'    // Waiting for user answers (ASK)
+  | 're-analyzing'   // NEXO re-analyzing with user answers (RE-THINK) - Phase 3 fix
   | 'reviewing'      // NEXO shows summary for user approval (HIL)
   | 'processing'     // Preparing final configuration (ACT)
   | 'importing'      // Executing the import
@@ -439,7 +459,25 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       throw new Error('Nenhuma sessão de importação ativa');
     }
 
-    updateProgress('processing', 75, 'Processando respostas...', 'learn');
+    // Phase 3 fix: Use 're-analyzing' stage with rotating messages
+    updateProgress('re-analyzing', 70, 'NEXO reanalisando com suas respostas...', 're-think');
+
+    // Simulate progress during Gemini call (15-30s)
+    let messageIndex = 0;
+    const progressInterval = setInterval(() => {
+      setState(prev => {
+        const newPercent = Math.min(prev.progress.percent + 2, 90);
+        messageIndex = (messageIndex + 1) % RE_ANALYZING_MESSAGES.length;
+        return {
+          ...prev,
+          progress: {
+            ...prev.progress,
+            percent: newPercent,
+            message: RE_ANALYZING_MESSAGES[messageIndex],
+          },
+        };
+      });
+    }, 2000);
 
     try {
       // STATELESS: Merge current answers into session state before sending
@@ -453,6 +491,9 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         session_state: updatedSessionState,  // STATELESS: Pass full state
         answers: state.answers,
       });
+
+      // Clear progress interval
+      clearInterval(progressInterval);
 
       // Debug logging for re-reasoning flow
       console.log('[NEXO] Submit answers response:', {
@@ -530,6 +571,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         }));
       }
     } catch (err) {
+      // Ensure interval is cleared on error
+      clearInterval(progressInterval);
       const message = err instanceof Error ? err.message : 'Erro ao processar respostas';
       setState(prev => ({ ...prev, error: message }));
       throw err;
@@ -593,7 +636,13 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       });
 
       if (!result.data?.success || !result.data?.ready) {
-        throw new Error('Configuração não está pronta');
+        // Show specific validation errors if available (Phase 2 fix)
+        if (result.data?.validation_errors && result.data.validation_errors.length > 0) {
+          console.warn('[NEXO] Schema validation failed:', result.data.validation_errors);
+          const errorList = result.data.validation_errors.join('\n• ');
+          throw new Error(`Validação de schema falhou:\n• ${errorList}`);
+        }
+        throw new Error(result.data?.error || 'Configuração não está pronta');
       }
 
       setState(prev => ({

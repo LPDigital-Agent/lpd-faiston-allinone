@@ -1121,6 +1121,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 
         re_reasoning_result = await self._re_reason_with_answers(session, answers)
 
+        # Track that re-reasoning was applied (for frontend visibility)
+        re_reasoning_applied = "error" not in re_reasoning_result
+
         # Step 4: Check if more questions needed (multi-round Q&A)
         follow_up_questions = []
         if current_round < max_rounds - 1:  # Can still ask more
@@ -1157,6 +1160,7 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 ],
                 "applied_mappings": session.learned_mappings,
                 "confidence": session.confidence.to_dict() if session.confidence else None,
+                "re_reasoning_applied": re_reasoning_applied,
             }
 
         # No more questions - ready for processing
@@ -1176,6 +1180,7 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             "applied_mappings": session.learned_mappings,
             "confidence": session.confidence.to_dict() if session.confidence else None,
             "ready_for_processing": True,
+            "re_reasoning_applied": re_reasoning_applied,
         }
 
     async def _re_reason_with_answers(

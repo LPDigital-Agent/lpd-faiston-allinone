@@ -968,14 +968,16 @@ export function SmartImportNexoPanel({
     }
   };
 
-  // Loading state (uploading, recalling, or analyzing) - COMBO COMPLETO
-  if (state.stage === 'uploading' || isRecalling || isAnalyzing) {
+  // Loading state (uploading, recalling, analyzing, or re-analyzing) - COMBO COMPLETO
+  const isReAnalyzing = state.stage === 're-analyzing';
+  if (state.stage === 'uploading' || isRecalling || isAnalyzing || isReAnalyzing) {
     const stageInfo = {
-      uploading: { title: 'Enviando Arquivo', gradient: 'from-cyan-500 to-blue-500' },
-      recalling: { title: 'NEXO Consultando Memória', gradient: 'from-purple-500 to-pink-500' },
-      analyzing: { title: 'NEXO Analisando com IA', gradient: 'from-purple-500 to-pink-500' },
+      'uploading': { title: 'Enviando Arquivo', gradient: 'from-cyan-500 to-blue-500' },
+      'recalling': { title: 'NEXO Consultando Memória', gradient: 'from-purple-500 to-pink-500' },
+      'analyzing': { title: 'NEXO Analisando com IA', gradient: 'from-purple-500 to-pink-500' },
+      're-analyzing': { title: 'NEXO Reavaliando Respostas', gradient: 'from-orange-500 to-red-500' },
     };
-    const currentStageKey = state.stage as 'uploading' | 'recalling' | 'analyzing';
+    const currentStageKey = state.stage as 'uploading' | 'recalling' | 'analyzing' | 're-analyzing';
     const { title, gradient } = stageInfo[currentStageKey] || stageInfo.analyzing;
     const currentMessage = LOADING_MESSAGES[loadingMessageIndex];
 
@@ -1033,15 +1035,28 @@ export function SmartImportNexoPanel({
             {/* Rotating messages with AnimatePresence */}
             <AnimatePresence mode="wait">
               <motion.div
-                key={loadingMessageIndex}
+                key={isReAnalyzing ? state.progress.message : loadingMessageIndex}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.3 }}
-                className="flex items-center justify-center gap-2 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20"
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border ${
+                  isReAnalyzing
+                    ? 'bg-orange-500/10 border-orange-500/20'
+                    : 'bg-purple-500/10 border-purple-500/20'
+                }`}
               >
-                <span className="text-lg">{currentMessage.emoji}</span>
-                <p className="text-sm text-text-secondary">{currentMessage.text}</p>
+                {isReAnalyzing ? (
+                  <>
+                    <span className="text-lg">🔄</span>
+                    <p className="text-sm text-text-secondary">{state.progress.message}</p>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-lg">{currentMessage.emoji}</span>
+                    <p className="text-sm text-text-secondary">{currentMessage.text}</p>
+                  </>
+                )}
               </motion.div>
             </AnimatePresence>
 

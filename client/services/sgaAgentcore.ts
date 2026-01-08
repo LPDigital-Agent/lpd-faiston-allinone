@@ -1242,6 +1242,11 @@ export interface NexoProcessingConfig {
   movement_type: string;
   special_handling: Record<string, unknown>;
   final_confidence: number;
+  // Error fields for schema validation failures (Phase 2 fix)
+  error?: string;
+  validation_errors?: string[];
+  validation_warnings?: string[];
+  suggestions?: string[];
 }
 
 /**
