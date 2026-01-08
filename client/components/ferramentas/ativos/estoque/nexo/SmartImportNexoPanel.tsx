@@ -372,7 +372,7 @@ function QuestionPanel({
   questions: NexoQuestion[];
   answers: Record<string, string>;
   onAnswer: (questionId: string, answer: string) => void;
-  onSubmit: (freeText: string) => void;
+  onSubmit: (freeText: string, correctedAnswers: Record<string, string>) => void;
   onSkip: () => void;
   isSubmitting: boolean;
 }) {
@@ -399,15 +399,30 @@ function QuestionPanel({
     setOtherTexts(prev => ({ ...prev, [questionId]: text }));
   };
 
-  // Enhanced submit that replaces "__other__" answers with actual text
+  // Build corrected answers SYNCHRONOUSLY (fixes React async state race condition)
+  // FIX: "__other__" was being sent to backend because onAnswer() state updates are async
+  // Solution: Build the corrected answers object without relying on React state updates
   const handleSubmit = () => {
-    // Replace "__other__" answers with the actual text before submitting
+    // Build corrected answers synchronously - do NOT rely on React state updates
+    const correctedAnswers: Record<string, string> = {};
+
     Object.keys(answers).forEach(questionId => {
-      if (answers[questionId] === '__other__' && otherTexts[questionId]?.trim()) {
-        onAnswer(questionId, `Outros: ${otherTexts[questionId].trim()}`);
+      const answer = answers[questionId];
+      if (answer === '__other__') {
+        // Replace "__other__" with actual text if provided
+        const otherText = otherTexts[questionId]?.trim();
+        if (otherText) {
+          correctedAnswers[questionId] = `Outros: ${otherText}`;
+        }
+        // If no text provided, omit this answer (don't send "__other__" to backend)
+      } else {
+        // Keep non-"__other__" answers as-is
+        correctedAnswers[questionId] = answer;
       }
     });
-    onSubmit(freeText.trim());
+
+    // Pass corrected answers directly to avoid React async state race condition
+    onSubmit(freeText.trim(), correctedAnswers);
   };
 
   const getImportanceBadge = (importance: NexoQuestion['importance']) => {
@@ -913,15 +928,22 @@ export function SmartImportNexoPanel({
     }
   }, [file, state.stage, startAnalysis]);
 
-  // Handle submit answers (with optional free text feedback)
-  const handleSubmitAnswers = async (freeText: string = '') => {
+  // Handle submit answers (with corrected answers to avoid "__other__" race condition)
+  // FIX: Now receives pre-corrected answers that don't contain "__other__" values
+  const handleSubmitAnswers = async (
+    freeText: string = '',
+    correctedAnswers?: Record<string, string>
+  ) => {
     setIsSubmitting(true);
     try {
-      // Pass freeText to submitAllAnswers for review/import
+      // Pass freeText and corrected answers to submitAllAnswers
       if (freeText) {
         console.log('[NEXO] User feedback received:', freeText);
       }
-      await submitAllAnswers(freeText || undefined);
+      if (correctedAnswers) {
+        console.log('[NEXO] Corrected answers received:', Object.keys(correctedAnswers).length, 'answers');
+      }
+      await submitAllAnswers(freeText || undefined, correctedAnswers);
     } finally {
       setIsSubmitting(false);
     }

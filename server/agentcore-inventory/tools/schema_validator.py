@@ -193,6 +193,33 @@ class SchemaValidator:
         mapped_schema_columns: Set[str] = set()
 
         # =================================================================
+        # 0. Filter out placeholder values (defense-in-depth)
+        # =================================================================
+        # FIX (January 2026): "__other__" is a frontend placeholder for the "Outros"
+        # radio option. It should be replaced with actual text before reaching backend.
+        # This check catches any that slip through due to race conditions.
+        INVALID_PLACEHOLDERS = {"__other__", "_other_", "OTHER", "__skip__", "__none__"}
+
+        for file_col, target_col in list(column_mappings.items()):
+            if target_col in INVALID_PLACEHOLDERS:
+                errors.append(ValidationIssue(
+                    field=file_col,
+                    issue_type="invalid_placeholder",
+                    message=(
+                        f"Coluna '{file_col}' não existe em sga.{target_table}"
+                    ),
+                    severity="error",
+                    sample_value=target_col,
+                    expected="Nome válido de coluna PostgreSQL",
+                ))
+                # Remove from mappings to prevent further validation errors
+                del column_mappings[file_col]
+                logger.warning(
+                    f"[SchemaValidator] Filtered invalid placeholder '{target_col}' "
+                    f"for file column '{file_col}'"
+                )
+
+        # =================================================================
         # 1. Validate target columns exist
         # =================================================================
         for file_col, target_col in column_mappings.items():

@@ -163,7 +163,7 @@ export interface UseSmartImportNexoReturn {
   // Actions
   startAnalysis: (file: File) => Promise<NexoAnalysisResult>;
   answerQuestion: (questionId: string, answer: string) => void;
-  submitAllAnswers: (userFeedback?: string) => Promise<void>;
+  submitAllAnswers: (userFeedback?: string, overrideAnswers?: Record<string, string>) => Promise<void>;
   skipQuestions: () => Promise<void>;
   approveAndImport: () => Promise<void>;
   backToQuestions: () => void;
@@ -465,11 +465,21 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   // ==========================================================================
   // Action: Submit All Answers
   // ==========================================================================
+  // FIX (January 2026): Added overrideAnswers parameter to fix "__other__" race condition
+  // When user selects "Outros" option, the value "__other__" was being sent to backend
+  // because React state updates are async. Now the component passes pre-corrected answers.
 
-  const submitAllAnswers = useCallback(async (userFeedback?: string) => {
+  const submitAllAnswers = useCallback(async (
+    userFeedback?: string,
+    overrideAnswers?: Record<string, string>
+  ) => {
     if (!state.sessionState) {
       throw new Error('Nenhuma sessão de importação ativa');
     }
+
+    // Use override answers if provided (fixes "__other__" race condition)
+    // Otherwise fall back to state.answers for backward compatibility
+    const answersToUse = overrideAnswers || state.answers;
 
     // Phase 3 fix: Use 're-analyzing' stage with rotating messages
     updateProgress('re-analyzing', 70, 'NEXO reanalisando com suas respostas...', 're-think');
@@ -492,16 +502,17 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     }, 2000);
 
     try {
-      // STATELESS: Merge current answers into session state before sending
+      // STATELESS: Merge answers into session state before sending
+      // Use overrideAnswers if provided (pre-corrected, no "__other__" values)
       const updatedSessionState: NexoSessionState = {
         ...state.sessionState,
-        answers: { ...state.sessionState.answers, ...state.answers },
+        answers: { ...state.sessionState.answers, ...answersToUse },
         updated_at: new Date().toISOString(),
       };
 
       const result = await nexoSubmitAnswers({
         session_state: updatedSessionState,  // STATELESS: Pass full state
-        answers: state.answers,
+        answers: answersToUse,  // Use corrected answers (no "__other__")
       });
 
       // Clear progress interval
