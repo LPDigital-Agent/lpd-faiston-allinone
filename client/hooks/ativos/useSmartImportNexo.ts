@@ -550,6 +550,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       if (result.data.remaining_questions && result.data.remaining_questions.length > 0) {
         setState(prev => ({
           ...prev,
+          stage: 'questioning',  // FIX: Must update stage to show questions UI
           sessionState: newSessionState,  // STATELESS: Store updated state
           questions: result.data!.remaining_questions!,
           progress: { stage: 'questioning', percent: 75, message: 'Mais perguntas...', currentStep: 'ask' },

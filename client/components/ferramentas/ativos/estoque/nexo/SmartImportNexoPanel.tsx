@@ -630,7 +630,7 @@ function QuestionItem({
       </div>
 
       <RadioGroup
-        value={answer}
+        value={answer ?? ''}
         onValueChange={(value: string) => onAnswer(question.id, value)}
         className="space-y-2"
       >
