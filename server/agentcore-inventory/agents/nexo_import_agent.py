@@ -1034,16 +1034,17 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         answers: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Process user answers to questions - STATELESS.
+        Process user answers to questions - STATELESS with RE-REASONING.
 
-        Applies answers to refine mappings and prepare for processing.
+        Applies answers, re-invokes Gemini for validation, and generates
+        follow-up questions if confidence is still low (multi-round Q&A).
 
         Args:
             session: Import session (in-memory, from frontend state)
             answers: Dict mapping question_id to answer
 
         Returns:
-            Updated session state
+            Updated session state with optional remaining_questions
         """
         log_agent_action(
             self.name, "submit_answers",
@@ -1054,7 +1055,45 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 
         session.answers = answers
 
-        # Process each answer
+        # Track current question round (max 3 rounds)
+        current_round = len([r for r in session.reasoning_trace if "Ronda" in r.content])
+        max_rounds = 3
+
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="observation",
+            content=f"Processando respostas do usuário (Ronda {current_round + 1}/{max_rounds})",
+        ))
+
+        # Step 1: Validate answers against PostgreSQL schema BEFORE applying
+        provider = self._get_schema_provider()
+        schema = provider.get_table_schema("pending_entry_items") if provider else None
+        valid_columns = schema.get_column_names() + ["_ignore"] if schema else []
+
+        validation_errors = []
+        for q in session.questions:
+            answer = answers.get(q.id)
+            if not answer:
+                continue
+
+            # Validate column mapping answers
+            if q.topic == "column_mapping" and valid_columns:
+                if answer not in valid_columns:
+                    validation_errors.append(
+                        f"Coluna '{answer}' não existe em sga.pending_entry_items"
+                    )
+
+        if validation_errors:
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Validação falhou: {'; '.join(validation_errors)}",
+            ))
+            return {
+                "success": False,
+                "session": session_to_dict(session),
+                "validation_errors": validation_errors,
+            }
+
+        # Step 2: Apply answers to session
         for q in session.questions:
             answer = answers.get(q.id)
             if not answer:
@@ -1065,7 +1104,6 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 content=f"Usuário respondeu '{answer}' para: {q.question}",
             ))
 
-            # Apply answer based on topic
             if q.topic == "column_mapping" and q.column:
                 session.learned_mappings[q.column] = answer
             elif q.topic == "sheet_selection":
@@ -1075,6 +1113,53 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 if session.file_analysis:
                     session.file_analysis["movement_type"] = answer
 
+        # Step 3: RE-REASON with Gemini using user answers as context
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="thought",
+            content="Vou reavaliar os mapeamentos com base nas respostas do usuário",
+        ))
+
+        re_reasoning_result = await self._re_reason_with_answers(session, answers)
+
+        # Step 4: Check if more questions needed (multi-round Q&A)
+        follow_up_questions = []
+        if current_round < max_rounds - 1:  # Can still ask more
+            follow_up_questions = self._generate_follow_up_questions(
+                session, re_reasoning_result
+            )
+
+        if follow_up_questions:
+            session.questions = follow_up_questions
+            session.stage = ImportStage.QUESTIONING
+            session.updated_at = now_iso()
+
+            log_agent_action(
+                self.name, "submit_answers",
+                entity_type="session",
+                entity_id=session.session_id,
+                status="follow_up_needed",
+            )
+
+            return {
+                "success": True,
+                "session": session_to_dict(session),
+                "remaining_questions": [
+                    {
+                        "id": q.id,
+                        "question": q.question,
+                        "context": q.context,
+                        "options": q.options,
+                        "importance": q.importance,
+                        "topic": q.topic,
+                        "column": q.column,
+                    }
+                    for q in follow_up_questions
+                ],
+                "applied_mappings": session.learned_mappings,
+                "confidence": session.confidence.to_dict() if session.confidence else None,
+            }
+
+        # No more questions - ready for processing
         session.stage = ImportStage.LEARNING
         session.updated_at = now_iso()
 
@@ -1087,10 +1172,208 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 
         return {
             "success": True,
-            "session": session_to_dict(session),  # Return full state
+            "session": session_to_dict(session),
             "applied_mappings": session.learned_mappings,
+            "confidence": session.confidence.to_dict() if session.confidence else None,
             "ready_for_processing": True,
         }
+
+    async def _re_reason_with_answers(
+        self,
+        session: ImportSession,
+        user_answers: Dict[str, str],
+    ) -> Dict[str, Any]:
+        """
+        Re-analyze mappings WITH user answer context using Gemini.
+
+        This is the critical RE-THINK phase that was missing.
+        Invokes Gemini to refine mappings based on user clarifications.
+
+        Args:
+            session: Current import session
+            user_answers: User's answers to questions
+
+        Returns:
+            Re-reasoning result with updated confidence
+        """
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="action",
+            content="Invocando IA para reavaliar com respostas do usuário",
+            tool="gemini",
+        ))
+
+        try:
+            # Build re-reasoning prompt
+            prompt = self._build_re_reasoning_prompt(session, user_answers)
+
+            # Invoke Gemini
+            response = await self.invoke(prompt)
+
+            # Parse response
+            result = parse_json_safe(response)
+
+            if "error" not in result:
+                # Update confidence based on re-analysis
+                new_confidence = result.get("confidence", 0.7)
+                session.confidence = self.calculate_confidence(
+                    extraction_quality=new_confidence,
+                    evidence_strength=0.85,  # Higher after user input
+                    historical_match=0.7,
+                )
+
+                # Capture AI's reasoning
+                thoughts = result.get("thoughts", [])
+                for thought in thoughts:
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="thought",
+                        content=thought,
+                    ))
+
+                # Update mappings if Gemini suggests changes
+                suggested = result.get("refined_mappings", {})
+                if isinstance(suggested, dict):
+                    session.learned_mappings.update(suggested)
+
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="conclusion",
+                    content=f"Reanálise completa. Confiança: {new_confidence:.0%}",
+                ))
+
+            return result
+
+        except Exception as e:
+            logger.warning(f"[NexoImportAgent] Re-reasoning failed: {e}")
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Reanálise falhou: {str(e)}",
+            ))
+            return {"error": str(e)}
+
+    def _build_re_reasoning_prompt(
+        self,
+        session: ImportSession,
+        user_answers: Dict[str, str],
+        target_table: str = "pending_entry_items",
+    ) -> str:
+        """
+        Build prompt for Gemini re-reasoning WITH user answers context.
+
+        This prompt includes the user's clarifications so Gemini can
+        refine its understanding and improve confidence.
+        """
+        schema_context = self._get_schema_context(target_table)
+
+        # Format user answers for context
+        answers_context = "\n".join([
+            f"- Pergunta: {q.question}\n  Resposta: {user_answers.get(q.id, 'Não respondida')}"
+            for q in session.questions
+            if q.id in user_answers
+        ])
+
+        # Format current mappings
+        mappings_context = "\n".join([
+            f"- {col} → {target}"
+            for col, target in session.learned_mappings.items()
+        ])
+
+        prompt = f"""Você é NEXO reanalisando um arquivo de importação COM as respostas do usuário.
+
+## SCHEMA POSTGRESQL (FONTE DA VERDADE)
+{schema_context}
+
+## ANÁLISE ANTERIOR DO ARQUIVO
+- Arquivo: {session.filename}
+- Colunas detectadas: {len(session.file_analysis.get('sheets', [{}])[0].get('columns', []))}
+
+## MAPEAMENTOS ATUAIS
+{mappings_context if mappings_context else "(nenhum mapeamento ainda)"}
+
+## RESPOSTAS DO USUÁRIO (NOVAS INFORMAÇÕES)
+{answers_context if answers_context else "(nenhuma resposta)"}
+
+## SUA TAREFA
+
+Com base nas respostas do usuário:
+1. REFINE os mapeamentos se necessário
+2. VALIDE que todos os mapeamentos usam colunas do schema acima
+3. CALCULE uma nova confiança (0.0 a 1.0)
+4. IDENTIFIQUE se ainda há dúvidas que precisam de mais perguntas
+
+## FORMATO DE RESPOSTA (JSON)
+```json
+{{
+    "thoughts": ["Seu raciocínio sobre as respostas..."],
+    "refined_mappings": {{"coluna_arquivo": "coluna_db"}},
+    "confidence": 0.85,
+    "needs_more_questions": false,
+    "uncertain_fields": []
+}}
+```
+
+IMPORTANTE:
+- SOMENTE use colunas que existem no schema PostgreSQL acima
+- Se não tiver certeza, inclua o campo em "uncertain_fields"
+"""
+        return prompt
+
+    def _generate_follow_up_questions(
+        self,
+        session: ImportSession,
+        re_reasoning_result: Dict[str, Any],
+    ) -> List[NexoQuestion]:
+        """
+        Generate follow-up questions based on re-reasoning result.
+
+        Only generates questions if:
+        1. Confidence is still below 0.8
+        2. There are uncertain fields identified by Gemini
+        3. We haven't exceeded max question rounds
+
+        Args:
+            session: Current import session
+            re_reasoning_result: Result from _re_reason_with_answers()
+
+        Returns:
+            List of follow-up questions (empty if none needed)
+        """
+        questions = []
+
+        # Check if Gemini explicitly said more questions needed
+        if not re_reasoning_result.get("needs_more_questions", False):
+            return questions
+
+        # Check confidence threshold
+        if session.confidence and session.confidence.overall >= 0.8:
+            return questions
+
+        # Get uncertain fields from Gemini response
+        uncertain_fields = re_reasoning_result.get("uncertain_fields", [])
+        if not uncertain_fields:
+            return questions
+
+        # Generate schema-aware questions for uncertain fields
+        provider = self._get_schema_provider()
+        schema = provider.get_table_schema("pending_entry_items") if provider else None
+
+        for field_info in uncertain_fields[:2]:  # Max 2 follow-up questions
+            field_name = field_info if isinstance(field_info, str) else field_info.get("name", "")
+            if not field_name:
+                continue
+
+            # Build schema-aware options
+            options = self._build_schema_aware_options(schema)
+
+            questions.append(NexoQuestion(
+                id=generate_id("FQ"),  # FQ = Follow-up Question
+                question=f"Confirmação: qual é o campo correto para '{field_name}'?",
+                context="O NEXO ainda não tem certeza sobre este mapeamento após a reanálise.",
+                options=options,
+                importance="high",
+                topic="column_mapping",
+                column=field_name,
+            ))
+
+        return questions
 
     # =========================================================================
     # LEARN Phase: Pattern Storage (with AgentCore Episodic Memory)
@@ -1820,6 +2103,121 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 
         return min(max(overall, 0.0), 1.0)
 
+    def _build_schema_aware_options(
+        self,
+        schema,
+        include_ignore: bool = True,
+    ) -> List[Dict[str, str]]:
+        """
+        Build column options dynamically from PostgreSQL schema.
+
+        This replaces the hardcoded column list with actual database columns.
+
+        Args:
+            schema: TableSchema from SchemaProvider
+            include_ignore: Whether to include "Ignorar" option
+
+        Returns:
+            List of option dictionaries with label and value
+        """
+        # Human-readable labels for common columns
+        column_labels = {
+            "part_number": "Part Number / SKU",
+            "quantity": "Quantidade",
+            "serial_number": "Número de Série",
+            "serial_numbers": "Lista de Números de Série",
+            "location_code": "Código da Localização",
+            "destination_location_id": "Destino",
+            "source_location_id": "Origem",
+            "project_code": "Código do Projeto",
+            "project_id": "Projeto",
+            "nf_number": "Número da NF",
+            "nf_date": "Data da NF",
+            "nf_key": "Chave da NF",
+            "supplier_name": "Fornecedor",
+            "supplier_cnpj": "CNPJ do Fornecedor",
+            "description": "Descrição",
+            "unit_value": "Valor Unitário",
+            "total_value": "Valor Total",
+            "movement_type": "Tipo de Movimento",
+            "reason": "Motivo/Observação",
+            "purchase_date": "Data de Compra",
+            "condition": "Condição do Item",
+            "manufacturer": "Fabricante",
+            "model": "Modelo",
+            "category": "Categoria",
+        }
+
+        options = []
+
+        if schema:
+            # Use actual schema columns
+            for col in schema.columns:
+                # Skip auto-generated and internal columns
+                if col.is_primary_key:
+                    continue
+                if col.name in ("created_at", "updated_at", "created_by", "is_active", "metadata"):
+                    continue
+
+                label = column_labels.get(col.name, col.name.replace("_", " ").title())
+
+                # Add data type hint for clarity
+                if col.udt_name and "timestamp" in col.data_type:
+                    label += " (Data)"
+                elif col.data_type == "integer" or col.data_type == "numeric":
+                    label += " (Número)"
+
+                options.append({"label": label, "value": col.name})
+        else:
+            # Fallback to common columns if schema unavailable
+            options = [
+                {"label": "Part Number / SKU", "value": "part_number"},
+                {"label": "Quantidade", "value": "quantity"},
+                {"label": "Número de Série", "value": "serial_number"},
+                {"label": "Localização", "value": "location_code"},
+                {"label": "Descrição", "value": "description"},
+                {"label": "Número da NF", "value": "nf_number"},
+                {"label": "Fornecedor", "value": "supplier_name"},
+                {"label": "Valor Unitário", "value": "unit_value"},
+            ]
+
+        if include_ignore:
+            options.append({"label": "🚫 Ignorar esta coluna", "value": "_ignore"})
+
+        return options
+
+    def _build_movement_type_options(self) -> List[Dict[str, str]]:
+        """
+        Build movement type options from PostgreSQL ENUM.
+
+        Uses SchemaProvider to get valid movement_type values.
+        """
+        provider = self._get_schema_provider()
+        if provider:
+            enum_values = provider.get_enum_values("movement_type")
+            if enum_values:
+                # Map ENUM values to user-friendly labels
+                enum_labels = {
+                    "ENTRADA": "✅ ENTRADA (Recebimento)",
+                    "SAIDA": "📤 SAÍDA (Expedição)",
+                    "TRANSFERENCIA": "🔄 TRANSFERÊNCIA",
+                    "AJUSTE": "⚖️ AJUSTE de Estoque",
+                    "RESERVA": "📌 RESERVA",
+                    "LIBERACAO": "🔓 LIBERAÇÃO de Reserva",
+                    "DEVOLUCAO": "↩️ DEVOLUÇÃO",
+                }
+                return [
+                    {"label": enum_labels.get(v, v), "value": v}
+                    for v in enum_values
+                ]
+
+        # Fallback
+        return [
+            {"label": "✅ ENTRADA", "value": "ENTRADA"},
+            {"label": "📤 SAÍDA", "value": "SAIDA"},
+            {"label": "⚖️ AJUSTE", "value": "AJUSTE"},
+        ]
+
     def _generate_targeted_questions(
         self,
         session: ImportSession,
@@ -1827,10 +2225,11 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         movement_confidence: float,
     ) -> List[NexoQuestion]:
         """
-        Generate targeted questions only for uncertain fields.
+        Generate targeted questions only for uncertain fields - SCHEMA-AWARE.
 
         TRUE agentic pattern: Don't ask about everything, only ask about
-        fields where the agent is genuinely uncertain.
+        fields where the agent is genuinely uncertain. Uses PostgreSQL
+        schema for column options instead of hardcoded values.
 
         Args:
             session: Current import session
@@ -1842,6 +2241,10 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         """
         questions = []
 
+        # Get schema for column options
+        provider = self._get_schema_provider()
+        schema = provider.get_table_schema("pending_entry_items") if provider else None
+
         # Only ask about movement type if confidence is below 90%
         if movement_confidence < 0.90:
             questions.append(NexoQuestion(
@@ -1850,17 +2253,16 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 context=f"O NEXO inferiu que este arquivo representa uma {movement_type} "
                         f"com {movement_confidence:.0%} de confiança. "
                         f"Confirme ou corrija se necessário.",
-                options=[
-                    {"label": "✅ Sim, é ENTRADA", "value": "ENTRADA"},
-                    {"label": "📤 Não, é SAÍDA", "value": "SAIDA"},
-                    {"label": "⚖️ É um AJUSTE de estoque", "value": "AJUSTE"},
-                ],
+                options=self._build_movement_type_options(),  # SCHEMA-AWARE
                 importance="critical",
                 topic="movement_type",
             ))
 
         # Ask about uncertain column mappings (only those with low confidence)
         if session.file_analysis:
+            # Build schema-aware column options ONCE
+            column_options = self._build_schema_aware_options(schema)
+
             for sheet in session.file_analysis.get("sheets", []):
                 for col in sheet.get("columns", []):
                     mapping_confidence = col.get("mapping_confidence", 0)
@@ -1872,14 +2274,7 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                             id=generate_id("Q"),
                             question=f"O que a coluna '{col_name}' representa?",
                             context=f"Exemplos de valores: {', '.join(str(s) for s in samples)}",
-                            options=[
-                                {"label": "Part Number / SKU", "value": "part_number"},
-                                {"label": "Quantidade", "value": "quantity"},
-                                {"label": "Número de Série", "value": "serial_number"},
-                                {"label": "Localização", "value": "location"},
-                                {"label": "Descrição", "value": "description"},
-                                {"label": "Ignorar esta coluna", "value": "_ignore"},
-                            ],
+                            options=column_options,  # SCHEMA-AWARE (not hardcoded)
                             importance="high",
                             topic="column_mapping",
                             column=col_name,

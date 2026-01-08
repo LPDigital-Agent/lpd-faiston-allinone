@@ -454,7 +454,25 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         answers: state.answers,
       });
 
+      // Debug logging for re-reasoning flow
+      console.log('[NEXO] Submit answers response:', {
+        success: result.data?.success,
+        remaining_questions: result.data?.remaining_questions?.length || 0,
+        ready_for_processing: result.data?.ready_for_processing,
+        will_continue_questioning: Boolean(result.data?.remaining_questions?.length),
+        confidence: result.data?.confidence,
+        validation_errors: result.data?.validation_errors,
+        re_reasoning_applied: result.data?.re_reasoning_applied,
+      });
+
       if (!result.data?.success) {
+        // Check for schema validation errors (pre-validation against PostgreSQL)
+        if (result.data?.validation_errors && result.data.validation_errors.length > 0) {
+          console.warn('[NEXO] Schema validation failed:', result.data.validation_errors);
+          const validationMsg = `Validação de schema falhou:\n${result.data.validation_errors.join('\n')}`;
+          throw new Error(validationMsg);
+        }
+
         // Extract error message from backend response
         const errorMsg = result.data?.error
           || 'Sessão expirada. Por favor, faça upload do arquivo novamente.';

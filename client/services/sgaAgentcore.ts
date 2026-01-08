@@ -1194,7 +1194,19 @@ export interface NexoSubmitAnswersResponse {
   session: NexoSessionState;  // Updated session state
   applied_mappings: Record<string, string>;
   ready_for_processing: boolean;
-  remaining_questions?: NexoQuestion[];  // If more questions remain
+  remaining_questions?: NexoQuestion[];  // If more questions remain (multi-round Q&A)
+  // New fields from re-reasoning flow (January 2026)
+  validation_errors?: string[];  // Schema pre-validation errors
+  re_reasoning_applied?: boolean;  // Whether Gemini re-analyzed with user answers
+  confidence?: {
+    overall: number;
+    extraction_quality: number;
+    evidence_strength: number;
+    historical_match: number;
+    risk_level: string;
+    factors: string[];
+    requires_hil: boolean;
+  };
 }
 
 /**
