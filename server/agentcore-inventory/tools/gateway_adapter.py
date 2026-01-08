@@ -71,16 +71,16 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         Build full tool name with target prefix.
 
-        Per AWS docs, Gateway routes to targets using the naming convention:
-        {TargetName}__{ToolName}
+        Per AWS MCP Gateway convention, tools are prefixed with:
+        {TargetName}___{ToolName} (THREE underscores)
 
         Args:
             tool: Base tool name (e.g., "sga_get_balance")
 
         Returns:
-            Full tool name (e.g., "SGAPostgresTools__sga_get_balance")
+            Full tool name (e.g., "SGAPostgresTools___sga_get_balance")
         """
-        return f"{self.TARGET_PREFIX}__{tool}"
+        return f"{self.TARGET_PREFIX}___{tool}"
 
     def _clean_none_values(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
