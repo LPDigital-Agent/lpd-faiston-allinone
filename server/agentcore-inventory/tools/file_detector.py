@@ -14,7 +14,7 @@
 from typing import Literal
 
 # Type definition for supported file types
-FileType = Literal["xml", "pdf", "image", "csv", "xlsx", "txt", "unknown"]
+FileType = Literal["xml", "pdf", "image", "csv", "xlsx", "xls", "txt", "json", "unknown"]
 
 
 def detect_file_type(
@@ -109,6 +109,14 @@ def _detect_by_magic_bytes(file_data: bytes) -> FileType:
         # If can't determine, assume xlsx for now
         return "xlsx"
 
+    # XLS (Excel 97-2003): OLE Compound Document - D0 CF 11 E0 A1 B1 1A E1
+    if file_data[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        return "xls"
+
+    # JSON: Check if starts with [ or { (after stripping whitespace)
+    if _looks_like_json(file_data):
+        return "json"
+
     # CSV: Plain text, check for comma/semicolon patterns
     # This is heuristic - CSV has no magic bytes
     if _looks_like_csv(file_data):
@@ -142,10 +150,13 @@ def _detect_by_mime_type(content_type: str) -> FileType:
         "image/webp": "image",
         # Spreadsheets
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-        "application/vnd.ms-excel": "xlsx",
+        "application/vnd.ms-excel": "xls",
         # CSV
         "text/csv": "csv",
         "application/csv": "csv",
+        # JSON
+        "application/json": "json",
+        "text/json": "json",
         # Text
         "text/plain": "txt",
     }
@@ -173,9 +184,11 @@ def _detect_by_extension(filename: str) -> FileType:
         "webp": "image",
         # Spreadsheets
         "xlsx": "xlsx",
-        "xls": "xlsx",
+        "xls": "xls",
         # CSV
         "csv": "csv",
+        # JSON
+        "json": "json",
         # Text
         "txt": "txt",
         "text": "txt",
@@ -228,6 +241,26 @@ def _is_plain_text(data: bytes) -> bool:
         return False
 
 
+def _looks_like_json(data: bytes) -> bool:
+    """
+    Check if data looks like JSON (starts with [ or { after whitespace).
+    """
+    try:
+        # Try to decode as UTF-8 and check first non-whitespace char
+        text = data[:1000].decode("utf-8", errors="ignore").strip()
+        if not text:
+            return False
+
+        # JSON must start with [ (array) or { (object)
+        if text[0] in ('[', '{'):
+            # Quick validation: try to find matching bracket
+            # This is a heuristic, not full JSON parsing
+            return True
+        return False
+    except Exception:
+        return False
+
+
 # =============================================================================
 # Human-friendly labels for UI display
 # =============================================================================
@@ -238,7 +271,9 @@ FILE_TYPE_LABELS = {
     "image": "Imagem (JPG/PNG)",
     "csv": "CSV (Planilha)",
     "xlsx": "Excel (XLSX)",
+    "xls": "Excel 97-2003 (XLS)",
     "txt": "Texto (TXT)",
+    "json": "JSON (Dados Estruturados)",
     "unknown": "Formato desconhecido",
 }
 

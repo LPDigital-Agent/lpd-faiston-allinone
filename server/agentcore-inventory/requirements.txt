@@ -41,3 +41,8 @@ psycopg[binary]>=3.1.0
 # Pure Python library (~3MB), safe for cold start
 # Used by tools/csv_parser.py for spreadsheet imports
 openpyxl>=3.1.0
+
+# Excel XLS (97-2003) file parsing for Smart Import
+# Pure Python library (~500KB), safe for cold start
+# Used by tools/sheet_analyzer.py for legacy Excel files
+xlrd>=2.0.1

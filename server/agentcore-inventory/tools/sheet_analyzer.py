@@ -901,10 +901,14 @@ def analyze_file_smart(
     max_sample_rows: int = 20,
 ) -> WorkbookAnalysis:
     """
-    Intelligently analyze any supported file format (CSV, XLSX, XLS).
+    Intelligently analyze any supported file format.
+
+    Supported formats:
+    - Structured: CSV, XLSX, XLS, TXT, JSON
+    - Visual (AI-First via Gemini Vision): JPG, JPEG, PNG, PDF
 
     This is the AI-First entry point that:
-    1. Detects file type from extension AND content
+    1. Detects file type from extension AND content (magic bytes)
     2. Routes to the appropriate parser
     3. Returns a unified WorkbookAnalysis structure
 
@@ -916,25 +920,59 @@ def analyze_file_smart(
     Returns:
         WorkbookAnalysis with unified structure regardless of file type
     """
-    # Detect file type from extension
     lower_name = filename.lower()
 
+    # ==========================================================================
+    # STRUCTURED FORMATS (Direct Parsing)
+    # ==========================================================================
     if lower_name.endswith(".csv"):
         return _analyze_csv(content, filename, max_sample_rows)
+
     elif lower_name.endswith(".xlsx"):
         return analyze_workbook(content, filename, max_sample_rows)
+
     elif lower_name.endswith(".xls"):
-        raise ValueError(
-            "Formato .xls (Excel 97-2003) não suportado. "
-            "Por favor, salve o arquivo como .xlsx ou .csv"
-        )
+        return _analyze_xls(content, filename, max_sample_rows)
+
+    elif lower_name.endswith(".txt"):
+        return _analyze_txt(content, filename, max_sample_rows)
+
+    elif lower_name.endswith(".json"):
+        return _analyze_json(content, filename, max_sample_rows)
+
+    # ==========================================================================
+    # VISUAL FORMATS (AI-First via Gemini Vision API)
+    # ==========================================================================
+    elif lower_name.endswith((".jpg", ".jpeg", ".png")):
+        return _analyze_image_with_vision(content, filename)
+
+    elif lower_name.endswith(".pdf"):
+        return _analyze_pdf_with_vision(content, filename)
+
+    # ==========================================================================
+    # FALLBACK: Detect from content (magic bytes)
+    # ==========================================================================
     else:
-        # Try to detect from content
-        # XLSX files start with PK (ZIP signature)
+        # XLSX/ZIP: starts with PK
         if content[:2] == b'PK':
             return analyze_workbook(content, filename, max_sample_rows)
+        # XLS (OLE): starts with D0 CF 11 E0
+        elif content[:4] == b'\xd0\xcf\x11\xe0':
+            return _analyze_xls(content, filename, max_sample_rows)
+        # PDF: starts with %PDF
+        elif content[:4] == b'%PDF':
+            return _analyze_pdf_with_vision(content, filename)
+        # PNG: starts with 89 50 4E 47
+        elif content[:4] == b'\x89PNG':
+            return _analyze_image_with_vision(content, filename)
+        # JPEG: starts with FF D8 FF
+        elif content[:3] == b'\xff\xd8\xff':
+            return _analyze_image_with_vision(content, filename)
+        # JSON: starts with [ or {
+        elif content[:1] in (b'[', b'{'):
+            return _analyze_json(content, filename, max_sample_rows)
         else:
-            # Default to CSV for unknown types
+            # Default to CSV/TXT for text-like content
             return _analyze_csv(content, filename, max_sample_rows)
 
 
@@ -1078,6 +1116,561 @@ def _analyze_csv(
         questions_for_user=[],
         reasoning_trace=reasoning_trace,
     )
+
+
+# =============================================================================
+# TXT Analysis (Delimited Text Files)
+# =============================================================================
+
+
+def _analyze_txt(
+    content: bytes,
+    filename: str,
+    max_sample_rows: int = 20,
+) -> WorkbookAnalysis:
+    """
+    Analyze delimited text file with automatic delimiter detection.
+
+    Supports delimiters: tab, pipe, semicolon, comma, multiple spaces.
+    Internally reuses CSV parsing logic after detecting delimiter.
+
+    Args:
+        content: Raw TXT content as bytes
+        filename: Original filename
+        max_sample_rows: Maximum rows to sample
+
+    Returns:
+        WorkbookAnalysis with TXT data as single sheet
+    """
+    reasoning_trace = []
+
+    reasoning_trace.append({
+        "type": "thought",
+        "content": f"Detectei arquivo TXT: '{filename}'. Vou identificar o delimitador.",
+    })
+
+    # Decode content with fallback encodings
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            text = content.decode("latin-1")
+            reasoning_trace.append({
+                "type": "observation",
+                "content": "Arquivo usa encoding Latin-1 (não UTF-8)",
+            })
+        except UnicodeDecodeError:
+            text = content.decode("cp1252", errors="ignore")
+
+    # Detect delimiter - check tab, pipe, semicolon first (more specific)
+    sample = text[:4096]
+    delimiters = ['\t', '|', ';', ',']
+    delimiter_counts = {d: sample.count(d) for d in delimiters}
+
+    # Check for multiple spaces as delimiter
+    import re
+    multi_space_matches = len(re.findall(r'  +', sample))
+    delimiter_counts['  '] = multi_space_matches
+
+    # Choose delimiter with highest count
+    delimiter = max(delimiter_counts, key=delimiter_counts.get)
+
+    # Validate delimiter by checking consistency across lines
+    lines = text.strip().split('\n')[:10]
+    if delimiter and delimiter != '  ':
+        counts = [line.count(delimiter) for line in lines if line.strip()]
+        if counts and counts[0] > 0 and len(set(counts)) <= 2:
+            pass  # Delimiter is consistent
+        else:
+            delimiter = ','  # Fallback to comma
+
+    delimiter_name = {
+        '\t': 'TAB', '|': 'PIPE', ';': 'ponto-e-vírgula',
+        ',': 'vírgula', '  ': 'espaços múltiplos'
+    }.get(delimiter, delimiter)
+
+    reasoning_trace.append({
+        "type": "observation",
+        "content": f"Delimitador detectado: {delimiter_name} ({delimiter_counts.get(delimiter, 0)} ocorrências)",
+    })
+
+    # Parse with detected delimiter
+    import csv
+    if delimiter == '  ':
+        # Split by multiple spaces
+        rows = [re.split(r'  +', line.strip()) for line in text.strip().split('\n') if line.strip()]
+    else:
+        reader = csv.reader(text.strip().split('\n'), delimiter=delimiter)
+        rows = list(reader)
+
+    if not rows:
+        raise ValueError("Arquivo TXT está vazio")
+
+    headers = rows[0]
+    data_rows = rows[1:max_sample_rows + 1] if len(rows) > 1 else []
+    total_rows = len(rows) - 1
+
+    reasoning_trace.append({
+        "type": "observation",
+        "content": f"TXT tem {len(headers)} colunas e {total_rows} linhas de dados",
+    })
+
+    # Analyze columns (same logic as CSV)
+    columns_analysis = []
+    for col_idx, header in enumerate(headers):
+        sample_values = []
+        null_count = 0
+        unique_values = set()
+
+        for row in data_rows:
+            if col_idx < len(row):
+                value = row[col_idx].strip() if row[col_idx] else ""
+                if value:
+                    sample_values.append(value)
+                    unique_values.add(value)
+                else:
+                    null_count += 1
+            else:
+                null_count += 1
+
+        data_type = _detect_data_type(sample_values)
+        suggested_mapping, mapping_confidence = detect_column_mapping(header)
+
+        columns_analysis.append(ColumnAnalysis(
+            name=header,
+            normalized_name=normalize_column_name(header),
+            sample_values=sample_values[:5],
+            data_type=data_type,
+            unique_count=len(unique_values),
+            null_count=null_count,
+            is_likely_key=len(unique_values) == len(data_rows) and null_count == 0,
+            suggested_mapping=suggested_mapping,
+            mapping_confidence=mapping_confidence,
+        ))
+
+    reasoning_trace.append({
+        "type": "conclusion",
+        "content": f"TXT analisado: {len(headers)} colunas, {total_rows} linhas. Pronto para mapeamento.",
+    })
+
+    sheet_analysis = SheetAnalysis(
+        name="TXT Data",
+        row_count=total_rows,
+        column_count=len(headers),
+        columns=columns_analysis,
+        detected_purpose=SheetPurpose.ITEMS,
+        purpose_confidence=0.75,
+        has_headers=True,
+        suggested_action="process",
+        merge_target=None,
+        notes=[f"Delimitador: {delimiter_name}"],
+    )
+
+    return WorkbookAnalysis(
+        filename=filename,
+        sheet_count=1,
+        total_rows=total_rows,
+        sheets=[sheet_analysis],
+        relationships=[],
+        recommended_strategy="single_sheet",
+        questions_for_user=[],
+        reasoning_trace=reasoning_trace,
+    )
+
+
+# =============================================================================
+# JSON Analysis (Array of Objects)
+# =============================================================================
+
+
+def _analyze_json(
+    content: bytes,
+    filename: str,
+    max_sample_rows: int = 20,
+) -> WorkbookAnalysis:
+    """
+    Analyze JSON file containing array of objects.
+
+    Expected format: [{"col1": "val1", "col2": "val2"}, ...]
+    Each object becomes a row, keys become column headers.
+
+    Args:
+        content: Raw JSON content as bytes
+        filename: Original filename
+        max_sample_rows: Maximum rows to sample
+
+    Returns:
+        WorkbookAnalysis with JSON data as single sheet
+    """
+    import json as json_module
+
+    reasoning_trace = []
+
+    reasoning_trace.append({
+        "type": "thought",
+        "content": f"Detectei arquivo JSON: '{filename}'. Vou analisar a estrutura.",
+    })
+
+    # Decode and parse
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        text = content.decode("latin-1")
+
+    try:
+        data = json_module.loads(text)
+    except json_module.JSONDecodeError as e:
+        raise ValueError(f"JSON inválido: {str(e)}")
+
+    # Handle different JSON structures
+    if isinstance(data, dict):
+        # Single object - wrap in array
+        if any(isinstance(v, list) for v in data.values()):
+            # Nested array inside object - try to find the main data array
+            for key, value in data.items():
+                if isinstance(value, list) and value and isinstance(value[0], dict):
+                    data = value
+                    reasoning_trace.append({
+                        "type": "observation",
+                        "content": f"JSON contém array aninhado em '{key}', usando como dados principais",
+                    })
+                    break
+            else:
+                data = [data]
+                reasoning_trace.append({
+                    "type": "observation",
+                    "content": "JSON contém objeto único, convertido para array",
+                })
+        else:
+            data = [data]
+            reasoning_trace.append({
+                "type": "observation",
+                "content": "JSON contém objeto único, convertido para array",
+            })
+
+    if not isinstance(data, list):
+        raise ValueError("JSON deve ser um array de objetos ou objeto com array interno")
+
+    if not data:
+        raise ValueError("JSON array está vazio")
+
+    # Validate first item is an object
+    first_obj = data[0]
+    if not isinstance(first_obj, dict):
+        raise ValueError("JSON deve conter objetos (dicionários)")
+
+    # Extract headers from all objects (union of all keys)
+    all_keys = set()
+    for obj in data[:max_sample_rows]:
+        if isinstance(obj, dict):
+            all_keys.update(obj.keys())
+    headers = list(all_keys)
+    total_rows = len(data)
+
+    reasoning_trace.append({
+        "type": "observation",
+        "content": f"JSON tem {len(headers)} colunas (keys) e {total_rows} registros",
+    })
+
+    # Analyze columns
+    columns_analysis = []
+    for header in headers:
+        sample_values = []
+        null_count = 0
+        unique_values = set()
+
+        for obj in data[:max_sample_rows]:
+            if isinstance(obj, dict):
+                value = obj.get(header)
+                if value is not None:
+                    str_val = str(value)[:100]
+                    sample_values.append(str_val)
+                    unique_values.add(str_val)
+                else:
+                    null_count += 1
+            else:
+                null_count += 1
+
+        data_type = _detect_data_type(sample_values)
+        suggested_mapping, mapping_confidence = detect_column_mapping(header)
+
+        columns_analysis.append(ColumnAnalysis(
+            name=header,
+            normalized_name=normalize_column_name(header),
+            sample_values=sample_values[:5],
+            data_type=data_type,
+            unique_count=len(unique_values),
+            null_count=null_count,
+            is_likely_key=len(unique_values) == min(len(data), max_sample_rows) and null_count == 0,
+            suggested_mapping=suggested_mapping,
+            mapping_confidence=mapping_confidence,
+        ))
+
+    reasoning_trace.append({
+        "type": "conclusion",
+        "content": f"JSON analisado: {len(headers)} campos, {total_rows} registros. Pronto para mapeamento.",
+    })
+
+    sheet_analysis = SheetAnalysis(
+        name="JSON Data",
+        row_count=total_rows,
+        column_count=len(headers),
+        columns=columns_analysis,
+        detected_purpose=SheetPurpose.ITEMS,
+        purpose_confidence=0.80,
+        has_headers=True,
+        suggested_action="process",
+        merge_target=None,
+        notes=[],
+    )
+
+    return WorkbookAnalysis(
+        filename=filename,
+        sheet_count=1,
+        total_rows=total_rows,
+        sheets=[sheet_analysis],
+        relationships=[],
+        recommended_strategy="single_sheet",
+        questions_for_user=[],
+        reasoning_trace=reasoning_trace,
+    )
+
+
+# =============================================================================
+# XLS Analysis (Excel 97-2003 Format)
+# =============================================================================
+
+# Lazy import for xlrd (cold start optimization)
+_xlrd_module = None
+
+
+def _get_xlrd():
+    """Lazy load xlrd for XLS support (cold start optimization)."""
+    global _xlrd_module
+    if _xlrd_module is None:
+        try:
+            import xlrd
+            _xlrd_module = xlrd
+            logger.info("[SheetAnalyzer] xlrd loaded for XLS support")
+        except ImportError:
+            raise ImportError(
+                "xlrd package required for XLS (Excel 97-2003) files. "
+                "Add 'xlrd>=2.0.1' to requirements.txt"
+            )
+    return _xlrd_module
+
+
+def _analyze_xls(
+    content: bytes,
+    filename: str,
+    max_sample_rows: int = 20,
+) -> WorkbookAnalysis:
+    """
+    Analyze XLS (Excel 97-2003) file using xlrd.
+
+    Mirrors analyze_workbook() pattern but with xlrd API.
+
+    Args:
+        content: Raw XLS content as bytes
+        filename: Original filename
+        max_sample_rows: Maximum rows to sample per sheet
+
+    Returns:
+        WorkbookAnalysis with XLS data
+    """
+    xlrd = _get_xlrd()
+
+    reasoning_trace = []
+
+    reasoning_trace.append({
+        "type": "thought",
+        "content": f"Detectei arquivo XLS (Excel 97-2003): '{filename}'",
+    })
+
+    # Open workbook
+    try:
+        wb = xlrd.open_workbook(file_contents=content)
+    except xlrd.XLRDError as e:
+        raise ValueError(f"Erro ao abrir arquivo XLS: {str(e)}")
+
+    reasoning_trace.append({
+        "type": "observation",
+        "content": f"Arquivo tem {wb.nsheets} aba(s): {', '.join(wb.sheet_names())}",
+    })
+
+    sheets_analysis = []
+    total_rows = 0
+
+    for sheet_idx in range(wb.nsheets):
+        ws = wb.sheet_by_index(sheet_idx)
+        sheet_name = ws.name
+
+        reasoning_trace.append({
+            "type": "action",
+            "content": f"Analisando aba '{sheet_name}'",
+        })
+
+        if ws.nrows == 0:
+            reasoning_trace.append({
+                "type": "observation",
+                "content": f"Aba '{sheet_name}' está vazia, pulando",
+            })
+            continue
+
+        # Get headers from first row
+        headers = []
+        for c in range(ws.ncols):
+            cell_value = ws.cell_value(0, c)
+            headers.append(str(cell_value) if cell_value else f"Column_{c}")
+
+        row_count = ws.nrows - 1  # Exclude header
+
+        # Sample data rows
+        sample_rows = []
+        for r in range(1, min(max_sample_rows + 1, ws.nrows)):
+            row_values = [ws.cell_value(r, c) for c in range(ws.ncols)]
+            sample_rows.append(row_values)
+
+        # Analyze columns
+        columns = []
+        for col_idx, header in enumerate(headers):
+            col_values = [
+                row[col_idx] if col_idx < len(row) else None
+                for row in sample_rows
+            ]
+
+            sample_values = [str(v) for v in col_values[:5] if v is not None and str(v).strip()]
+            data_type = detect_data_type(col_values)
+            mapping, confidence = detect_column_mapping(header)
+
+            unique_vals = set(str(v) for v in col_values if v is not None and str(v).strip())
+
+            columns.append(ColumnAnalysis(
+                name=header,
+                normalized_name=normalize_column_name(header),
+                sample_values=sample_values,
+                data_type=data_type,
+                unique_count=len(unique_vals),
+                null_count=sum(1 for v in col_values if v is None or str(v).strip() == ""),
+                is_likely_key=len(unique_vals) == len([v for v in col_values if v]) and len(unique_vals) > 1,
+                suggested_mapping=mapping,
+                mapping_confidence=confidence,
+            ))
+
+        # Detect sheet purpose
+        purpose, purpose_conf = detect_sheet_purpose(sheet_name, columns, row_count)
+
+        # Determine action
+        if purpose == SheetPurpose.SUMMARY or purpose == SheetPurpose.METADATA:
+            action = "skip"
+        elif purpose == SheetPurpose.SERIALS:
+            action = "merge_with"
+        else:
+            action = "process"
+
+        sheets_analysis.append(SheetAnalysis(
+            name=sheet_name,
+            row_count=row_count,
+            column_count=len(headers),
+            columns=columns,
+            detected_purpose=purpose,
+            purpose_confidence=purpose_conf,
+            has_headers=True,
+            suggested_action=action,
+            merge_target=None,
+            notes=[],
+        ))
+
+        total_rows += row_count
+
+        reasoning_trace.append({
+            "type": "observation",
+            "content": (
+                f"Aba '{sheet_name}': {row_count} linhas, "
+                f"{len(headers)} colunas, propósito: {purpose.value}"
+            ),
+        })
+
+    if not sheets_analysis:
+        raise ValueError("Arquivo XLS não contém dados válidos")
+
+    # Detect relationships between sheets
+    relationships = detect_sheet_relationships(sheets_analysis)
+    strategy = _determine_processing_strategy(sheets_analysis, relationships)
+
+    reasoning_trace.append({
+        "type": "conclusion",
+        "content": f"XLS analisado: {len(sheets_analysis)} aba(s), {total_rows} linhas. Estratégia: {strategy}",
+    })
+
+    analysis = WorkbookAnalysis(
+        filename=filename,
+        sheet_count=len(sheets_analysis),
+        total_rows=total_rows,
+        sheets=sheets_analysis,
+        relationships=relationships,
+        recommended_strategy=strategy,
+        questions_for_user=[],
+        reasoning_trace=reasoning_trace,
+    )
+
+    # Generate questions
+    analysis.questions_for_user = generate_questions(analysis)
+
+    return analysis
+
+
+# =============================================================================
+# Vision-Based Analysis (AI-First via Gemini Vision API)
+# =============================================================================
+
+
+def _analyze_image_with_vision(
+    content: bytes,
+    filename: str,
+) -> WorkbookAnalysis:
+    """
+    Analyze image containing tabular data using Gemini Vision API.
+
+    This is the AI-First approach - all visual data extraction is done
+    by the LLM, not by traditional OCR libraries.
+
+    Supports: JPG, JPEG, PNG, GIF
+
+    Args:
+        content: Raw image content as bytes
+        filename: Original filename
+
+    Returns:
+        WorkbookAnalysis with extracted table data
+    """
+    # Lazy import of vision extractor
+    from tools.vision_table_extractor import extract_table_from_image
+
+    return extract_table_from_image(content, filename)
+
+
+def _analyze_pdf_with_vision(
+    content: bytes,
+    filename: str,
+) -> WorkbookAnalysis:
+    """
+    Analyze PDF document using Gemini Vision API.
+
+    This is the AI-First approach - PDF is processed directly by
+    Gemini Vision, not by traditional PDF libraries like PyPDF2.
+
+    Args:
+        content: Raw PDF content as bytes
+        filename: Original filename
+
+    Returns:
+        WorkbookAnalysis with extracted table data
+    """
+    # Lazy import of vision extractor
+    from tools.vision_table_extractor import extract_table_from_pdf
+
+    return extract_table_from_pdf(content, filename)
 
 
 def _detect_data_type(values: List[str]) -> str:
