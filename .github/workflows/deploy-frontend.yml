@@ -55,9 +55,12 @@ jobs:
       - name: Build Next.js static export
         working-directory: client
         env:
-          NEXT_PUBLIC_AWS_REGION: ${{ secrets.NEXT_PUBLIC_AWS_REGION }}
-          NEXT_PUBLIC_USER_POOL_ID: ${{ secrets.NEXT_PUBLIC_USER_POOL_ID }}
-          NEXT_PUBLIC_USER_POOL_CLIENT_ID: ${{ secrets.NEXT_PUBLIC_USER_POOL_CLIENT_ID }}
+          # Cognito credentials - use same secrets as AgentCore to avoid mismatch
+          # User Pool: us-east-2_lkBXr4kjy (faiston-users-prod)
+          # Client ID: 7ovjm09dr94e52mpejvbu9v1cg (faiston-client-prod)
+          NEXT_PUBLIC_AWS_REGION: us-east-2
+          NEXT_PUBLIC_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID }}
+          NEXT_PUBLIC_USER_POOL_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
           NEXT_PUBLIC_GRAPHQL_ENDPOINT: ${{ secrets.NEXT_PUBLIC_GRAPHQL_ENDPOINT }}
         run: pnpm build
 
