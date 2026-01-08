@@ -152,12 +152,30 @@ async def _nexo_chat(payload: dict, user_id: str, session_id: str) -> dict:
 
     conversation_history = payload.get("conversation_history")
 
-    return await nexo_chat(
+    result = await nexo_chat(
         question=question,
         user_id=user_id,
         session_id=session_id,
         conversation_history=conversation_history
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_NEXO_CHAT",
+            actor_id=user_id,
+            entity_type="CONVERSATION",
+            entity_id=session_id,
+            action="nexo_chat",
+            details={"question_length": len(question)},
+            session_id=session_id,
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _get_daily_summary(payload: dict, user_id: str) -> dict:
@@ -171,10 +189,27 @@ async def _get_daily_summary(payload: dict, user_id: str) -> dict:
 
     include_news = payload.get("include_news", True)
 
-    return await get_daily_summary(
+    result = await get_daily_summary(
         user_id=user_id,
         include_news=include_news
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_DAILY_SUMMARY",
+            actor_id=user_id,
+            entity_type="SUMMARY",
+            entity_id=f"daily_{user_id}",
+            action="get_daily_summary",
+            details={"include_news": include_news},
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 # =============================================================================
@@ -195,12 +230,35 @@ async def _get_tech_news(payload: dict) -> dict:
     categories = payload.get("categories")
     max_articles = payload.get("max_articles", 20)
     language = payload.get("language", "all")
+    user_id = payload.get("user_id", "anonymous")
 
-    return await get_tech_news(
+    result = await get_tech_news(
         categories=categories,
         max_articles=max_articles,
         language=language
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_NEWS_FETCH",
+            actor_id=user_id,
+            entity_type="NEWS",
+            entity_id="tech_news",
+            action="get_tech_news",
+            details={
+                "categories": categories,
+                "max_articles": max_articles,
+                "language": language,
+                "articles_returned": len(result.get("articles", []))
+            },
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _get_news_by_category(payload: dict) -> dict:
@@ -218,12 +276,34 @@ async def _get_news_by_category(payload: dict) -> dict:
         return {"error": "Missing required field: category"}
 
     max_articles = payload.get("max_articles", 10)
+    user_id = payload.get("user_id", "anonymous")
 
     agent = NewsAgent()
-    return await agent.get_news_by_category(
+    result = await agent.get_news_by_category(
         category=category,
         max_articles=max_articles
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_NEWS_FETCH",
+            actor_id=user_id,
+            entity_type="NEWS",
+            entity_id=f"category_{category}",
+            action="get_news_by_category",
+            details={
+                "category": category,
+                "max_articles": max_articles,
+                "articles_returned": len(result.get("articles", []))
+            },
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _search_news(payload: dict) -> dict:
@@ -243,19 +323,60 @@ async def _search_news(payload: dict) -> dict:
 
     categories = payload.get("categories")
     max_articles = payload.get("max_articles", 10)
+    user_id = payload.get("user_id", "anonymous")
 
     agent = NewsAgent()
-    return await agent.search_news(
+    result = await agent.search_news(
         query=query,
         categories=categories,
         max_articles=max_articles
     )
 
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_NEWS_SEARCH",
+            actor_id=user_id,
+            entity_type="NEWS",
+            entity_id=f"search_{query[:50]}",
+            action="search_news",
+            details={
+                "query": query,
+                "categories": categories,
+                "max_articles": max_articles,
+                "results_count": len(result.get("articles", []))
+            },
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
+
 
 async def _get_news_digest() -> dict:
     """Get daily news digest."""
     from agents.news_agent import get_news_digest
-    return await get_news_digest()
+
+    result = await get_news_digest()
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_NEWS_FETCH",
+            actor_id="system",
+            entity_type="NEWS",
+            entity_id="daily_digest",
+            action="get_news_digest",
+            details={"digest_generated": True},
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 # =============================================================================
@@ -278,12 +399,30 @@ async def _delegate_to_academy(payload: dict, user_id: str, session_id: str) -> 
 
     context = payload.get("context")
 
-    return await delegate_to_academy(
+    result = await delegate_to_academy(
         question=question,
         user_id=user_id,
         session_id=session_id,
         context=context
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_DELEGATION_ACADEMY",
+            actor_id=user_id,
+            entity_type="DELEGATION",
+            entity_id=session_id,
+            action="delegate_to_academy",
+            details={"question_length": len(question)},
+            session_id=session_id,
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _delegate_to_sga(payload: dict, user_id: str, session_id: str) -> dict:
@@ -302,12 +441,30 @@ async def _delegate_to_sga(payload: dict, user_id: str, session_id: str) -> dict
 
     context = payload.get("context")
 
-    return await delegate_to_sga(
+    result = await delegate_to_sga(
         question=question,
         user_id=user_id,
         session_id=session_id,
         context=context
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_portal_event
+        log_portal_event(
+            event_type="PORTAL_DELEGATION_SGA",
+            actor_id=user_id,
+            entity_type="DELEGATION",
+            entity_id=session_id,
+            action="delegate_to_sga",
+            details={"question_length": len(question)},
+            session_id=session_id,
+            success="error" not in result
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 # =============================================================================

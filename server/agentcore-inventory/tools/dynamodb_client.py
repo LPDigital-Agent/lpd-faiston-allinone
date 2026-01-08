@@ -1034,3 +1034,41 @@ class SGAAuditLogger:
             item["GSI4SK"] = f"{iso_now}#{event_id}"
 
         return self._client.put_item(item)
+
+    def log_action(
+        self,
+        action: str,
+        entity_type: str,
+        entity_id: str,
+        actor: str,
+        details: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Convenience wrapper for log_event.
+        Maps simplified parameters to full log_event signature.
+
+        Args:
+            action: Action performed (e.g., NF_ENTRY_CONFIRMED, VIOLATION_FLAGGED)
+            entity_type: Entity type affected (e.g., NF_ENTRY, CAMPAIGN)
+            entity_id: Entity identifier
+            actor: Actor identifier (user who performed the action)
+            details: Additional safe-to-log details
+            session_id: Optional session identifier
+
+        Returns:
+            True if successful
+        """
+        # Infer event_type from action (e.g., NF_ENTRY_CONFIRMED -> INVENTORY_NF_ENTRY_CONFIRMED)
+        event_type = f"INVENTORY_{action}"
+
+        return self.log_event(
+            event_type=event_type,
+            actor_type="USER",  # Default to USER, can be overridden
+            actor_id=actor,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            action=action,
+            details=details,
+            session_id=session_id,
+        )

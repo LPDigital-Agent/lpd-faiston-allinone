@@ -58,3 +58,6 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+# AI Documentation (local only)
+ai_docs/

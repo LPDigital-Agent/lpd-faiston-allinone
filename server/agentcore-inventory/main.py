@@ -954,6 +954,26 @@ async def _create_manual_entry(payload: dict, user_id: str) -> dict:
         except Exception as e:
             errors.append(f"Erro ao criar movimento para {pn_id}: {str(e)}")
 
+    # Audit logging
+    try:
+        from tools.dynamodb_client import SGAAuditLogger
+        audit = SGAAuditLogger()
+        audit.log_action(
+            action="MANUAL_ENTRY_CREATED",
+            entity_type="ENTRY",
+            entity_id=entry_id,
+            actor=user_id,
+            details={
+                "movements_created": movements_created,
+                "assets_created": assets_created,
+                "total_quantity": total_quantity,
+                "document_reference": document_reference,
+                "errors_count": len(errors),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
     return {
         "success": len(errors) == 0,
         "entry_id": entry_id,
@@ -1051,6 +1071,24 @@ async def _execute_sap_import(payload: dict, user_id: str) -> dict:
         full_asset_creation=full_asset_creation,
         operator_id=user_id,
     )
+
+    # Audit logging
+    try:
+        from tools.dynamodb_client import SGAAuditLogger
+        audit = SGAAuditLogger()
+        audit.log_action(
+            action="SAP_IMPORT_EXECUTED",
+            entity_type="SAP_IMPORT",
+            entity_id=import_id,
+            actor=user_id,
+            details={
+                "full_asset_creation": full_asset_creation,
+                "pn_overrides_count": len(pn_overrides),
+                "success": result.get("success", False),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
 
     return result
 
@@ -1713,6 +1751,28 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
         f"{len(failed_rows)} failed, {len(skipped_rows)} skipped"
     )
 
+    # Audit logging
+    try:
+        from tools.dynamodb_client import SGAAuditLogger
+        audit = SGAAuditLogger()
+        audit.log_action(
+            action="IMPORT_EXECUTED",
+            entity_type="IMPORT",
+            entity_id=import_id,
+            actor=user_id,
+            details={
+                "filename": filename,
+                "total_rows": total_rows,
+                "created_count": len(created_movements),
+                "failed_count": len(failed_rows),
+                "skipped_count": len(skipped_rows),
+                "success_rate": round(success_rate * 100, 1),
+                "movement_type": movement_type,
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
     return {
         "success": True,
         "import_id": import_id,
@@ -2106,6 +2166,25 @@ async def _complete_expedition(payload: dict, user_id: str) -> dict:
         operator_id=user_id,
     )
 
+    # Audit logging
+    try:
+        from tools.dynamodb_client import SGAAuditLogger
+        audit = SGAAuditLogger()
+        audit.log_action(
+            action="EXPEDITION_COMPLETED",
+            entity_type="EXPEDITION",
+            entity_id=expedition_id,
+            actor=user_id,
+            details={
+                "nf_number": nf_number,
+                "carrier": carrier,
+                "tracking_code": tracking_code,
+                "success": result.get("success", False),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
     return result
 
 
@@ -2163,6 +2242,27 @@ async def _process_return(payload: dict, user_id: str) -> dict:
         notes=notes,
         operator_id=user_id,
     )
+
+    # Audit logging
+    try:
+        from tools.dynamodb_client import SGAAuditLogger
+        audit = SGAAuditLogger()
+        audit.log_action(
+            action="RETURN_PROCESSED",
+            entity_type="RETURN",
+            entity_id=serial,
+            actor=user_id,
+            details={
+                "origin_type": origin_type,
+                "owner": owner,
+                "condition": condition,
+                "return_reason": return_reason,
+                "chamado_id": chamado_id,
+                "success": result.get("success", False),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
 
     return result
 
@@ -2614,6 +2714,23 @@ async def _apply_reconciliation_action(payload: dict, user_id: str) -> dict:
         result["message"] = "Delta ignorado após investigação"
     else:
         result["message"] = "Delta marcado para investigação manual"
+
+    # Audit logging
+    try:
+        from tools.dynamodb_client import SGAAuditLogger
+        audit = SGAAuditLogger()
+        audit.log_action(
+            action="RECONCILIATION_ACTION_APPLIED",
+            entity_type="RECONCILIATION_DELTA",
+            entity_id=delta_id,
+            actor=user_id,
+            details={
+                "action_taken": action,
+                "notes": notes[:200] if notes else None,  # Truncate long notes
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
 
     return result
 

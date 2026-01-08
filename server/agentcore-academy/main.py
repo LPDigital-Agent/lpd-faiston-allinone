@@ -194,6 +194,21 @@ Responda de forma acolhedora, didatica e acessivel. NUNCA revele que suas respos
     agent.save_to_memory(session_id, user_id, {"role": "user", "content": question})
     agent.save_to_memory(session_id, user_id, {"role": "assistant", "content": response})
 
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_NEXO_CHAT",
+            actor_id=user_id,
+            entity_type="CONVERSATION",
+            entity_id=session_id,
+            action="nexo_chat",
+            details={"prompt_length": len(prompt), "history_count": len(history)},
+            session_id=session_id,
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
     return {"answer": response}
 
 
@@ -208,12 +223,33 @@ async def _generate_flashcards(payload: dict) -> dict:
     from agents.flashcards_agent import FlashcardsAgent
     agent = FlashcardsAgent()
 
-    return await agent.generate(
+    result = await agent.generate(
         transcription=payload.get("transcription", ""),
         difficulty=payload.get("difficulty", "medium"),
         count=payload.get("count", 10),
         custom_prompt=payload.get("custom_prompt", ""),
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_FLASHCARD_GENERATE",
+            actor_id=payload.get("user_id", "anonymous"),
+            entity_type="FLASHCARD",
+            entity_id=payload.get("episode_id", "unknown"),
+            action="generate_flashcards",
+            details={
+                "difficulty": payload.get("difficulty", "medium"),
+                "count": payload.get("count", 10),
+                "success": result.get("success", False),
+            },
+            session_id=payload.get("session_id"),
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _generate_mindmap(payload: dict) -> dict:
@@ -227,10 +263,30 @@ async def _generate_mindmap(payload: dict) -> dict:
     from agents.mindmap_agent import MindMapAgent
     agent = MindMapAgent()
 
-    return await agent.generate(
+    result = await agent.generate(
         transcription=payload.get("transcription", ""),
         episode_title=payload.get("episode_title", "Aula"),
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_MINDMAP_GENERATE",
+            actor_id=payload.get("user_id", "anonymous"),
+            entity_type="MINDMAP",
+            entity_id=payload.get("episode_id", "unknown"),
+            action="generate_mindmap",
+            details={
+                "episode_title": payload.get("episode_title", "Aula"),
+                "success": result.get("success", False),
+            },
+            session_id=payload.get("session_id"),
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _analyze_reflection(payload: dict) -> dict:
@@ -244,10 +300,30 @@ async def _analyze_reflection(payload: dict) -> dict:
     from agents.reflection_agent import ReflectionAgent
     agent = ReflectionAgent()
 
-    return await agent.analyze(
+    result = await agent.analyze(
         transcription=payload.get("transcription", ""),
         reflection=payload.get("reflection", ""),
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_REFLECTION_ANALYZE",
+            actor_id=payload.get("user_id", "anonymous"),
+            entity_type="REFLECTION",
+            entity_id=payload.get("episode_id", "unknown"),
+            action="analyze_reflection",
+            details={
+                "reflection_length": len(payload.get("reflection", "")),
+                "success": result.get("success", False),
+            },
+            session_id=payload.get("session_id"),
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _generate_audio_class(payload: dict) -> dict:
@@ -265,7 +341,7 @@ async def _generate_audio_class(payload: dict) -> dict:
     from agents.audioclass_agent import AudioClassAgent
     agent = AudioClassAgent()
 
-    return await agent.generate(
+    result = await agent.generate(
         transcription=payload.get("transcription", ""),
         mode=payload.get("mode", "deep_explanation"),
         student_name=payload.get("student_name", "Aluno"),
@@ -276,6 +352,28 @@ async def _generate_audio_class(payload: dict) -> dict:
         male_voice_name=payload.get("male_voice_name", "Eric"),
         female_voice_name=payload.get("female_voice_name", "Sarah"),
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_AUDIO_CLASS_GENERATE",
+            actor_id=payload.get("user_id", "anonymous"),
+            entity_type="AUDIO_CLASS",
+            entity_id=payload.get("episode_id", "unknown"),
+            action="generate_audio_class",
+            details={
+                "mode": payload.get("mode", "deep_explanation"),
+                "male_voice_name": payload.get("male_voice_name", "Eric"),
+                "female_voice_name": payload.get("female_voice_name", "Sarah"),
+                "success": result.get("success", False),
+            },
+            session_id=payload.get("session_id"),
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _search_youtube(payload: dict, user_id: str, session_id: str) -> dict:
@@ -421,12 +519,32 @@ async def _generate_slidedeck(payload: dict) -> dict:
     from agents.slidedeck_agent import SlideDeckAgent
     agent = SlideDeckAgent()
 
-    return await agent.generate(
+    result = await agent.generate(
         transcription=payload.get("transcription", ""),
         episode_title=payload.get("episode_title", "Aula"),
         episode_id=payload.get("episode_id", "unknown"),
         custom_prompt=payload.get("custom_prompt", ""),
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_SLIDEDECK_GENERATE",
+            actor_id=payload.get("user_id", "anonymous"),
+            entity_type="SLIDEDECK",
+            entity_id=payload.get("episode_id", "unknown"),
+            action="generate_slidedeck",
+            details={
+                "episode_title": payload.get("episode_title", "Aula"),
+                "success": result.get("success", False),
+            },
+            session_id=payload.get("session_id"),
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _slidedeck_plan(payload: dict) -> dict:
@@ -649,13 +767,34 @@ async def _create_training(payload: dict, user_id: str) -> dict:
     from agents.training_agent import TrainingAgent
     agent = TrainingAgent()
 
-    return await agent.create_training(
+    result = await agent.create_training(
         title=payload.get("title", "Novo Treinamento"),
         description=payload.get("description", ""),
         user_id=user_id,
         tenant_id=payload.get("tenant_id", "faiston-academy"),
         category=payload.get("category", "Geral"),
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_TRAINING_CREATE",
+            actor_id=user_id,
+            entity_type="TRAINING",
+            entity_id=result.get("training_id", "unknown"),
+            action="create_training",
+            details={
+                "title": payload.get("title", "Novo Treinamento"),
+                "category": payload.get("category", "Geral"),
+                "tenant_id": payload.get("tenant_id", "faiston-academy"),
+                "success": result.get("success", False),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _get_training(payload: dict, user_id: str) -> dict:
@@ -710,10 +849,29 @@ async def _delete_training(payload: dict, user_id: str) -> dict:
     from agents.training_agent import TrainingAgent
     agent = TrainingAgent()
 
-    return await agent.delete_training(
-        training_id=payload.get("training_id", ""),
+    training_id = payload.get("training_id", "")
+    result = await agent.delete_training(
+        training_id=training_id,
         user_id=user_id,
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_TRAINING_DELETE",
+            actor_id=user_id,
+            entity_type="TRAINING",
+            entity_id=training_id,
+            action="delete_training",
+            details={
+                "success": result.get("success", False),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _add_document_source(payload: dict, user_id: str) -> dict:
@@ -806,11 +964,30 @@ async def _consolidate_training_content(payload: dict, user_id: str) -> dict:
     from agents.training_agent import TrainingAgent
     agent = TrainingAgent()
 
+    training_id = payload.get("training_id", "")
     # Note: user_id=None skips ownership check for read operations
-    return await agent.consolidate_content(
-        training_id=payload.get("training_id", ""),
+    result = await agent.consolidate_content(
+        training_id=training_id,
         user_id=None,
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_TRAINING_UPDATE",
+            actor_id=user_id,
+            entity_type="TRAINING",
+            entity_id=training_id,
+            action="consolidate_training_content",
+            details={
+                "success": result.get("success", False),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _generate_training_summary(payload: dict, user_id: str) -> dict:
@@ -823,11 +1000,30 @@ async def _generate_training_summary(payload: dict, user_id: str) -> dict:
     from agents.training_agent import TrainingAgent
     agent = TrainingAgent()
 
+    training_id = payload.get("training_id", "")
     # Note: user_id=None skips ownership check for read operations
-    return await agent.generate_summary(
-        training_id=payload.get("training_id", ""),
+    result = await agent.generate_summary(
+        training_id=training_id,
         user_id=None,
     )
+
+    # Audit logging
+    try:
+        from tools.audit_logger import log_academy_event
+        log_academy_event(
+            event_type="ACADEMY_TRAINING_UPDATE",
+            actor_id=user_id,
+            entity_type="TRAINING",
+            entity_id=training_id,
+            action="generate_training_summary",
+            details={
+                "success": result.get("success", False),
+            },
+        )
+    except Exception:
+        pass  # Don't fail the request if audit logging fails
+
+    return result
 
 
 async def _generate_thumbnail(payload: dict, user_id: str) -> dict:
