@@ -10,6 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Important (Never Change or replace it)
 - FAISTON ONE (MANDATORY CONTEXT): Faiston ONE is a **100% AUTONOMOUS** and **GENERATIVE** AI agent system. The agents are intelligent: they automate cognitive tasks, learn from context/feedback, provide opinions/recommendations, and improve processes — acting like a “human operator” in Faiston’s operations. They continuously improve their **memory and knowledge** using **reinforcement learning techniques** (feedback-driven optimization) and other learning loops aligned with the platform’s architecture. This is NOT a traditional client-server microservices system. It is a **100% AI-FIRST** platform; if you do not understand what AI-FIRST means, you MUST research it and fully understand it before designing or implementing anything.
 
+---
+
+- BUGFIX & CONSISTENCY CHECK (MANDATORY): When fixing **ANY bug, issue, typo, naming error, logic flaw, or configuration problem**, you MUST NOT apply a partial or local fix. After making a correction, you MUST review and validate the **ENTIRE codebase** (code, imports, constants, configs, tests, scripts, docs) to ensure the same issue does **NOT** exist anywhere else. A fix is considered **INCOMPLETE** until global consistency is verified. If you are unsure whether all occurrences were fixed → **STOP AND ASK BEFORE PROCEEDING**.
+
+---
 
 ---
 ## DO NOT REMOVE
@@ -198,6 +203,9 @@ lpd-faiston-allinone/
 | `deploy-agentcore-academy.yml` | Push to `server/agentcore-academy/**` or manual | Deploy Academy agents to Bedrock AgentCore |
 | `deploy-agentcore-inventory.yml` | Push to `server/agentcore-inventory/**` or manual | Deploy SGA Inventory agents to Bedrock AgentCore |
 | `deploy-agentcore-portal.yml` | Push to `server/agentcore-portal/**` or manual | Deploy Portal NEXO agents to Bedrock AgentCore |
+| `deploy-sga-postgres-lambda.yml` | Push to `tools/postgres_tools_lambda.py` or manual | Deploy PostgreSQL MCP tools Lambda |
+| `migrate-sga-schema.yml` | Manual only | Run PostgreSQL schema migrations |
+| `update-sga-gateway-target.yml` | Manual only | Update MCP Gateway Target tool definitions |
 
 ## Available Commands
 
@@ -469,7 +477,7 @@ Asset/Inventory management system at `/ferramentas/ativos/estoque/`. Full produc
 - ✅ **PostgreSQL Migration (January 2026)**: Complete Aurora PostgreSQL infrastructure
   - Aurora Serverless v2 cluster with RDS Proxy
   - 13 tables, 110 indexes, 8 materialized views
-  - MCP Gateway + Lambda MCP tools (8 tools working)
+  - MCP Gateway + Lambda MCP tools (11 tools: 8 data + 3 schema introspection)
   - VPC with private subnets, S3/Secrets Manager/RDS endpoints
 - ✅ **Schema-Aware Import (January 2026)**: Agents OBSERVE PostgreSQL schema before analyzing files
   - Dynamic column matching replaces 50+ hardcoded patterns
@@ -1109,3 +1117,42 @@ Compared Strands Agents vs Google ADK frameworks. Conclusion: Keep Google ADK be
 2. 14+ agents already implemented and tested
 3. Migration effort (3-4 weeks) doesn't justify marginal gains
 4. Strands is v0.1.x (less mature than ADK)
+
+### 20. MCP Gateway Tool Naming Convention - 3 Underscores (January 2026)
+**Issue**: `"MCP error: Unknown tool: SGAPostgresTools__sga_get_schema_metadata"` after enabling MCP Gateway for schema queries
+**Root Cause**: AWS MCP Gateway uses **THREE underscores** (`___`) between TargetName and ToolName, but code was using **TWO underscores** (`__`).
+
+**Pattern**:
+```
+WRONG:  SGAPostgresTools__sga_get_balance   (2 underscores)
+CORRECT: SGAPostgresTools___sga_get_balance  (3 underscores)
+```
+
+**Where it was wrong**:
+- `schema_provider.py:237` - HARDCODED tool name (not using `_tool_name()` method)
+- `mcp_gateway_client.py` - Examples in docstrings
+- `gateway_adapter.py` - All docstring examples
+- `postgres_tools_lambda.py` - Comments
+- `.github/workflows/deploy-sga-postgres-lambda.yml` - Test payload
+
+**Fix**: Updated all 5 files to use 3 underscores consistently.
+
+**Lesson Learned**: When fixing a pattern in one file, ALWAYS use `grep` to search the ENTIRE codebase for the same wrong pattern. The `gateway_adapter.py` had the correct `_tool_name()` method using `___`, but `schema_provider.py` bypassed it with a hardcoded string.
+
+**Files Modified**: `schema_provider.py`, `mcp_gateway_client.py`, `gateway_adapter.py`, `postgres_tools_lambda.py`, `deploy-sga-postgres-lambda.yml`
+
+### 21. Cognito Secrets Mismatch Between Frontend and AgentCore (January 2026)
+**Issue**: HTTP 403 Forbidden on ALL AgentCore Runtime invocations after JWT Authorizer was configured
+**Root Cause**: Frontend and AgentCore workflows used DIFFERENT GitHub Secrets:
+- Frontend used: `NEXT_PUBLIC_USER_POOL_ID`, `NEXT_PUBLIC_USER_POOL_CLIENT_ID`
+- Backend used: `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`
+- These secrets may have had different values or didn't exist at all
+
+**Fix**: HARDCODED the Cognito values directly in both workflows (they are NOT secrets - they appear in frontend JS and JWT tokens):
+```yaml
+# Cognito values - HARDCODED for consistency
+NEXT_PUBLIC_USER_POOL_ID: us-east-2_lkBXr4kjy      # faiston-users-prod
+NEXT_PUBLIC_USER_POOL_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg  # faiston-client-prod
+```
+
+**Files Modified**: `.github/workflows/deploy-frontend.yml`, `.github/workflows/deploy-agentcore-inventory.yml`
