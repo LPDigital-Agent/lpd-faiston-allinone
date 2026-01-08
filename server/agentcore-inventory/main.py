@@ -73,25 +73,18 @@ def get_database_adapter():
         return _database_adapter
 
     if USE_POSTGRES_MCP and (AGENTCORE_GATEWAY_URL or AGENTCORE_GATEWAY_ID):
-        # Use PostgreSQL via MCP Gateway
+        # Use PostgreSQL via MCP Gateway with IAM SigV4 auth
+        # Per AWS Well-Architected Framework: Use IAM roles, not tokens
         from tools.mcp_gateway_client import MCPGatewayClientFactory
         from tools.gateway_adapter import GatewayPostgresAdapter
 
-        def get_access_token():
-            """
-            Get JWT access token for Gateway authentication.
-
-            In AgentCore Runtime, the token is available from request context.
-            For local testing, can be set via environment variable.
-            """
-            # AgentCore injects token into environment during invocation
-            return os.environ.get("AGENTCORE_ACCESS_TOKEN", "")
-
-        mcp_client = MCPGatewayClientFactory.create_from_env(get_access_token)
+        # No token provider needed - MCPGatewayClient uses SigV4 signing
+        # Credentials come from AgentCore Runtime's execution role
+        mcp_client = MCPGatewayClientFactory.create_from_env()
         _database_adapter = GatewayPostgresAdapter(mcp_client)
 
         import logging
-        logging.info("Database adapter: GatewayPostgresAdapter (PostgreSQL via MCP)")
+        logging.info("Database adapter: GatewayPostgresAdapter (PostgreSQL via MCP, IAM auth)")
     else:
         # Use DynamoDB (legacy)
         from tools.dynamodb_client import SGADynamoDBClient

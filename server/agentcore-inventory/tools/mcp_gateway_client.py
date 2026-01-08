@@ -1,245 +1,308 @@
 """
-MCP Gateway Client for AgentCore Communication.
+MCP Gateway Client with AWS SigV4 Authentication.
 
-This client handles communication with AgentCore Gateway using the MCP
-(Model Context Protocol) library. Based on AWS documentation:
-- gateway-agent-integration.html
-- gateway-using-mcp-call.html
-- gateway-using-mcp-list.html
+Per AWS Well-Architected Framework (Security Pillar):
+> "Use IAM roles for service-to-service communication, NOT static credentials or tokens."
+
+This client handles communication with AgentCore Gateway using IAM-based
+authentication with SigV4 request signing. This replaces the previous
+Bearer token pattern which was incorrect for AWS_IAM-configured Gateways.
 
 Architecture:
-    Agent → MCPGatewayClient → AgentCore Gateway → Lambda MCP Target
+    Agent -> MCPGatewayClient (SigV4) -> AgentCore Gateway -> Lambda MCP Target
 
 Key Features:
-- Uses mcp.client.streamable_http for proper JSON-RPC 2.0 handling
+- Uses SigV4 signing with IAM credentials (auto-refreshed)
 - Supports tool discovery via list_tools()
 - Supports tool invocation via call_tool()
-- Handles JWT authentication with Bearer token
 - Caches tool list for performance
+- Sync-first design for simplicity (avoids async complexity)
+
+Reference:
+- https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-inbound-auth.html
+- https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-using-mcp-call.html
 
 Author: Faiston NEXO Team
 Date: January 2026
+Updated: January 2026 - SigV4 auth (AWS Best Practice)
 """
 
+import json
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional
-from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
+
+import boto3
+import requests
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 
 logger = logging.getLogger(__name__)
 
 
 class MCPGatewayClient:
     """
-    Client for invoking tools via AgentCore Gateway using MCP protocol.
+    Client for invoking tools via AgentCore Gateway using IAM SigV4 auth.
 
-    This follows the official AWS pattern from gateway-agent-integration.html
-    using mcp.client.streamable_http for proper protocol handling.
+    This follows AWS best practices for service-to-service communication
+    using IAM roles instead of Bearer tokens. The AgentCore Runtime's
+    execution role already has `bedrock-agentcore:InvokeGateway` permission.
 
     Example usage:
         ```python
         client = MCPGatewayClient(
-            gateway_url="https://{id}.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp",
-            access_token_provider=lambda: get_jwt_token()
+            gateway_url="https://{id}.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp"
         )
 
-        async with client.connect() as connected_client:
-            tools = await connected_client.list_tools()
-            result = await connected_client.call_tool(
-                "SGAPostgresTools__sga_get_balance",
-                {"part_number": "PN-001"}
-            )
+        # Sync call - no context manager needed
+        result = client.call_tool(
+            "SGAPostgresTools__sga_get_balance",
+            {"part_number": "PN-001"}
+        )
         ```
 
     Attributes:
         _gateway_url: Full MCP endpoint URL for AgentCore Gateway
-        _get_access_token: Callable that returns current JWT access token
-        _session: Active MCP ClientSession (set during connect())
+        _region: AWS region for SigV4 signing
+        _session: boto3 Session for credential management
         _tools_cache: Cached list of available tools
     """
+
+    # Service name for SigV4 signing
+    SERVICE_NAME = "bedrock-agentcore"
 
     def __init__(
         self,
         gateway_url: str,
-        access_token_provider: Callable[[], str]
+        region: Optional[str] = None
     ):
         """
-        Initialize MCP Gateway Client.
+        Initialize MCP Gateway Client with IAM auth.
 
         Args:
             gateway_url: Gateway MCP endpoint URL
                 Format: https://{gateway_id}.gateway.bedrock-agentcore.{region}.amazonaws.com/mcp
-            access_token_provider: Callable that returns current JWT access token
-                This is called each time a connection is established to ensure fresh tokens
+            region: AWS region for SigV4 signing (default: from env or us-east-2)
         """
         self._gateway_url = gateway_url
-        self._get_access_token = access_token_provider
-        self._session = None
+        self._region = region or os.environ.get("AWS_REGION", "us-east-2")
+        self._session = boto3.Session()
         self._tools_cache: Optional[List[Dict]] = None
+
+        logger.info(
+            f"[MCPGatewayClient] Initialized with IAM auth (SigV4) "
+            f"for region {self._region}"
+        )
 
     @property
     def gateway_url(self) -> str:
         """Get the configured Gateway URL."""
         return self._gateway_url
 
-    @property
-    def is_connected(self) -> bool:
-        """Check if client has an active session."""
-        return self._session is not None
-
-    @asynccontextmanager
-    async def connect(self):
+    def _get_credentials(self):
         """
-        Establish MCP connection to Gateway.
+        Get fresh AWS credentials.
 
-        This context manager handles the full connection lifecycle:
-        1. Gets fresh JWT token from provider
-        2. Establishes streamable HTTP connection
-        3. Initializes MCP session
-        4. Yields connected client for use
-        5. Cleans up on exit
-
-        Per AWS docs, use streamablehttp_client for MCP communication.
-
-        Yields:
-            self: Connected MCPGatewayClient instance
-
-        Raises:
-            ImportError: If mcp package is not installed
-            ConnectionError: If Gateway connection fails
-        """
-        # Lazy import to avoid cold start penalty when not using MCP
-        try:
-            from mcp import ClientSession
-            from mcp.client.streamable_http import streamablehttp_client
-        except ImportError as e:
-            logger.error("MCP package not installed. Install with: pip install mcp")
-            raise ImportError(
-                "MCP package required for Gateway communication. "
-                "Install with: pip install mcp"
-            ) from e
-
-        # Get fresh access token
-        access_token = self._get_access_token()
-        if not access_token:
-            raise ValueError("Access token provider returned empty token")
-
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        logger.info(f"Connecting to AgentCore Gateway: {self._gateway_url}")
-
-        try:
-            async with streamablehttp_client(
-                url=self._gateway_url,
-                headers=headers
-            ) as (read_stream, write_stream, _):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    self._session = session
-                    logger.info("MCP session initialized successfully")
-                    yield self
-                    self._session = None
-        except Exception as e:
-            logger.error(f"Failed to connect to Gateway: {e}")
-            self._session = None
-            raise
-
-    async def list_tools(self, use_cache: bool = True) -> List[Dict]:
-        """
-        List all available tools from Gateway.
-
-        Per AWS docs (gateway-using-mcp-list.html), this method supports
-        pagination for large tool sets. All pages are fetched and combined.
-
-        Args:
-            use_cache: If True, returns cached tools if available
+        Uses boto3 Session which handles credential refresh automatically
+        for temporary credentials (from IAM roles, instance profiles, etc.)
 
         Returns:
-            List of tool definitions with name, description, and input_schema
-
-        Raises:
-            RuntimeError: If called outside connect() context
+            Frozen credentials tuple (access_key, secret_key, token)
         """
-        if not self._session:
-            raise RuntimeError("Must be called within connect() context manager")
+        credentials = self._session.get_credentials()
+        if credentials is None:
+            raise ValueError(
+                "No AWS credentials found. Ensure IAM role is configured "
+                "or AWS credentials are available in environment."
+            )
+        return credentials.get_frozen_credentials()
 
-        # Return cached tools if available
-        if use_cache and self._tools_cache is not None:
-            return self._tools_cache
+    def _sign_request(
+        self,
+        method: str,
+        url: str,
+        payload: Dict[str, Any]
+    ) -> Dict[str, str]:
+        """
+        Sign HTTP request with AWS SigV4 for AgentCore Gateway.
 
-        tools = []
-        cursor = None  # None means first page
+        Args:
+            method: HTTP method (POST, GET, etc.)
+            url: Full request URL
+            payload: Request body as dictionary
 
-        while True:
-            response = await self._session.list_tools(cursor)
-            tools.extend(response.tools)
+        Returns:
+            Dictionary of signed headers to include in request
+        """
+        body = json.dumps(payload)
 
-            # Check for more pages
-            if hasattr(response, 'nextCursor') and response.nextCursor:
-                cursor = response.nextCursor
-            else:
-                break
+        # Create AWS request object
+        request = AWSRequest(
+            method=method,
+            url=url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+        )
 
-        # Cache for subsequent calls
-        self._tools_cache = tools
-        logger.info(f"Discovered {len(tools)} tools from Gateway")
+        # Sign with SigV4
+        credentials = self._get_credentials()
+        SigV4Auth(credentials, self.SERVICE_NAME, self._region).add_auth(request)
 
-        return tools
+        logger.debug(f"[MCPGatewayClient] Request signed for {self.SERVICE_NAME}")
 
-    async def call_tool(
+        return dict(request.headers)
+
+    def call_tool(
         self,
         tool_name: str,
-        arguments: Dict[str, Any]
+        arguments: Dict[str, Any],
+        timeout: int = 30
     ) -> Dict[str, Any]:
         """
-        Invoke a tool via Gateway.
+        Invoke a tool via Gateway using MCP protocol (JSON-RPC 2.0).
 
         Per AWS docs (gateway-using-mcp-call.html):
-        - Method: tools/call (JSON-RPC 2.0)
+        - Method: tools/call
         - Tool name format: {TargetName}__{tool_name}
         - Response contains content array with results
 
         Args:
             tool_name: Full tool name (e.g., "SGAPostgresTools__sga_get_balance")
             arguments: Tool arguments as dictionary
+            timeout: Request timeout in seconds (default 30)
 
         Returns:
             Tool execution result parsed from response content
 
         Raises:
-            RuntimeError: If called outside connect() context
-            Exception: If tool execution fails
+            requests.HTTPError: If Gateway returns error status
+            ValueError: If response cannot be parsed
+            Exception: If MCP error in response
         """
-        if not self._session:
-            raise RuntimeError("Must be called within connect() context manager")
+        payload = {
+            "jsonrpc": "2.0",
+            "id": f"call-{tool_name}-{id(arguments)}",
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments
+            }
+        }
 
-        logger.debug(f"Calling tool: {tool_name} with args: {arguments}")
+        logger.debug(f"[MCPGatewayClient] Calling tool: {tool_name}")
+
+        # Sign and execute request
+        headers = self._sign_request("POST", self._gateway_url, payload)
 
         try:
-            response = await self._session.call_tool(
-                name=tool_name,
-                arguments=arguments
+            response = requests.post(
+                self._gateway_url,
+                headers=headers,
+                json=payload,
+                timeout=timeout
             )
+            response.raise_for_status()
 
-            # Parse response content
-            # MCP response has content array with type and text/data
-            if hasattr(response, 'content') and response.content:
-                for content_item in response.content:
-                    if hasattr(content_item, 'text'):
-                        # Parse JSON text response
-                        import json
-                        return json.loads(content_item.text)
-                    elif hasattr(content_item, 'data'):
-                        return content_item.data
-
-            # Return raw response if no parseable content
-            return {"raw_response": str(response)}
-
-        except Exception as e:
-            logger.error(f"Tool call failed: {tool_name} - {e}")
+        except requests.exceptions.HTTPError as e:
+            logger.error(
+                f"[MCPGatewayClient] HTTP error calling {tool_name}: "
+                f"{e.response.status_code} - {e.response.text}"
+            )
+            raise
+        except requests.exceptions.RequestException as e:
+            logger.error(f"[MCPGatewayClient] Request failed for {tool_name}: {e}")
             raise
 
-    async def search_tools(self, query: str) -> List[Dict]:
+        # Parse JSON-RPC response
+        result = response.json()
+
+        # Check for JSON-RPC error
+        if "error" in result:
+            error = result["error"]
+            error_msg = error.get("message", str(error))
+            logger.error(f"[MCPGatewayClient] MCP error: {error_msg}")
+            raise Exception(f"MCP error: {error_msg}")
+
+        # Parse MCP response content
+        # MCP response format: {"result": {"content": [{"type": "text", "text": "..."}]}}
+        if "result" in result:
+            content = result["result"].get("content", [])
+            for content_item in content:
+                if content_item.get("type") == "text":
+                    text = content_item.get("text", "{}")
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError:
+                        logger.warning(
+                            f"[MCPGatewayClient] Could not parse response as JSON: {text[:100]}"
+                        )
+                        return {"raw_text": text}
+                elif "data" in content_item:
+                    return content_item["data"]
+
+        # Return raw result if no parseable content
+        logger.debug(f"[MCPGatewayClient] Returning raw result for {tool_name}")
+        return result.get("result", {})
+
+    def list_tools(self, use_cache: bool = True) -> List[Dict]:
+        """
+        List all available tools from Gateway.
+
+        Per AWS docs (gateway-using-mcp-list.html), this method supports
+        pagination for large tool sets.
+
+        Args:
+            use_cache: If True, returns cached tools if available
+
+        Returns:
+            List of tool definitions with name, description, and input_schema
+        """
+        if use_cache and self._tools_cache is not None:
+            return self._tools_cache
+
+        tools = []
+        cursor = None
+
+        while True:
+            payload = {
+                "jsonrpc": "2.0",
+                "id": "list-tools",
+                "method": "tools/list",
+                "params": {"cursor": cursor} if cursor else {}
+            }
+
+            headers = self._sign_request("POST", self._gateway_url, payload)
+
+            response = requests.post(
+                self._gateway_url,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+            response.raise_for_status()
+
+            result = response.json()
+
+            if "error" in result:
+                raise Exception(f"MCP error: {result['error']}")
+
+            result_data = result.get("result", {})
+            tools.extend(result_data.get("tools", []))
+
+            # Check for pagination
+            cursor = result_data.get("nextCursor")
+            if not cursor:
+                break
+
+        self._tools_cache = tools
+        logger.info(f"[MCPGatewayClient] Discovered {len(tools)} tools from Gateway")
+
+        return tools
+
+    def search_tools(self, query: str) -> List[Dict]:
         """
         Semantic search for tools (if enabled on Gateway).
 
@@ -252,29 +315,25 @@ class MCPGatewayClient:
 
         Returns:
             List of matching tool definitions
-
-        Raises:
-            RuntimeError: If called outside connect() context
         """
-        if not self._session:
-            raise RuntimeError("Must be called within connect() context manager")
-
-        logger.info(f"Searching tools with query: {query}")
+        logger.info(f"[MCPGatewayClient] Searching tools: '{query}'")
 
         try:
-            response = await self.call_tool(
+            result = self.call_tool(
                 tool_name="x_amz_bedrock_agentcore_search",
                 arguments={"query": query}
             )
-            return response.get("tools", [])
+            return result.get("tools", [])
         except Exception as e:
-            logger.warning(f"Semantic search failed (may not be enabled): {e}")
-            # Fall back to listing all tools
-            return await self.list_tools()
+            logger.warning(
+                f"[MCPGatewayClient] Semantic search failed (may not be enabled): {e}"
+            )
+            return self.list_tools()
 
     def clear_cache(self) -> None:
         """Clear the cached tools list."""
         self._tools_cache = None
+        logger.debug("[MCPGatewayClient] Tool cache cleared")
 
 
 class MCPGatewayClientFactory:
@@ -287,18 +346,16 @@ class MCPGatewayClientFactory:
     Environment Variables:
         AGENTCORE_GATEWAY_URL: Full MCP endpoint URL
         AGENTCORE_GATEWAY_ID: Gateway ID (alternative to full URL)
-        AWS_REGION: AWS region for URL construction
+        AWS_REGION: AWS region for URL construction and SigV4 signing
     """
 
     @staticmethod
-    def create_from_env(
-        access_token_provider: Callable[[], str]
-    ) -> MCPGatewayClient:
+    def create_from_env() -> MCPGatewayClient:
         """
         Create MCPGatewayClient from environment variables.
 
-        Args:
-            access_token_provider: Callable that returns JWT access token
+        Uses IAM-based authentication (SigV4) - no token provider needed.
+        The AgentCore Runtime's execution role provides credentials.
 
         Returns:
             Configured MCPGatewayClient instance
@@ -325,7 +382,18 @@ class MCPGatewayClientFactory:
                 f"{region}.amazonaws.com/mcp"
             )
 
-        return MCPGatewayClient(
-            gateway_url=gateway_url,
-            access_token_provider=access_token_provider
-        )
+        return MCPGatewayClient(gateway_url=gateway_url)
+
+    @staticmethod
+    def create_with_url(gateway_url: str, region: str = "us-east-2") -> MCPGatewayClient:
+        """
+        Create MCPGatewayClient with explicit URL.
+
+        Args:
+            gateway_url: Full Gateway MCP endpoint URL
+            region: AWS region for SigV4 signing
+
+        Returns:
+            Configured MCPGatewayClient instance
+        """
+        return MCPGatewayClient(gateway_url=gateway_url, region=region)

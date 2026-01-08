@@ -5,17 +5,23 @@ Implements DatabaseAdapter interface by routing database operations
 through AgentCore Gateway MCP protocol to Lambda PostgreSQL tools.
 
 Architecture:
-    Agent → GatewayPostgresAdapter → MCPGatewayClient → AgentCore Gateway → Lambda → Aurora PostgreSQL
+    Agent → GatewayPostgresAdapter → MCPGatewayClient (SigV4) → AgentCore Gateway → Lambda → Aurora PostgreSQL
 
 Tool Naming Convention (per AWS docs):
     Format: {TargetName}__{ToolName}
     Example: SGAPostgresTools__sga_get_balance
 
+Authentication:
+    Uses AWS IAM SigV4 signing (NOT Bearer tokens) per AWS Well-Architected Framework.
+    The AgentCore Runtime's execution role provides credentials automatically.
+
 Author: Faiston NEXO Team
 Date: January 2026
+Updated: January 2026 - Sync client with SigV4 auth
 """
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from tools.database_adapter import (
@@ -41,6 +47,9 @@ class GatewayPostgresAdapter(DatabaseAdapter):
     - Argument serialization
     - Response parsing
     - Error handling and logging
+
+    Note: All methods are SYNCHRONOUS. The MCPGatewayClient uses SigV4
+    signing and the requests library for HTTP calls.
 
     Attributes:
         TARGET_PREFIX: MCP target name for PostgreSQL tools
@@ -85,7 +94,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         """
         return {k: v for k, v in data.items() if v is not None}
 
-    async def list_inventory(
+    def list_inventory(
         self,
         filters: Optional[InventoryFilters] = None
     ) -> Dict[str, Any]:
@@ -107,12 +116,12 @@ class GatewayPostgresAdapter(DatabaseAdapter):
 
         logger.debug(f"list_inventory with filters: {arguments}")
 
-        return await self._client.call_tool(
+        return self._client.call_tool(
             tool_name=self._tool_name("sga_list_inventory"),
             arguments=arguments
         )
 
-    async def get_balance(
+    def get_balance(
         self,
         part_number: str,
         location_id: Optional[str] = None,
@@ -131,12 +140,12 @@ class GatewayPostgresAdapter(DatabaseAdapter):
 
         logger.debug(f"get_balance for: {part_number}")
 
-        return await self._client.call_tool(
+        return self._client.call_tool(
             tool_name=self._tool_name("sga_get_balance"),
             arguments=arguments
         )
 
-    async def search_assets(
+    def search_assets(
         self,
         query: str,
         search_type: str = "all",
@@ -155,7 +164,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
 
         logger.debug(f"search_assets: query='{query}', type={search_type}")
 
-        result = await self._client.call_tool(
+        result = self._client.call_tool(
             tool_name=self._tool_name("sga_search_assets"),
             arguments=arguments
         )
@@ -163,7 +172,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
         # Return items list from result
         return result.get("items", []) if isinstance(result, dict) else result
 
-    async def get_asset_timeline(
+    def get_asset_timeline(
         self,
         identifier: str,
         identifier_type: str = "serial_number",
@@ -182,14 +191,14 @@ class GatewayPostgresAdapter(DatabaseAdapter):
 
         logger.debug(f"get_asset_timeline: {identifier_type}={identifier}")
 
-        result = await self._client.call_tool(
+        result = self._client.call_tool(
             tool_name=self._tool_name("sga_get_asset_timeline"),
             arguments=arguments
         )
 
         return result.get("events", []) if isinstance(result, dict) else result
 
-    async def get_movements(
+    def get_movements(
         self,
         filters: Optional[MovementFilters] = None
     ) -> List[Dict[str, Any]]:
@@ -211,14 +220,14 @@ class GatewayPostgresAdapter(DatabaseAdapter):
 
         logger.debug(f"get_movements with filters: {arguments}")
 
-        result = await self._client.call_tool(
+        result = self._client.call_tool(
             tool_name=self._tool_name("sga_get_movements"),
             arguments=arguments
         )
 
         return result.get("movements", []) if isinstance(result, dict) else result
 
-    async def get_pending_tasks(
+    def get_pending_tasks(
         self,
         task_type: Optional[str] = None,
         priority: Optional[str] = None,
@@ -239,14 +248,14 @@ class GatewayPostgresAdapter(DatabaseAdapter):
 
         logger.debug(f"get_pending_tasks: {arguments}")
 
-        result = await self._client.call_tool(
+        result = self._client.call_tool(
             tool_name=self._tool_name("sga_get_pending_tasks"),
             arguments=arguments
         )
 
         return result.get("tasks", []) if isinstance(result, dict) else result
 
-    async def create_movement(
+    def create_movement(
         self,
         movement_data: MovementData
     ) -> Dict[str, Any]:
@@ -273,12 +282,12 @@ class GatewayPostgresAdapter(DatabaseAdapter):
             f"part={movement_data.part_number}, qty={movement_data.quantity}"
         )
 
-        return await self._client.call_tool(
+        return self._client.call_tool(
             tool_name=self._tool_name("sga_create_movement"),
             arguments=arguments
         )
 
-    async def reconcile_with_sap(
+    def reconcile_with_sap(
         self,
         sap_data: List[Dict[str, Any]],
         include_serials: bool = False
@@ -295,7 +304,7 @@ class GatewayPostgresAdapter(DatabaseAdapter):
 
         logger.info(f"reconcile_with_sap: {len(sap_data)} items")
 
-        return await self._client.call_tool(
+        return self._client.call_tool(
             tool_name=self._tool_name("sga_reconcile_sap"),
             arguments=arguments
         )
@@ -307,31 +316,57 @@ class GatewayAdapterFactory:
 
     Handles the setup of MCPGatewayClient and adapter creation,
     abstracting the complexity from agent code.
+
+    Uses IAM-based authentication (SigV4) - no tokens required.
+    The AgentCore Runtime's execution role provides credentials.
     """
 
     @staticmethod
-    async def create_with_context(
+    def create_from_env() -> GatewayPostgresAdapter:
+        """
+        Create adapter from environment variables.
+
+        Uses IAM SigV4 authentication (not Bearer tokens).
+        Credentials come from AgentCore Runtime's execution role.
+
+        Environment Variables:
+            AGENTCORE_GATEWAY_URL: Full MCP endpoint URL
+            AGENTCORE_GATEWAY_ID: Gateway ID (alternative to full URL)
+            AWS_REGION: AWS region for URL construction and SigV4 signing
+
+        Returns:
+            Configured GatewayPostgresAdapter
+
+        Raises:
+            ValueError: If required environment variables are missing
+        """
+        from tools.mcp_gateway_client import MCPGatewayClientFactory
+
+        client = MCPGatewayClientFactory.create_from_env()
+        logger.info("[GatewayAdapterFactory] Created adapter with IAM auth (SigV4)")
+
+        return GatewayPostgresAdapter(client)
+
+    @staticmethod
+    def create_with_url(
         gateway_url: str,
-        access_token: str
+        region: str = "us-east-2"
     ) -> GatewayPostgresAdapter:
         """
-        Create adapter with pre-configured context.
+        Create adapter with explicit Gateway URL.
 
-        This is a convenience method for creating an adapter when you
-        already have the gateway URL and access token available.
+        Uses IAM SigV4 authentication (not Bearer tokens).
 
         Args:
             gateway_url: Full Gateway MCP endpoint URL
-            access_token: JWT access token for authentication
+            region: AWS region for SigV4 signing
 
         Returns:
             Configured GatewayPostgresAdapter
         """
         from tools.mcp_gateway_client import MCPGatewayClient
 
-        client = MCPGatewayClient(
-            gateway_url=gateway_url,
-            access_token_provider=lambda: access_token
-        )
+        client = MCPGatewayClient(gateway_url=gateway_url, region=region)
+        logger.info(f"[GatewayAdapterFactory] Created adapter for {gateway_url}")
 
         return GatewayPostgresAdapter(client)

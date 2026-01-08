@@ -1049,3 +1049,63 @@ def _refresh_cache(self) -> None:
 - `server/agentcore-inventory/tools/postgres_tools_lambda.py` (added schema handlers)
 - `server/agentcore-inventory/tools/schema_provider.py` (MCP Gateway support)
 - `.github/workflows/deploy-agentcore-inventory.yml` (USE_POSTGRES_MCP=true)
+
+### 19. MCP Gateway Authentication - SigV4 vs Bearer Tokens (January 2026)
+**Issue**: After enabling MCP Gateway for schema queries, error: `"Access token provider returned empty token"`
+**Root Cause**: MCPGatewayClient code used `Authorization: Bearer {token}` pattern with `AGENTCORE_ACCESS_TOKEN` env var, but:
+1. AgentCore Gateway is configured with `authorizerType: AWS_IAM` (not JWT)
+2. `AGENTCORE_ACCESS_TOKEN` env var doesn't exist
+3. Per AWS Well-Architected Framework: "Use IAM roles for service-to-service communication, NOT static credentials or tokens"
+
+**Architecture Context**:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  INBOUND AUTHENTICATION (User → Gateway)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Option 1: JWT Bearer Token (for external users/frontend)       │
+│  - Authorization: Bearer {jwt_token}                            │
+│  - Requires Cognito/IdP configured                              │
+│                                                                 │
+│  Option 2: AWS IAM (SigV4) ← OUR CASE                          │
+│  - For AWS services/identities                                  │
+│  - Requires SigV4 signed request                                │
+│  - Uses IAM credentials automatically                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Fix**: Replaced Bearer token pattern with AWS SigV4 signing using `botocore.auth.SigV4Auth`:
+```python
+# OLD (wrong - Bearer token for IAM Gateway)
+headers = {"Authorization": f"Bearer {access_token}"}
+
+# NEW (correct - SigV4 signing with IAM credentials)
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+import boto3
+
+session = boto3.Session()
+credentials = session.get_credentials().get_frozen_credentials()
+request = AWSRequest(method="POST", url=gateway_url, data=payload)
+SigV4Auth(credentials, "bedrock-agentcore", region).add_auth(request)
+```
+
+**Also Simplified**: Changed from async MCP library to synchronous `requests` + SigV4Auth, avoiding complex asyncio bridging.
+
+**Files Modified**:
+- `server/agentcore-inventory/tools/mcp_gateway_client.py` (complete rewrite with SigV4)
+- `server/agentcore-inventory/tools/gateway_adapter.py` (async→sync methods)
+- `server/agentcore-inventory/tools/schema_provider.py` (removed token provider)
+- `server/agentcore-inventory/main.py` (simplified get_database_adapter)
+
+**IAM Permission Required** (already in `iam_sga_agentcore.tf`):
+```hcl
+actions = ["bedrock-agentcore:InvokeGateway"]
+resources = ["arn:aws:bedrock-agentcore:${region}:${account}:gateway/*"]
+```
+
+**Strands Agents Evaluation** (also completed):
+Compared Strands Agents vs Google ADK frameworks. Conclusion: Keep Google ADK because:
+1. Extended Thinking feature works (critical for NEXO Import)
+2. 14+ agents already implemented and tested
+3. Migration effort (3-4 weeks) doesn't justify marginal gains
+4. Strands is v0.1.x (less mature than ADK)
