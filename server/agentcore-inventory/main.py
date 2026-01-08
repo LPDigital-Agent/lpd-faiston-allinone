@@ -352,6 +352,12 @@ def invoke(payload: dict, context) -> dict:
             return asyncio.run(_nexo_get_adaptive_threshold(payload, user_id))
 
         # =================================================================
+        # Schema Introspection (Schema-Aware Import - January 2026)
+        # =================================================================
+        elif action == "get_import_schema":
+            return asyncio.run(_get_import_schema(payload))
+
+        # =================================================================
         # Expedition (ExpeditionAgent)
         # =================================================================
         elif action == "process_expedition_request":
@@ -3011,6 +3017,127 @@ async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
     result = await agent.prepare_for_processing(session=session)
 
     return result
+
+
+# =============================================================================
+# Schema Introspection (Schema-Aware Import - January 2026)
+# =============================================================================
+
+
+async def _get_import_schema(payload: dict) -> dict:
+    """
+    Get PostgreSQL schema metadata for import operations.
+
+    Returns detailed schema information including:
+    - Table columns with data types and constraints
+    - ENUM values (movement_type, asset_status, etc.)
+    - Required columns (NOT NULL)
+    - Foreign key references
+
+    This enables clients to validate mappings and display
+    schema-aware UI for import operations.
+
+    Payload:
+        target_table: Optional table name (default: pending_entry_items)
+        include_enums: Whether to include ENUM definitions (default: True)
+        include_fks: Whether to include FK references (default: True)
+        format: "full" | "prompt" | "columns_only" (default: "full")
+
+    Returns:
+        Schema metadata for the target table(s)
+    """
+    target_table = payload.get("target_table", "pending_entry_items")
+    include_enums = payload.get("include_enums", True)
+    include_fks = payload.get("include_fks", True)
+    format_type = payload.get("format", "full")
+
+    try:
+        from tools.schema_provider import SchemaProvider
+        from tools.postgres_client import PostgresClient
+
+        postgres_client = PostgresClient()
+        provider = SchemaProvider(postgres_client)
+
+        # Get table schema
+        schema = provider.get_table_schema(target_table)
+
+        if not schema:
+            return {
+                "success": False,
+                "error": f"Table '{target_table}' not found in schema",
+            }
+
+        # Format based on requested type
+        if format_type == "prompt":
+            # Return markdown format for Gemini prompts
+            return {
+                "success": True,
+                "target_table": target_table,
+                "prompt_context": provider.get_schema_for_prompt(target_table),
+                "schema_version": provider.get_schema_version(target_table),
+            }
+
+        elif format_type == "columns_only":
+            # Return just column names and types
+            return {
+                "success": True,
+                "target_table": target_table,
+                "columns": [
+                    {
+                        "name": col.name,
+                        "data_type": col.data_type,
+                        "is_nullable": col.is_nullable,
+                    }
+                    for col in schema.columns
+                ],
+                "schema_version": provider.get_schema_version(target_table),
+            }
+
+        # Full format (default)
+        result = {
+            "success": True,
+            "target_table": target_table,
+            "columns": [
+                {
+                    "name": col.name,
+                    "data_type": col.data_type,
+                    "is_nullable": col.is_nullable,
+                    "is_primary_key": col.is_primary_key,
+                    "fk_reference": col.fk_reference,
+                }
+                for col in schema.columns
+            ],
+            "primary_key": schema.primary_key,
+            "required_columns": [
+                col.name for col in schema.columns if not col.is_nullable
+            ],
+            "schema_version": provider.get_schema_version(target_table),
+        }
+
+        # Include ENUMs if requested
+        if include_enums:
+            enum_names = ["movement_type", "asset_status", "entry_source"]
+            enums = {}
+            for enum_name in enum_names:
+                try:
+                    values = provider.get_enum_values(enum_name)
+                    if values:
+                        enums[enum_name] = values
+                except Exception:
+                    pass
+            result["enums"] = enums
+
+        # Include FKs if requested
+        if include_fks:
+            result["foreign_keys"] = schema.foreign_keys
+
+        return result
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Schema introspection failed: {str(e)}",
+        }
 
 
 # =============================================================================

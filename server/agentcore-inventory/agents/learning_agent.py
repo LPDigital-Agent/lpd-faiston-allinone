@@ -9,10 +9,16 @@
 # - Episodes contain: file type, column mappings, user corrections, success rate
 # - Reflections are auto-generated across episodes for cross-session learning
 #
+# SCHEMA-AWARE: Now tracks schema version to filter stale mappings.
+# Learned mappings are validated against current schema before retrieval.
+#
 # Module: Gestao de Ativos -> Gestao de Estoque -> Smart Import
 # Model: Gemini 3.0 Pro (MANDATORY per CLAUDE.md)
+# Author: Faiston NEXO Team
+# Updated: January 2026 - Schema version tracking
 # =============================================================================
 
+import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import json
@@ -28,6 +34,8 @@ from agents.utils import (
     generate_id,
 )
 
+logger = logging.getLogger(__name__)
+
 
 # =============================================================================
 # Types
@@ -42,6 +50,10 @@ class ImportEpisode:
     An episode captures all the relevant information from one complete
     import interaction, including the file structure, mappings learned,
     user corrections, and final success/failure status.
+
+    SCHEMA-AWARE: Now includes schema_version to track when mappings
+    were learned. Stale mappings (different schema version) are filtered
+    during retrieval to prevent invalid column suggestions.
     """
     episode_id: str
     filename_pattern: str  # Normalized pattern (dates replaced with DATE, etc.)
@@ -66,6 +78,10 @@ class ImportEpisode:
     user_id: str
     created_at: str = field(default_factory=now_iso)
     lessons: List[str] = field(default_factory=list)  # Natural language lessons
+
+    # Schema tracking (NEW - January 2026)
+    schema_version: str = ""          # MD5 hash of schema at learning time
+    target_table: str = "pending_entry_items"  # Target PostgreSQL table
 
 
 @dataclass
@@ -163,6 +179,10 @@ class LearningAgent(BaseInventoryAgent):
         self._episodes_cache: Dict[str, List[ImportEpisode]] = {}
         self._reflections_cache: List[ImportReflection] = []
 
+        # Schema validation (lazy-loaded to avoid cold start impact)
+        self._schema_provider = None
+        self._current_schema_version: Optional[str] = None
+
         # Initialize memory client if available
         self._init_memory()
 
@@ -213,6 +233,126 @@ class LearningAgent(BaseInventoryAgent):
             )
 
     # =========================================================================
+    # Schema Validation (SCHEMA-AWARE - January 2026)
+    # =========================================================================
+
+    def _get_schema_provider(self):
+        """
+        Lazy-load SchemaProvider to avoid cold start impact.
+
+        The SchemaProvider queries PostgreSQL for table metadata on first use.
+        We cache it for the lifetime of the agent instance.
+        """
+        if self._schema_provider is None:
+            try:
+                from tools.schema_provider import SchemaProvider
+                from tools.postgres_client import PostgresClient
+                postgres_client = PostgresClient()
+                self._schema_provider = SchemaProvider(postgres_client)
+                logger.info("[LearningAgent] SchemaProvider initialized")
+            except Exception as e:
+                logger.warning(f"[LearningAgent] SchemaProvider unavailable: {e}")
+        return self._schema_provider
+
+    def _get_current_schema_version(self, target_table: str = "pending_entry_items") -> str:
+        """
+        Get the current schema version hash for a table.
+
+        The schema version is an MD5 hash of the table's column structure.
+        This allows us to detect when the schema has changed and invalidate
+        learned mappings that may no longer be valid.
+
+        Args:
+            target_table: The PostgreSQL table to get version for
+
+        Returns:
+            MD5 hash of schema, or empty string if unavailable
+        """
+        if self._current_schema_version:
+            return self._current_schema_version
+
+        provider = self._get_schema_provider()
+        if provider:
+            try:
+                self._current_schema_version = provider.get_schema_version(target_table)
+                return self._current_schema_version
+            except Exception as e:
+                logger.warning(f"[LearningAgent] Failed to get schema version: {e}")
+
+        return ""
+
+    def _validate_mapping_against_schema(
+        self,
+        field_name: str,
+        target_table: str = "pending_entry_items",
+    ) -> bool:
+        """
+        Check if a field name exists in the current schema.
+
+        Used to filter out stale learned mappings that reference
+        columns that no longer exist in the target table.
+
+        Args:
+            field_name: The PostgreSQL column name to check
+            target_table: The target table to check against
+
+        Returns:
+            True if the field exists, False otherwise
+        """
+        provider = self._get_schema_provider()
+        if not provider:
+            # Permissive when schema unavailable - don't block learning
+            return True
+
+        try:
+            return provider.validate_column_exists(target_table, field_name)
+        except Exception as e:
+            logger.warning(f"[LearningAgent] Schema validation error: {e}")
+            return True  # Permissive on error
+
+    def _filter_stale_mappings(
+        self,
+        mappings: Dict[str, Dict[str, Any]],
+        target_table: str = "pending_entry_items",
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Filter out mappings that reference non-existent columns.
+
+        This is the core schema-aware filtering that ensures we never
+        suggest mappings to columns that don't exist in the current schema.
+
+        Args:
+            mappings: {column: {"field": target_field, "confidence": score}}
+            target_table: The target PostgreSQL table
+
+        Returns:
+            Filtered mappings with only valid target fields
+        """
+        provider = self._get_schema_provider()
+        if not provider:
+            # Return all mappings if schema unavailable
+            return mappings
+
+        filtered = {}
+        for column, mapping_info in mappings.items():
+            target_field = mapping_info.get("field", "")
+            if self._validate_mapping_against_schema(target_field, target_table):
+                filtered[column] = mapping_info
+            else:
+                logger.info(
+                    f"[LearningAgent] Filtered stale mapping: {column} -> {target_field} "
+                    f"(column not in {target_table})"
+                )
+
+        if len(filtered) < len(mappings):
+            logger.info(
+                f"[LearningAgent] Filtered {len(mappings) - len(filtered)} "
+                f"stale mappings out of {len(mappings)} total"
+            )
+
+        return filtered
+
+    # =========================================================================
     # Episode Storage (LEARN Phase)
     # =========================================================================
 
@@ -224,11 +364,16 @@ class LearningAgent(BaseInventoryAgent):
         column_mappings: Dict[str, str],
         user_corrections: Dict[str, Any],
         import_result: Dict[str, Any],
+        target_table: str = "pending_entry_items",
     ) -> Dict[str, Any]:
         """
         Create and store an import episode in memory.
 
         Called after successful import to capture learned patterns.
+
+        SCHEMA-AWARE: Episodes now include schema_version for tracking
+        when mappings were learned. This enables filtering stale mappings
+        during retrieval if the schema changes.
 
         Args:
             user_id: User who performed the import
@@ -237,6 +382,7 @@ class LearningAgent(BaseInventoryAgent):
             column_mappings: Final column mappings used
             user_corrections: Any corrections made by user
             import_result: Result of the import execution
+            target_table: Target PostgreSQL table for schema versioning
 
         Returns:
             Episode creation result
@@ -246,6 +392,9 @@ class LearningAgent(BaseInventoryAgent):
             entity_type="episode",
             status="started",
         )
+
+        # Get current schema version for tracking
+        schema_version = self._get_current_schema_version(target_table)
 
         # Build episode
         episode = ImportEpisode(
@@ -271,6 +420,9 @@ class LearningAgent(BaseInventoryAgent):
             items_failed=import_result.get("items_failed", 0),
             user_id=user_id,
             lessons=self._extract_lessons(column_mappings, user_corrections),
+            # Schema-aware tracking (January 2026)
+            schema_version=schema_version,
+            target_table=target_table,
         )
 
         # Store in memory
@@ -351,6 +503,7 @@ class LearningAgent(BaseInventoryAgent):
         user_id: str,
         filename: str,
         file_analysis: Dict[str, Any],
+        target_table: str = "pending_entry_items",
     ) -> Dict[str, Any]:
         """
         Retrieve prior knowledge relevant to current import.
@@ -358,10 +511,15 @@ class LearningAgent(BaseInventoryAgent):
         Called before analysis to find similar past imports
         and pre-populate suggested mappings.
 
+        SCHEMA-AWARE: Validates learned mappings against current schema
+        to filter out stale suggestions that reference columns that
+        no longer exist.
+
         Args:
             user_id: User performing the import
             filename: Current filename
             file_analysis: Current file analysis
+            target_table: Target PostgreSQL table for schema validation
 
         Returns:
             Prior knowledge with suggested mappings and confidence
@@ -426,11 +584,19 @@ class LearningAgent(BaseInventoryAgent):
         # Aggregate mappings from similar episodes
         suggested_mappings = self._aggregate_mappings(top_episodes)
 
+        # SCHEMA-AWARE: Filter out stale mappings that reference non-existent columns
+        original_count = len(suggested_mappings)
+        suggested_mappings = self._filter_stale_mappings(suggested_mappings, target_table)
+        filtered_count = original_count - len(suggested_mappings)
+
         # Calculate confidence boost based on historical success
         confidence_boost = self._calculate_confidence_boost(top_episodes)
 
         # Get reflections if available
         reflections = await self._get_relevant_reflections(filename_pattern)
+
+        # Get current schema version for tracking
+        schema_version = self._get_current_schema_version(target_table)
 
         log_agent_action(
             self.name, "retrieve_prior_knowledge",
@@ -438,7 +604,9 @@ class LearningAgent(BaseInventoryAgent):
             details={
                 "similar_episodes": len(top_episodes),
                 "suggested_mappings": len(suggested_mappings),
+                "filtered_stale_mappings": filtered_count,
                 "confidence_boost": confidence_boost,
+                "schema_version": schema_version[:8] if schema_version else "unknown",
             },
         )
 
@@ -451,12 +619,17 @@ class LearningAgent(BaseInventoryAgent):
                     "similarity": sim,
                     "success": ep.success if hasattr(ep, 'success') else ep.get("success"),
                     "match_rate": ep.match_rate if hasattr(ep, 'match_rate') else ep.get("match_rate"),
+                    # Include schema version from episode for debugging
+                    "schema_version": ep.schema_version if hasattr(ep, 'schema_version') else ep.get("schema_version", ""),
                 }
                 for ep, sim in top_episodes
             ],
             "suggested_mappings": suggested_mappings,
             "confidence_boost": confidence_boost,
             "reflections": reflections,
+            # Schema-aware metadata
+            "schema_version": schema_version,
+            "filtered_stale_mappings": filtered_count,
         }
 
     async def _query_memory_episodes(

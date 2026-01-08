@@ -5,12 +5,18 @@
 # Guides user through import with questions, learns from corrections,
 # and improves over time using AgentCore Episodic Memory.
 #
-# Philosophy: OBSERVE → THINK → ASK → LEARN → ACT
+# Philosophy: OBSERVE_SCHEMA → OBSERVE_FILE → THINK → VALIDATE → ASK → LEARN → ACT
+#
+# SCHEMA-AWARE: Now queries PostgreSQL schema BEFORE analyzing files.
+# This enables true schema-aware reasoning and validation.
 #
 # Module: Gestao de Ativos -> Gestao de Estoque -> Smart Import
 # Model: Gemini 3.0 Pro (MANDATORY per CLAUDE.md)
+# Author: Faiston NEXO Team
+# Updated: January 2026 - Schema-aware prompts
 # =============================================================================
 
+import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 from enum import Enum
@@ -28,6 +34,8 @@ from agents.utils import (
     extract_json,
     parse_json_safe,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -165,6 +173,128 @@ class NexoImportAgent(BaseInventoryAgent):
             instruction=NEXO_IMPORT_INSTRUCTION,
             description="Assistente inteligente de importação com aprendizado contínuo",
         )
+        # Lazy-loaded schema components
+        self._schema_provider = None
+        self._schema_validator = None
+
+    # =========================================================================
+    # Schema-Aware Helpers (OBSERVE_SCHEMA phase)
+    # =========================================================================
+
+    def _get_schema_provider(self):
+        """
+        Get or create SchemaProvider instance (lazy initialization).
+
+        Lazy loading prevents cold start impact - schema is only
+        fetched when needed for reasoning prompts.
+        """
+        if self._schema_provider is None:
+            try:
+                from tools.schema_provider import get_schema_provider
+                self._schema_provider = get_schema_provider()
+                logger.info("[NexoImportAgent] Schema provider initialized")
+            except Exception as e:
+                logger.warning(f"[NexoImportAgent] Schema provider unavailable: {e}")
+        return self._schema_provider
+
+    def _get_schema_validator(self):
+        """
+        Get or create SchemaValidator instance (lazy initialization).
+        """
+        if self._schema_validator is None:
+            try:
+                from tools.schema_validator import get_schema_validator
+                self._schema_validator = get_schema_validator(self._get_schema_provider())
+                logger.info("[NexoImportAgent] Schema validator initialized")
+            except Exception as e:
+                logger.warning(f"[NexoImportAgent] Schema validator unavailable: {e}")
+        return self._schema_validator
+
+    def _get_schema_context(self, target_table: str = "pending_entry_items") -> str:
+        """
+        Get PostgreSQL schema context for Gemini prompt injection.
+
+        This is the KEY method that enables schema-aware reasoning.
+        The schema context is injected into Gemini prompts so the AI
+        knows the exact target table structure.
+
+        Args:
+            target_table: Target PostgreSQL table
+
+        Returns:
+            Markdown-formatted schema documentation for prompt injection
+        """
+        provider = self._get_schema_provider()
+        if not provider:
+            return "⚠️ Schema não disponível - usando mapeamento genérico"
+
+        try:
+            schema_md = provider.get_schema_for_prompt(target_table)
+
+            # Add ENUMs section
+            enums = provider.get_all_enums()
+            if enums:
+                schema_md += "\n\n### ENUMs Válidos\n"
+                for enum_name, values in enums.items():
+                    schema_md += f"- **{enum_name}**: `{', '.join(values)}`\n"
+
+            # Add required columns
+            required = provider.get_required_columns(target_table)
+            if required:
+                schema_md += f"\n\n### Colunas Obrigatórias (NOT NULL)\n"
+                schema_md += f"`{', '.join(required)}`\n"
+
+            return schema_md
+
+        except Exception as e:
+            logger.warning(f"[NexoImportAgent] Failed to get schema context: {e}")
+            return f"⚠️ Erro ao obter schema: {str(e)}"
+
+    def _validate_mappings_against_schema(
+        self,
+        column_mappings: Dict[str, str],
+        target_table: str = "pending_entry_items",
+        sample_data: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Validate column mappings against PostgreSQL schema.
+
+        This is called BEFORE ACT phase to catch invalid mappings
+        before they hit the database.
+
+        Args:
+            column_mappings: Dict mapping file_column → target_column
+            target_table: Target PostgreSQL table
+            sample_data: Optional sample data for value validation
+
+        Returns:
+            Validation result with errors, warnings, and suggestions
+        """
+        validator = self._get_schema_validator()
+        if not validator:
+            return {
+                "is_valid": True,  # Permissive when validator unavailable
+                "errors": [],
+                "warnings": ["Schema validator não disponível - validação ignorada"],
+                "suggestions": [],
+            }
+
+        try:
+            result = validator.validate_mappings(
+                column_mappings=column_mappings,
+                target_table=target_table,
+                sample_data=sample_data,
+            )
+            return result.to_dict()
+
+        except Exception as e:
+            logger.warning(f"[NexoImportAgent] Validation failed: {e}")
+            return {
+                "is_valid": True,  # Permissive on error
+                "errors": [],
+                "warnings": [f"Validação falhou: {str(e)}"],
+                "suggestions": [],
+            }
 
     # =========================================================================
     # Session Helpers (In-Memory Only, No Persistence)
@@ -734,11 +864,40 @@ Com base em toda a análise acima, qual é o tipo de movimento?
         self,
         session: ImportSession,
         prior_knowledge: Optional[Dict[str, Any]] = None,
+        target_table: str = "pending_entry_items",
     ) -> str:
-        """Build the prompt for Gemini reasoning."""
+        """
+        Build the prompt for Gemini reasoning WITH SCHEMA CONTEXT.
+
+        This is the critical method that enables schema-aware AI reasoning.
+        The PostgreSQL schema is injected so Gemini knows EXACTLY which
+        columns exist in the target table.
+
+        Args:
+            session: Current import session
+            prior_knowledge: Previously learned patterns
+            target_table: Target PostgreSQL table (default: pending_entry_items)
+
+        Returns:
+            Prompt string with schema context
+        """
         analysis = session.file_analysis
 
+        # =================================================================
+        # CRITICAL: Get schema context FIRST
+        # =================================================================
+        schema_context = self._get_schema_context(target_table)
+
         prompt = f"""Analise este arquivo de importação e sugira mapeamentos de colunas.
+
+## ⚠️ REGRA CRÍTICA - SCHEMA POSTGRESQL
+
+Você DEVE mapear colunas APENAS para campos que existem na tabela destino.
+O schema abaixo é a FONTE DA VERDADE - NÃO invente campos que não existem.
+
+{schema_context}
+
+---
 
 ## Arquivo: {session.filename}
 
@@ -772,15 +931,41 @@ Com base em toda a análise acima, qual é o tipo de movimento?
             prompt += "\n## Conhecimento Prévio (de importações anteriores):\n"
             prompt += json.dumps(prior_knowledge, indent=2, ensure_ascii=False)
 
-        prompt += """
+        prompt += f"""
+
+## ⚠️ REGRAS DE MAPEAMENTO (OBRIGATÓRIO)
+
+1. **COLUNAS VÁLIDAS**: O campo `target_field` DEVE existir na tabela `sga.{target_table}` acima
+2. **ENUMS**: Para campos ENUM, use APENAS os valores listados no schema
+3. **OBRIGATÓRIOS**: Campos NOT NULL DEVEM ser mapeados (exceto auto-gerados como id, created_at)
+4. **TIPOS**: Respeite os tipos de dados (INTEGER para quantidade, VARCHAR para texto)
+5. **SE NÃO EXISTIR**: Se uma coluna do arquivo não corresponde a nenhum campo do schema, deixe `target_field: null`
 
 ## Sua Tarefa:
-1. Analise a estrutura e sugira mapeamentos para colunas não identificadas
+1. Analise a estrutura e sugira mapeamentos APENAS para campos que existem no schema
 2. Avalie a confiança geral dos mapeamentos
 3. Identifique se precisa de esclarecimentos do usuário
 4. Gere perguntas específicas se necessário
 
-Responda APENAS em JSON com a estrutura especificada no system prompt.
+## Formato de Resposta (JSON OBRIGATÓRIO)
+```json
+{{
+    "thoughts": ["Lista de pensamentos sobre a análise"],
+    "observations": ["Lista de observações sobre o arquivo"],
+    "confidence": 0.0 a 1.0,
+    "needs_clarification": true/false,
+    "questions": [{{"question": "...", "options": [...]}}],
+    "suggested_mappings": {{
+        "coluna_do_arquivo": "campo_do_schema_postgresql"
+    }},
+    "unmapped_columns": ["colunas que não correspondem a nenhum campo do schema"],
+    "validation_warnings": ["avisos sobre possíveis problemas"],
+    "recommendations": ["Lista de recomendações"],
+    "next_action": "descrição da próxima ação"
+}}
+```
+
+IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
 """
         return prompt
 
@@ -1185,22 +1370,77 @@ Responda APENAS em JSON com a estrutura especificada no system prompt.
     async def prepare_for_processing(
         self,
         session: ImportSession,
+        target_table: str = "pending_entry_items",
     ) -> Dict[str, Any]:
         """
         Prepare final configuration for import processing (ACT phase) - STATELESS.
 
-        Consolidates all learned mappings and user decisions into
-        a configuration ready for the ImportAgent to execute.
+        NOW WITH SCHEMA VALIDATION: Validates all mappings against PostgreSQL
+        schema before allowing import to proceed. This catches invalid columns
+        BEFORE they hit the database.
 
         Args:
             session: Import session (in-memory, from frontend state)
+            target_table: Target PostgreSQL table
 
         Returns:
             Processing configuration with updated session state
         """
         session.reasoning_trace.append(ReasoningStep(
-            step_type="conclusion",
+            step_type="thought",
             content="Preparando configuração final para processamento",
+        ))
+
+        # =================================================================
+        # CRITICAL: VALIDATE mappings against schema BEFORE processing
+        # =================================================================
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="action",
+            content=f"Validando mapeamentos contra schema sga.{target_table}...",
+            tool="schema_validator",
+        ))
+
+        validation_result = self._validate_mappings_against_schema(
+            column_mappings=session.learned_mappings,
+            target_table=target_table,
+        )
+
+        # Check for validation errors
+        if not validation_result.get("is_valid", True):
+            errors = validation_result.get("errors", [])
+            error_messages = [
+                e.get("message", str(e)) if isinstance(e, dict) else str(e)
+                for e in errors
+            ]
+
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="error",
+                content=f"❌ Validação falhou: {'; '.join(error_messages[:3])}",
+            ))
+
+            return {
+                "success": False,
+                "ready": False,
+                "error": "Mapeamentos inválidos contra schema PostgreSQL",
+                "validation_errors": errors,
+                "validation_warnings": validation_result.get("warnings", []),
+                "suggestions": validation_result.get("suggestions", []),
+                "session": session_to_dict(session),
+            }
+
+        # Log warnings and suggestions
+        warnings = validation_result.get("warnings", [])
+        if warnings:
+            for warn in warnings[:3]:
+                warn_msg = warn.get("message", str(warn)) if isinstance(warn, dict) else str(warn)
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="observation",
+                    content=f"⚠️ Aviso: {warn_msg}",
+                ))
+
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="conclusion",
+            content=f"✅ Validação OK - {validation_result.get('coverage_score', 0):.0f}% cobertura",
         ))
 
         # Build column mappings in expected format

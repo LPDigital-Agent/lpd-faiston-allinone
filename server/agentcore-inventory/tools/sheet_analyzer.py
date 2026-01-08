@@ -7,13 +7,21 @@
 # Philosophy: OBSERVE → THINK → ASK → LEARN → ACT
 # This tool handles the OBSERVE phase by deeply analyzing file structure.
 #
+# SCHEMA-AWARE: Now uses SchemaColumnMatcher for dynamic column matching
+# against PostgreSQL schema instead of hardcoded patterns.
+#
 # Module: Gestao de Ativos -> Gestao de Estoque -> Smart Import
+# Author: Faiston NEXO Team
+# Updated: January 2026 - Schema-aware matching
 # =============================================================================
 
 import io
+import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -96,10 +104,35 @@ class WorkbookAnalysis:
 
 # =============================================================================
 # Column Pattern Detection (OBSERVE phase)
+# Schema-aware matching using SchemaColumnMatcher
 # =============================================================================
 
 
-# Known column patterns for inventory management
+# Global matcher instance (lazy initialized)
+_schema_matcher = None
+
+
+def _get_schema_matcher():
+    """
+    Get or create the SchemaColumnMatcher instance (lazy initialization).
+
+    Uses lazy import to avoid cold start impact in AgentCore runtime.
+    Falls back to pattern-only matching if schema is unavailable.
+    """
+    global _schema_matcher
+    if _schema_matcher is None:
+        try:
+            from tools.schema_column_matcher import get_column_matcher
+            _schema_matcher = get_column_matcher()
+            logger.info("[SheetAnalyzer] Schema-aware matching enabled")
+        except Exception as e:
+            logger.warning(f"[SheetAnalyzer] Schema matcher unavailable: {e}")
+            _schema_matcher = None
+    return _schema_matcher
+
+
+# Legacy COLUMN_PATTERNS kept as fallback when schema is unavailable
+# These patterns are now also in schema_column_matcher.py BUILTIN_ALIASES
 COLUMN_PATTERNS: Dict[str, List[str]] = {
     "part_number": [
         "pn", "codigo", "material", "part_number", "partnumber",
@@ -113,29 +146,29 @@ COLUMN_PATTERNS: Dict[str, List[str]] = {
     "quantity": [
         "qty", "quantidade", "qtd", "quant", "quantity", "qtde"
     ],
-    "serial": [
+    "serial_number": [
         "serial", "sn", "serie", "serial_number", "numero_serie",
         "ns", "n_serie"
     ],
-    "location": [
+    "location_code": [
         "loc", "local", "deposito", "location", "warehouse",
         "armazem", "almoxarifado", "destino"
     ],
-    "project": [
+    "project_code": [
         "projeto", "project", "proj", "id_projeto", "cod_projeto",
         "project_id", "obra"
     ],
-    "supplier": [
+    "supplier_name": [
         "fornecedor", "supplier", "vendor", "fabricante", "manufacturer"
     ],
-    "unit_cost": [
+    "unit_value": [
         "custo", "cost", "preco", "valor", "unit_cost", "custo_unitario",
         "preco_unitario", "value"
     ],
     "ncm": [
         "ncm", "ncm_code", "codigo_ncm"
     ],
-    "date": [
+    "movement_date": [
         "data", "date", "dt", "data_entrada", "data_saida", "created_at"
     ],
     "status": [
@@ -181,16 +214,35 @@ def normalize_column_name(name: str) -> str:
     return result.strip("_")
 
 
-def detect_column_mapping(column_name: str) -> Tuple[Optional[str], float]:
+def detect_column_mapping(
+    column_name: str,
+    target_table: str = "pending_entry_items",
+) -> Tuple[Optional[str], float]:
     """
-    Detect which target field a column maps to.
+    Detect which target field a column maps to using schema-aware matching.
+
+    Algorithm (priority order):
+    1. Use SchemaColumnMatcher (schema + aliases + fuzzy) if available
+    2. Fallback to legacy COLUMN_PATTERNS if schema unavailable
 
     Args:
         column_name: Original column name
+        target_table: Target PostgreSQL table (default: pending_entry_items)
 
     Returns:
         Tuple of (target_field or None, confidence)
     """
+    # Try schema-aware matching first
+    matcher = _get_schema_matcher()
+    if matcher:
+        target, confidence = matcher.match_column(column_name, target_table)
+        if target:
+            logger.debug(
+                f"[SheetAnalyzer] Schema match: {column_name} → {target} ({confidence:.2f})"
+            )
+            return target, confidence
+
+    # Fallback to legacy pattern matching
     normalized = normalize_column_name(column_name)
 
     for target_field, patterns in COLUMN_PATTERNS.items():
@@ -205,6 +257,34 @@ def detect_column_mapping(column_name: str) -> Tuple[Optional[str], float]:
                 return target_field, 0.75
 
     return None, 0.0
+
+
+def detect_column_mapping_with_schema(
+    column_name: str,
+    target_table: str,
+    schema_provider=None,
+) -> Tuple[Optional[str], float]:
+    """
+    Schema-aware column mapping detection (explicit schema injection).
+
+    Use this when you have a SchemaProvider instance and want to ensure
+    schema awareness without relying on global state.
+
+    Args:
+        column_name: Original column name
+        target_table: Target PostgreSQL table
+        schema_provider: SchemaProvider instance (optional)
+
+    Returns:
+        Tuple of (target_field or None, confidence)
+    """
+    try:
+        from tools.schema_column_matcher import SchemaColumnMatcher
+        matcher = SchemaColumnMatcher(schema_provider)
+        return matcher.match_column(column_name, target_table)
+    except Exception as e:
+        logger.warning(f"[SheetAnalyzer] Schema match failed: {e}")
+        return detect_column_mapping(column_name, target_table)
 
 
 def detect_data_type(values: List[Any]) -> str:

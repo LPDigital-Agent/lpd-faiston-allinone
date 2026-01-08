@@ -846,3 +846,277 @@ class SGAPostgresClient:
         }
 
         return results
+
+    # =========================================================================
+    # Schema Introspection Methods (for Schema-Aware NEXO Import)
+    # =========================================================================
+
+    def get_table_columns(self, table_name: str, schema_name: str = "sga") -> List[Dict]:
+        """
+        Get column metadata for a table from information_schema.
+
+        Used by NEXO agents to understand target table structure
+        before analyzing import files.
+
+        Args:
+            table_name: Name of the table (e.g., "pending_entry_items")
+            schema_name: Schema name (default: "sga")
+
+        Returns:
+            List of column metadata dictionaries with:
+            - name: Column name
+            - data_type: PostgreSQL data type
+            - character_maximum_length: Max length for VARCHAR
+            - is_nullable: YES/NO
+            - column_default: Default value
+            - udt_name: User-defined type name (for ENUMs)
+            - is_primary_key: Boolean
+            - ordinal_position: Column order
+        """
+        query = """
+            SELECT
+                c.column_name as name,
+                c.data_type,
+                c.character_maximum_length,
+                c.is_nullable,
+                c.column_default,
+                c.udt_name,
+                c.ordinal_position,
+                CASE
+                    WHEN pk.column_name IS NOT NULL THEN TRUE
+                    ELSE FALSE
+                END as is_primary_key
+            FROM information_schema.columns c
+            LEFT JOIN (
+                SELECT kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                    AND tc.table_schema = kcu.table_schema
+                WHERE tc.constraint_type = 'PRIMARY KEY'
+                    AND tc.table_schema = %s
+                    AND tc.table_name = %s
+            ) pk ON c.column_name = pk.column_name
+            WHERE c.table_schema = %s AND c.table_name = %s
+            ORDER BY c.ordinal_position
+        """
+        try:
+            results = self._execute_query(
+                query,
+                (schema_name, table_name, schema_name, table_name)
+            )
+            logger.info(f"Retrieved {len(results)} columns for {schema_name}.{table_name}")
+            return results
+        except Exception as e:
+            logger.error(f"Failed to get table columns: {e}")
+            return []
+
+    def get_enum_values(self, enum_name: str) -> List[str]:
+        """
+        Get valid values for a PostgreSQL ENUM type.
+
+        Used by NEXO agents to validate movement_type, asset_status, etc.
+
+        Args:
+            enum_name: Name of the ENUM type (e.g., "movement_type")
+
+        Returns:
+            List of valid enum values in sort order
+        """
+        query = """
+            SELECT enumlabel as value
+            FROM pg_catalog.pg_enum e
+            JOIN pg_catalog.pg_type t ON e.enumtypid = t.oid
+            WHERE t.typname = %s
+            ORDER BY e.enumsortorder
+        """
+        try:
+            results = self._execute_query(query, (enum_name,))
+            values = [r["value"] for r in results]
+            logger.info(f"Retrieved {len(values)} values for ENUM {enum_name}")
+            return values
+        except Exception as e:
+            logger.error(f"Failed to get enum values: {e}")
+            return []
+
+    def get_foreign_keys(self, table_name: str, schema_name: str = "sga") -> List[Dict]:
+        """
+        Get foreign key constraints for a table.
+
+        Used by NEXO agents to understand FK relationships
+        and validate references during import.
+
+        Args:
+            table_name: Name of the table
+            schema_name: Schema name (default: "sga")
+
+        Returns:
+            List of FK constraint dictionaries with:
+            - constraint_name: Name of the constraint
+            - column_name: Column in this table
+            - foreign_table_schema: Schema of referenced table
+            - foreign_table_name: Referenced table name
+            - foreign_column_name: Referenced column name
+        """
+        query = """
+            SELECT
+                tc.constraint_name,
+                kcu.column_name,
+                ccu.table_schema as foreign_table_schema,
+                ccu.table_name as foreign_table_name,
+                ccu.column_name as foreign_column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage ccu
+                ON ccu.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND tc.table_schema = %s
+                AND tc.table_name = %s
+        """
+        try:
+            results = self._execute_query(query, (schema_name, table_name))
+            logger.info(f"Retrieved {len(results)} FK constraints for {schema_name}.{table_name}")
+            return results
+        except Exception as e:
+            logger.error(f"Failed to get foreign keys: {e}")
+            return []
+
+    def get_schema_metadata(self) -> Dict[str, Any]:
+        """
+        Get complete schema metadata for all SGA import-related tables.
+
+        This method is optimized to retrieve all necessary schema info
+        in a single call, minimizing database round trips.
+
+        Used by SchemaProvider for caching schema knowledge.
+
+        Returns:
+            Dictionary with:
+            - tables: Dict[table_name, List[column_info]]
+            - enums: Dict[enum_name, List[values]]
+            - foreign_keys: Dict[table_name, List[fk_info]]
+            - timestamp: ISO timestamp of retrieval
+        """
+        # Import target tables (relevant for NEXO import)
+        import_tables = [
+            "part_numbers",
+            "locations",
+            "projects",
+            "assets",
+            "movements",
+            "movement_items",
+            "pending_entries",
+            "pending_entry_items",
+            "balances",
+            "reservations",
+        ]
+
+        # Known ENUMs in schema
+        enum_types = [
+            "movement_type",
+            "asset_status",
+            "entry_source",
+            "task_status",
+            "priority",
+        ]
+
+        tables = {}
+        foreign_keys = {}
+        enums = {}
+
+        # Get all table columns
+        for table in import_tables:
+            columns = self.get_table_columns(table)
+            if columns:
+                tables[table] = columns
+
+            fks = self.get_foreign_keys(table)
+            if fks:
+                foreign_keys[table] = fks
+
+        # Get all enum values
+        for enum_name in enum_types:
+            values = self.get_enum_values(enum_name)
+            if values:
+                enums[enum_name] = values
+
+        # Get required columns (NOT NULL without default)
+        required_columns = {}
+        for table_name, columns in tables.items():
+            required = [
+                col["name"]
+                for col in columns
+                if col["is_nullable"] == "NO"
+                and col["column_default"] is None
+                and not col["is_primary_key"]  # PKs are auto-generated
+            ]
+            if required:
+                required_columns[table_name] = required
+
+        return {
+            "tables": tables,
+            "enums": enums,
+            "foreign_keys": foreign_keys,
+            "required_columns": required_columns,
+            "table_list": list(tables.keys()),
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    def list_tables(self, schema_name: str = "sga") -> List[str]:
+        """
+        List all tables in a schema.
+
+        Args:
+            schema_name: Schema name (default: "sga")
+
+        Returns:
+            List of table names
+        """
+        query = """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = %s
+                AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+        """
+        try:
+            results = self._execute_query(query, (schema_name,))
+            return [r["table_name"] for r in results]
+        except Exception as e:
+            logger.error(f"Failed to list tables: {e}")
+            return []
+
+    def validate_column_exists(
+        self,
+        table_name: str,
+        column_name: str,
+        schema_name: str = "sga"
+    ) -> bool:
+        """
+        Check if a column exists in a table.
+
+        Used by SchemaValidator to verify column mappings.
+
+        Args:
+            table_name: Table name
+            column_name: Column name to check
+            schema_name: Schema name (default: "sga")
+
+        Returns:
+            True if column exists, False otherwise
+        """
+        query = """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = %s
+                AND table_name = %s
+                AND column_name = %s
+        """
+        try:
+            results = self._execute_query(query, (schema_name, table_name, column_name))
+            return len(results) > 0
+        except Exception as e:
+            logger.error(f"Failed to validate column: {e}")
+            return False

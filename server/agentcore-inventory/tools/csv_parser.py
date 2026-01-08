@@ -3,13 +3,22 @@
 # =============================================================================
 # Parses CSV and Excel files for bulk import.
 # Auto-detects delimiters and maps columns to expected fields.
+#
+# SCHEMA-AWARE: Now uses SchemaColumnMatcher for dynamic column matching
+# against PostgreSQL schema instead of hardcoded patterns.
+#
+# Author: Faiston NEXO Team
+# Updated: January 2026 - Schema-aware matching
 # =============================================================================
 
 import csv
 import io
+import logging
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -52,20 +61,114 @@ class ImportPreview:
     validation_summary: Dict[str, int]
 
 
-# Expected column names and their aliases
+# =============================================================================
+# Schema-Aware Column Matching
+# =============================================================================
+
+
+# Global schema matcher instance (lazy initialized)
+_schema_matcher = None
+_schema_provider = None
+
+
+def _get_schema_matcher():
+    """
+    Get or create the SchemaColumnMatcher instance (lazy initialization).
+
+    Uses lazy import to avoid cold start impact in AgentCore runtime.
+    """
+    global _schema_matcher
+    if _schema_matcher is None:
+        try:
+            from tools.schema_column_matcher import get_column_matcher
+            _schema_matcher = get_column_matcher()
+            logger.info("[CSVParser] Schema-aware matching enabled")
+        except Exception as e:
+            logger.warning(f"[CSVParser] Schema matcher unavailable: {e}")
+    return _schema_matcher
+
+
+def _get_schema_provider():
+    """
+    Get or create the SchemaProvider instance (lazy initialization).
+    """
+    global _schema_provider
+    if _schema_provider is None:
+        try:
+            from tools.schema_provider import get_schema_provider
+            _schema_provider = get_schema_provider()
+            logger.info("[CSVParser] Schema provider enabled")
+        except Exception as e:
+            logger.warning(f"[CSVParser] Schema provider unavailable: {e}")
+    return _schema_provider
+
+
+def get_expected_columns(target_table: str = "pending_entry_items") -> Dict[str, List[str]]:
+    """
+    Get expected columns from schema with aliases.
+
+    Args:
+        target_table: Target PostgreSQL table
+
+    Returns:
+        Dictionary of target_field → list of aliases
+    """
+    # Try schema-aware approach first
+    provider = _get_schema_provider()
+    if provider:
+        try:
+            schema = provider.get_table_schema(target_table)
+            if schema:
+                # Return column names from schema
+                # Note: aliases come from SchemaColumnMatcher, not here
+                columns = {}
+                for col in schema.columns:
+                    columns[col.name] = [col.name]
+                return columns
+        except Exception as e:
+            logger.warning(f"[CSVParser] Failed to get schema columns: {e}")
+
+    # Fallback to legacy patterns
+    return EXPECTED_COLUMNS
+
+
+def get_required_fields(target_table: str = "pending_entry_items") -> List[str]:
+    """
+    Get required fields from schema.
+
+    Args:
+        target_table: Target PostgreSQL table
+
+    Returns:
+        List of required field names
+    """
+    # Try schema-aware approach first
+    provider = _get_schema_provider()
+    if provider:
+        try:
+            return provider.get_required_columns(target_table)
+        except Exception as e:
+            logger.warning(f"[CSVParser] Failed to get required columns: {e}")
+
+    # Fallback to legacy
+    return REQUIRED_FIELDS
+
+
+# Legacy expected columns (fallback when schema unavailable)
+# Column names updated to match PostgreSQL schema
 EXPECTED_COLUMNS: Dict[str, List[str]] = {
     "part_number": ["pn", "codigo", "material", "part_number", "partnumber", "cod_material", "codigo_material"],
     "description": ["desc", "descricao", "nome", "description", "nome_material", "desc_material"],
     "quantity": ["qty", "quantidade", "qtd", "quant", "quantity"],
-    "serial": ["serial", "sn", "serie", "serial_number", "numero_serie"],
-    "location": ["loc", "local", "deposito", "location", "warehouse", "armazem"],
-    "project": ["projeto", "project", "proj", "id_projeto"],
-    "supplier_code": ["cod_fornecedor", "supplier_code", "cod_forn", "fornecedor_cod"],
-    "unit_cost": ["custo", "cost", "preco", "valor", "unit_cost", "custo_unitario"],
+    "serial_number": ["serial", "sn", "serie", "serial_number", "numero_serie"],
+    "location_code": ["loc", "local", "deposito", "location", "warehouse", "armazem"],
+    "project_code": ["projeto", "project", "proj", "id_projeto"],
+    "supplier_name": ["cod_fornecedor", "supplier_code", "cod_forn", "fornecedor_cod", "fornecedor"],
+    "unit_value": ["custo", "cost", "preco", "valor", "unit_cost", "custo_unitario"],
     "ncm": ["ncm", "ncm_code", "codigo_ncm"],
 }
 
-# Required fields for a valid import
+# Legacy required fields (fallback when schema unavailable)
 REQUIRED_FIELDS = ["part_number", "quantity"]
 
 
@@ -131,16 +234,35 @@ def normalize_column_name(name: str) -> str:
     return result.strip("_")
 
 
-def map_column_to_field(column_name: str) -> Tuple[Optional[str], float]:
+def map_column_to_field(
+    column_name: str,
+    target_table: str = "pending_entry_items",
+) -> Tuple[Optional[str], float]:
     """
-    Map a column name to expected field.
+    Map a column name to expected field using schema-aware matching.
+
+    Algorithm (priority order):
+    1. Use SchemaColumnMatcher (schema + aliases + fuzzy) if available
+    2. Fallback to legacy EXPECTED_COLUMNS if schema unavailable
 
     Args:
         column_name: Original column name from file
+        target_table: Target PostgreSQL table (default: pending_entry_items)
 
     Returns:
         Tuple of (target_field or None, confidence)
     """
+    # Try schema-aware matching first
+    matcher = _get_schema_matcher()
+    if matcher:
+        target, confidence = matcher.match_column(column_name, target_table)
+        if target:
+            logger.debug(
+                f"[CSVParser] Schema match: {column_name} → {target} ({confidence:.2f})"
+            )
+            return target, confidence
+
+    # Fallback to legacy pattern matching
     normalized = normalize_column_name(column_name)
 
     for field, aliases in EXPECTED_COLUMNS.items():
