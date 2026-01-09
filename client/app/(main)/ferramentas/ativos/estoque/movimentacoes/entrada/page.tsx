@@ -241,8 +241,6 @@ export default function EntradaPage() {
               progress={smartProgress}
               error={smartError}
               detectedType={detectedType}
-              projects={projects}
-              locations={locations}
             />
           ) : (
             <SmartPreview

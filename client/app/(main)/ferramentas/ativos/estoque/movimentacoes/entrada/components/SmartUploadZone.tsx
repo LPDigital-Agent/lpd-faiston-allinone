@@ -31,13 +31,9 @@ import {
   FileType,
   AlertTriangle,
   RefreshCw,
-  MapPin,
-  Briefcase,
-  Clock,
   Sparkles,
   Brain,
 } from 'lucide-react';
-import type { SGAProject, SGALocation } from '@/lib/ativos/types';
 import type {
   SmartFileType,
   SmartImportProgress,
@@ -55,11 +51,7 @@ interface SmartUploadZoneProps {
   error: string | null;
   detectedType: SmartFileType | null;
 
-  // Master data
-  projects: SGAProject[];
-  locations: SGALocation[];
-
-  // Actions - projectId and locationId are optional (can be set in preview after analysis)
+  // Actions - projectId and locationId are always null (determined by NEXO analysis)
   onFileSelect: (file: File, projectId: string | null, locationId: string | null) => Promise<void>;
 }
 
@@ -125,14 +117,10 @@ export function SmartUploadZone({
   progress,
   error,
   detectedType,
-  projects,
-  locations,
   onFileSelect,
 }: SmartUploadZoneProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewType, setPreviewType] = useState<SmartFileType | null>(null);
-  const [selectedProject, setSelectedProject] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
 
   // Handle file selection
@@ -171,13 +159,12 @@ export function SmartUploadZone({
     }
   };
 
-  // Handle upload - Project and Location are optional
-  // They can be detected from file or set in preview
+  // Handle upload - Project and Location determined by NEXO analysis
   const handleUpload = async () => {
     if (!selectedFile) return;
 
     try {
-      await onFileSelect(selectedFile, selectedProject || null, selectedLocation || null);
+      await onFileSelect(selectedFile, null, null);
     } catch {
       // Error handled by hook
     }
@@ -204,61 +191,6 @@ export function SmartUploadZone({
 
       <GlassCardContent>
         <div className="space-y-6">
-          {/* Project and Location Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-text-primary mb-2 block">
-                <Briefcase className="w-4 h-4 inline mr-2" />
-                Projeto <span className="text-text-muted font-normal">(opcional)</span>
-              </label>
-              <select
-                className="w-full px-3 py-2 bg-white/5 border border-border rounded-md text-sm text-text-primary"
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                disabled={isProcessing}
-              >
-                <option value="">Sem projeto (atribuir depois)...</option>
-                {projects.filter(p => p.is_active).map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.code} - {project.name}
-                  </option>
-                ))}
-              </select>
-              {!selectedProject && (
-                <p className="text-xs text-orange-400 mt-1">
-                  <Clock className="w-3 h-3 inline mr-1" />
-                  Entrada ficara aguardando atribuicao de projeto
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-text-primary mb-2 block">
-                <MapPin className="w-4 h-4 inline mr-2" />
-                Local de Destino <span className="text-text-muted font-normal">(opcional)</span>
-              </label>
-              <select
-                className="w-full px-3 py-2 bg-white/5 border border-border rounded-md text-sm text-text-primary"
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-                disabled={isProcessing}
-              >
-                <option value="">Detectar do arquivo ou definir depois...</option>
-                {locations.filter(l => l.is_active && l.type === 'WAREHOUSE').map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.code} - {location.name}
-                  </option>
-                ))}
-              </select>
-              {!selectedLocation && (
-                <p className="text-xs text-blue-400 mt-1">
-                  <Brain className="w-3 h-3 inline mr-1" />
-                  Sistema tentara detectar do arquivo ou perguntar apos analise
-                </p>
-              )}
-            </div>
-          </div>
-
           {/* Drop Zone */}
           <div
             className={`
