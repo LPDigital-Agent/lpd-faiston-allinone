@@ -106,6 +106,8 @@ class ImportSession:
     requested_new_columns: List[RequestedNewColumn] = field(default_factory=list)
     confidence: Optional[ConfidenceScore] = None
     error: Optional[str] = None
+    # FIX (January 2026): Track user for audit trail in schema evolution
+    user_id: Optional[str] = None
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 
@@ -456,6 +458,8 @@ class NexoImportAgent(BaseInventoryAgent):
                 for col in state.get("requested_new_columns", [])
             ],
             error=state.get("error"),
+            # FIX (January 2026): Restore user_id for audit trail in schema evolution
+            user_id=state.get("user_id"),
             created_at=state.get("created_at", now_iso()),
             updated_at=now_iso(),
         )

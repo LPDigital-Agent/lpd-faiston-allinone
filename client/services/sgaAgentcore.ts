@@ -1185,6 +1185,8 @@ export interface NexoSessionState {
     requires_hil: boolean;
   } | null;
   error?: string | null;
+  // FIX (January 2026): Track user for audit trail in schema evolution
+  user_id?: string;
   created_at: string;
   updated_at: string;
 }
