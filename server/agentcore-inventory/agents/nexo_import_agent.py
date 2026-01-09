@@ -1794,9 +1794,15 @@ IMPORTANTE:
             from agents.learning_agent import LearningAgent
 
             learning_agent = LearningAgent()
+            # Pass parameters matching create_episode() signature
             episode_result = await learning_agent.create_episode(
-                import_data=episode_data,
                 user_id=user_id,
+                filename=session.filename,
+                file_analysis=session.file_analysis or {},
+                column_mappings=session.learned_mappings,
+                user_corrections=user_corrections or {},
+                import_result=import_result,
+                target_table="pending_entry_items",
             )
 
             episode_stored = episode_result.get("success", False)

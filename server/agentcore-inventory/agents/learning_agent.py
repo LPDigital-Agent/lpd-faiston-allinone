@@ -195,11 +195,12 @@ class LearningAgent(BaseInventoryAgent):
         """
         try:
             # Check if we have memory configuration
-            if not self.MEMORY_ID or self.MEMORY_ID == "faiston-sga-import-memory":
+            # Note: Default value "faiston-sga-import-memory" is VALID and should be used
+            if not self.MEMORY_ID:
                 log_agent_action(
                     self.name, "init_memory",
                     status="skipped",
-                    details={"reason": "No AGENTCORE_MEMORY_ID configured"},
+                    details={"reason": "AGENTCORE_MEMORY_ID is empty"},
                 )
                 return
 
