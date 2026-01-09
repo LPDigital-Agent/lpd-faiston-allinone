@@ -2257,7 +2257,7 @@ IMPORTANTE:
     async def get_prior_knowledge(
         self,
         filename: str,
-        file_analysis: Dict[str, Any],
+        file_analysis: Optional[Dict[str, Any]] = None,
         user_id: str = "anonymous",
     ) -> Dict[str, Any]:
         """
@@ -2266,9 +2266,13 @@ IMPORTANTE:
         Queries LearningAgent for similar past imports to provide
         context and suggested mappings before AI reasoning.
 
+        NOTE: file_analysis is OPTIONAL. When not provided (e.g., before
+        file has been analyzed), we match by filename pattern alone.
+        Full signature matching happens after analysis.
+
         Args:
             filename: Name of file being imported
-            file_analysis: Initial file analysis
+            file_analysis: Initial file analysis (optional - can be None)
             user_id: User performing import
 
         Returns:
@@ -2286,12 +2290,18 @@ IMPORTANTE:
 
             learning_agent = LearningAgent()
 
+            # Handle case where file_analysis is not yet available
+            # (frontend calls this before analysis is complete)
+            if file_analysis is None:
+                file_analysis = {}  # Use empty dict for safe .get() calls
+
             # Build context for retrieval
+            # Note: Can match by filename pattern alone if no analysis available
             context = {
                 "filename": filename,
                 "filename_pattern": self._extract_filename_pattern(filename),
                 "file_type": self._detect_file_type(filename),
-                "file_signature": self._compute_file_signature(file_analysis),
+                "file_signature": self._compute_file_signature(file_analysis) if file_analysis else "",
                 "sheet_count": file_analysis.get("sheet_count", 1),
                 "columns": [
                     col.get("name", "")

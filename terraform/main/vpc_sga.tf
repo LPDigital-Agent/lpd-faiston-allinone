@@ -231,8 +231,13 @@ resource "aws_vpc_endpoint" "sga_s3" {
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
 
-  # Associate with Lambda route table so Lambda can reach S3
-  route_table_ids = [aws_route_table.sga_lambda.id]
+  # Associate with Lambda and Database route tables
+  # Lambda: For schema file downloads during import
+  # Database: For Aurora S3 imports/exports (if needed)
+  route_table_ids = [
+    aws_route_table.sga_lambda.id,
+    aws_route_table.sga_database.id
+  ]
 
   tags = {
     Name        = "${local.name_prefix}-sga-s3-endpoint"

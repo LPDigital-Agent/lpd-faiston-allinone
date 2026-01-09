@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Feature flag: Use MCP Gateway for schema queries (required when running in AgentCore)
-USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "false").lower() == "true"
+USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "true").lower() == "true"
 
 
 # =============================================================================

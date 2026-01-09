@@ -46,7 +46,7 @@ from typing import Optional
 # - AGENTCORE_GATEWAY_ID: Gateway ID (alternative to full URL)
 # =============================================================================
 
-USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "false").lower() == "true"
+USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "true").lower() == "true"
 AGENTCORE_GATEWAY_URL = os.environ.get("AGENTCORE_GATEWAY_URL", "")
 AGENTCORE_GATEWAY_ID = os.environ.get("AGENTCORE_GATEWAY_ID", "")
 
@@ -3041,20 +3041,22 @@ async def _nexo_get_prior_knowledge(payload: dict, user_id: str) -> dict:
         - reflections: Cross-session insights
     """
     filename = payload.get("filename", "")
-    file_analysis = payload.get("file_analysis", {})
+    # NOTE: file_analysis is OPTIONAL - we can match by filename pattern alone
+    # for initial recall. Full signature matching happens after analysis.
+    file_analysis = payload.get("file_analysis")  # Can be None
 
     if not filename:
         return {"success": False, "error": "filename is required"}
 
-    if not file_analysis:
-        return {"success": False, "error": "file_analysis is required"}
-
+    # file_analysis is OPTIONAL - LearningAgent can match by filename pattern alone
+    # This fixes the bug where prior knowledge was never retrieved because
+    # file_analysis isn't available when frontend calls this before analysis
     from agents.nexo_import_agent import NexoImportAgent
 
     agent = NexoImportAgent()
     result = await agent.get_prior_knowledge(
         filename=filename,
-        file_analysis=file_analysis,
+        file_analysis=file_analysis,  # Can be None - agent handles this
         user_id=user_id,
     )
 
