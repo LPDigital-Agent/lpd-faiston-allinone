@@ -73,9 +73,10 @@ ls -la
 
 | Runtime                | Agents     | Purpose                   |
 | ---------------------- | ---------- | ------------------------- |
-| `agentcore-inventory`  | 15 agents  | SGA - Gestão de Estoque   |
-| `agentcore-academy`    | 11 agents  | Hive Academy - Learning   |
+| `agentcore-inventory`  | 14 agents  | SGA - Gestão de Estoque   |
 | `agentcore-portal`     | 3 agents   | NEXO Orchestrator         |
+
+> **Note:** `agentcore-academy` was removed (agents consolidated into portal).
 
 ### Minimal Tree (2 levels max)
 

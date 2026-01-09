@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.ai/code`) when working in this repository.
+This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.ai/code`) when working in this repository. 
+
+To be used on web research we are in year 2026.
 
 > **MEMORY ARCHITECTURE (CRITICAL):**  
 > This root `CLAUDE.md` contains **ONLY essential global rules**.  
@@ -305,6 +307,154 @@ This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.a
 - ARCHITECTURE DOCUMENTATION (MANDATORY): Maintain a documentation file that describes the application architecture end-to-end (how it works inside and out). Keep it updated when architecture changes.
 
 - NO SPECULATION / READ BEFORE ANSWERING (MANDATORY): Never speculate about code you have not opened. If a specific file is referenced, you MUST read it before answering. Investigate and read relevant files BEFORE making any claim. Provide grounded, hallucination-free answers; if uncertain, say so and read more before proceeding.
+
+---
+
+## 📦 SGA MODULE ARCHITECTURE — IMMUTABLE & MANDATORY
+
+> **Sistema de Gestão de Ativos (SGA)** is the reference architecture for ALL new modules.
+
+- **MANDATORY READING BEFORE ANY SGA WORK:**
+  You MUST read and follow the official architecture document:
+  - `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
+
+- **SGA ARCHITECTURAL PATTERNS (MANDATORY):**
+  All SGA implementations MUST follow these patterns:
+
+  1. **Context Provider Hierarchy:**
+     ```
+     QueryClientProvider → AssetManagementProvider → InventoryOperationsProvider
+       → TaskInboxProvider → NexoEstoqueProvider → InventoryCountProvider → OfflineSyncProvider
+     ```
+     - Reference: `client/app/(main)/ferramentas/ativos/layout.tsx`
+
+  2. **Hook Organization:**
+     - Data fetching hooks: `useAssets`, `useMovements`, `useLocations`, `usePartNumbers`, `useProjects`
+     - Operation hooks: `useMovementMutations`, `useMovementValidation`
+     - Import hooks: `useSmartImporter`, `useNFReader`, `useBulkImport`
+     - Reference: `client/hooks/ativos/`
+
+  3. **Service Layer Pattern:**
+     - All backend calls via `sgaAgentcore.ts` service
+     - JWT Bearer token auth with AgentCore Gateway
+     - Session management with sessionStorage
+     - Reference: `client/services/sgaAgentcore.ts`
+
+  4. **Smart Import Architecture:**
+     - File type detection via magic bytes (`file_detector.py`)
+     - Route to appropriate agent: IntakeAgent (NF), ImportAgent (spreadsheet)
+     - Confidence-based HIL routing (≥80% = autonomous, <80% = HIL review)
+     - Reference: `client/hooks/ativos/useSmartImporter.ts`
+
+  5. **NEXO AI Copilot Pattern:**
+     - Frosted glass FAB with sliding panel (Apple TV style)
+     - Quick actions (7 predefined queries)
+     - KB integration with citations
+     - Reference: `client/components/ferramentas/ativos/estoque/nexo/`
+
+  6. **Offline-First (PWA):**
+     - Queue-based sync with localStorage persistence
+     - Auto-retry with exponential backoff (max 3 retries)
+     - Reference: `client/contexts/ativos/OfflineSyncContext.tsx`
+
+- **KEY FILE REFERENCES:**
+  - **Types**: `client/lib/ativos/types.ts`
+  - **Constants**: `client/lib/ativos/constants.ts`
+  - **Smart Import Types**: `client/lib/ativos/smartImportTypes.ts`
+  - **Backend Main**: `server/agentcore-inventory/main.py`
+  - **Backend Agents**: `server/agentcore-inventory/agents/`
+
+- **ENFORCEMENT:**
+  If you implement SGA features without following this architecture, you MUST **STOP IMMEDIATELY** and **CONSULT THE ARCHITECTURE DOC**.
+
+---
+
+## 🧠 CONTEXT ENGINEERING — IMMUTABLE & MANDATORY (Best Practices 2025-2026)
+
+> Based on [Anthropic's Context Engineering Guide](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) and [Claude Code Best Practices](https://www.anthropic.com/engineering/claude-code-best-practices).
+
+- **TOKEN EFFICIENCY (MANDATORY):**
+  - Context is a **FINITE RESOURCE** — every token competes for attention
+  - Prefer **pointers to copies**: Use `file:line` references, not code snippets
+  - Use **progressive disclosure**: Load context just-in-time, not upfront
+  - If context exceeds **60% capacity** → `/compact` or `/clear` + `/prime`
+
+- **INSTRUCTION LIMITS (MANDATORY):**
+  - LLMs can follow **~150-200 instructions** with reasonable consistency
+  - This `CLAUDE.md` already contains ~50+ instructions
+  - **DO NOT** add task-specific instructions here
+  - **DO** add task-specific guidance in `docs/` and reference with `@docs/filename.md`
+
+- **STRUCTURE PRINCIPLE (MANDATORY):**
+  - Follow **WHAT** (tech stack, structure) / **WHY** (purpose) / **HOW** (process) model
+  - Use clear section headers (`## SECTION_NAME`)
+  - Separate instructions from context
+
+- **TOOL DELEGATION (MANDATORY):**
+  - **NEVER** send an LLM to do a linter's job → Use Biome, ESLint, ruff
+  - Use `/check` skill for lint + build + test validation
+  - Reserve AI for reasoning tasks, not mechanical validation
+
+- **UNCERTAINTY HANDLING (MANDATORY):**
+  - **EXPRESS UNCERTAINTY** rather than guessing → reduces hallucinations
+  - If unsure → **READ MORE FILES** before proceeding
+  - If still unsure → **ASK THE USER**
+
+- **COMPACTION STRATEGY (MANDATORY):**
+  - When nearing context limits, summarize and restart
+  - Preserve: architectural decisions, unresolved issues
+  - Discard: redundant tool outputs, verbose logs
+  - Use structured notes (`NOTES.md`, `TODO.md`) for long tasks
+
+- **SUB-AGENT ARCHITECTURE (MANDATORY):**
+  - Use specialized agents for focused tasks
+  - Return **condensed summaries** (1,000-2,000 tokens) to parent agent
+  - Reference: Available SubAgents in Claude Code Skills
+
+---
+
+## 📚 PROGRESSIVE DISCLOSURE — IMMUTABLE & MANDATORY
+
+> Module-specific details MUST live in subdirectory docs, not in root CLAUDE.md.
+
+- **ARCHITECTURE DOCS (Reference as needed):**
+  - SGA Module: `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
+  - AgentCore Implementation: `docs/AgentCore/IMPLEMENTATION_GUIDE.md`
+  - Frontend Auth: `docs/FRONTEND_AUTH.md`
+  - Agent Design: `docs/agents/ADK_AGENTCORE_ARCHITECT.md`
+
+- **PRD DOCS (Reference for requirements):**
+  - SGA Estoque PRD: `docs/prd_modulo_gestao_estoque_faiston_sga2.md`
+  - Inventory Management: `docs/Faiston_Investory_Mamagement.md`
+
+- **SETUP DOCS (Reference for configuration):**
+  - Equipment KB Setup: `docs/SGA_EQUIPMENT_KB_SETUP.md`
+
+- **USAGE PATTERN:**
+  - Before implementing a feature → `@docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
+  - Before AgentCore work → `@docs/AgentCore/IMPLEMENTATION_GUIDE.md`
+  - When unsure about patterns → Read the relevant doc **FIRST**
+
+---
+
+## 🔄 FLYWHEEL IMPROVEMENT — IMMUTABLE & MANDATORY
+
+> Treat CLAUDE.md as a living document that improves over time.
+
+- **DATA-DRIVEN UPDATES:**
+  - Review logs for common mistakes → Update CLAUDE.md
+  - Pattern: **Bugs → Improved CLAUDE.md / Skills → Better Agent**
+
+- **ADDING NEW RULES:**
+  1. Identify recurring mistake or pattern
+  2. Propose rule addition with justification
+  3. Add to appropriate section (NOT root if module-specific)
+  4. Test rule effectiveness over 3+ sessions
+
+- **FORBIDDEN:**
+  - Adding rules without observed need
+  - Adding code snippets (use file:line references instead)
+  - Adding task-specific instructions to root CLAUDE.md
 
 ---
 <!-- ===================================================== -->

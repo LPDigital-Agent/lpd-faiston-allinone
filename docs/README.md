@@ -128,9 +128,8 @@ lpd-faiston-allinone/
 │   ├── lib/               # Utilities
 │   └── services/          # API clients (AgentCore)
 ├── server/                 # Python backend
-│   ├── agentcore-academy/ # Academy agents (19 actions)
 │   ├── agentcore-inventory/ # SGA agents (30+ actions, 14 agents, 18 tools)
-│   └── agentcore-portal/  # Portal NEXO agents
+│   └── agentcore-portal/  # Portal NEXO agents (includes Academy features)
 ├── terraform/             # AWS Infrastructure as Code
 │   └── main/              # All AWS resources
 ├── docs/                  # Documentation (this folder)
@@ -208,9 +207,8 @@ This platform follows security-first development practices:
 |----------|---------|---------|
 | `terraform.yml` | Push to `terraform/**` | Infrastructure deployment |
 | `deploy-frontend.yml` | Push to `client/**` | Frontend to S3/CloudFront |
-| `deploy-agentcore-academy.yml` | Push/Manual | Academy agents |
 | `deploy-agentcore-inventory.yml` | Push/Manual | SGA agents |
-| `deploy-agentcore-portal.yml` | Push/Manual | Portal NEXO agents |
+| `deploy-agentcore-portal.yml` | Push/Manual | Portal NEXO agents (includes Academy) |
 | `deploy-sga-postgres-lambda.yml` | Push/Manual | PostgreSQL MCP tools Lambda (11 tools) |
 | `migrate-sga-schema.yml` | Manual | Apply PostgreSQL schema via Lambda bridge |
 | `update-sga-gateway-target.yml` | Manual | Update MCP Gateway Target tool definitions |
