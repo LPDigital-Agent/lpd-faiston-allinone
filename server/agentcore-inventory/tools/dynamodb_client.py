@@ -14,7 +14,7 @@
 # =============================================================================
 
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 # Lazy imports - boto3 imported only when needed
@@ -67,6 +67,11 @@ def _get_hil_table() -> str:
 def _get_audit_table() -> str:
     """Get audit log table name from environment."""
     return os.environ.get("AUDIT_LOG_TABLE", "faiston-one-sga-audit-log-prod")
+
+
+def _get_sessions_table() -> str:
+    """Get sessions table name from environment."""
+    return os.environ.get("SESSIONS_TABLE", "faiston-one-sga-sessions-prod")
 
 
 # =============================================================================
@@ -1072,3 +1077,168 @@ class SGAAuditLogger:
             details=details,
             session_id=session_id,
         )
+
+
+# =============================================================================
+# Session Manager
+# =============================================================================
+
+
+class SGASessionManager:
+    """
+    Session manager for SGA Inventory agent sessions.
+
+    Manages session persistence in DynamoDB with:
+    - Session creation and updates
+    - Turn counting
+    - TTL-based expiration (30 days)
+    - GSI queries for agent type and status filtering
+
+    Example:
+        manager = SGASessionManager()
+        manager.ensure_session_exists("user123", "session456", "query_inventory")
+        session = manager.get_session("user123", "session456")
+    """
+
+    def __init__(self):
+        """Initialize the session manager."""
+        self._table_name = _get_sessions_table()
+        self._table = None
+
+    @property
+    def table(self):
+        """Lazy-load DynamoDB table resource."""
+        if self._table is None:
+            self._table = _get_dynamodb_resource().Table(self._table_name)
+        return self._table
+
+    def ensure_session_exists(
+        self,
+        user_id: str,
+        session_id: str,
+        action: str,
+        agent_type: str = "inventory",
+    ) -> bool:
+        """
+        Create or update session record in DynamoDB.
+
+        If session exists, updates lastActiveAt, lastAction, and increments turnCount.
+        If session does not exist, creates a new session record.
+
+        Args:
+            user_id: User identifier
+            session_id: Session identifier
+            action: Current action being performed
+            agent_type: Type of agent (default: "inventory")
+
+        Returns:
+            True if successful, False otherwise
+        """
+        from botocore.exceptions import ClientError
+
+        now = datetime.utcnow().isoformat() + "Z"
+        expires_at = int((datetime.utcnow() + timedelta(days=30)).timestamp())
+
+        try:
+            # Try to update existing session
+            self.table.update_item(
+                Key={"PK": f"USER#{user_id}", "SK": f"SESSION#{session_id}"},
+                UpdateExpression="SET lastActiveAt = :now, lastAction = :action, turnCount = turnCount + :inc, expiresAt = :exp",
+                ExpressionAttributeValues={
+                    ":now": now,
+                    ":action": action,
+                    ":inc": 1,
+                    ":exp": expires_at
+                },
+                ConditionExpression="attribute_exists(PK)"
+            )
+            return True
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                # Create new session
+                try:
+                    self.table.put_item(Item={
+                        "PK": f"USER#{user_id}",
+                        "SK": f"SESSION#{session_id}",
+                        "session_id": session_id,
+                        "user_id": user_id,
+                        "agent_type": agent_type,
+                        "createdAt": now,
+                        "lastActiveAt": now,
+                        "lastAction": action,
+                        "turnCount": 1,
+                        "status": "ACTIVE",
+                        "expiresAt": expires_at,
+                        # GSI keys
+                        "GSI1PK": f"AGENT#{agent_type}",
+                        "GSI1SK": now,
+                        "GSI2PK": "STATUS#ACTIVE",
+                        "GSI2SK": now
+                    })
+                    return True
+                except Exception as put_error:
+                    print(f"[SessionManager] put_item error: {put_error}")
+                    return False
+            else:
+                print(f"[SessionManager] update_item error: {e}")
+                return False
+        except Exception as e:
+            print(f"[SessionManager] ensure_session_exists error: {e}")
+            return False
+
+    def get_session(
+        self,
+        user_id: str,
+        session_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve a session by user ID and session ID.
+
+        Args:
+            user_id: User identifier
+            session_id: Session identifier
+
+        Returns:
+            Session dict if found, None otherwise
+        """
+        try:
+            response = self.table.get_item(
+                Key={
+                    "PK": f"USER#{user_id}",
+                    "SK": f"SESSION#{session_id}"
+                }
+            )
+            return response.get("Item")
+        except Exception as e:
+            print(f"[SessionManager] get_session error: {e}")
+            return None
+
+    def list_user_sessions(
+        self,
+        user_id: str,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        List sessions for a user, sorted by most recent first.
+
+        Args:
+            user_id: User identifier
+            limit: Maximum sessions to return (default: 50)
+
+        Returns:
+            List of session dicts
+        """
+        try:
+            response = self.table.query(
+                KeyConditionExpression="PK = :pk AND begins_with(SK, :sk_prefix)",
+                ExpressionAttributeValues={
+                    ":pk": f"USER#{user_id}",
+                    ":sk_prefix": "SESSION#"
+                },
+                Limit=limit,
+                ScanIndexForward=False  # Most recent first
+            )
+            return response.get("Items", [])
+        except Exception as e:
+            print(f"[SessionManager] list_user_sessions error: {e}")
+            return []

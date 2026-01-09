@@ -229,7 +229,7 @@ resource "aws_iam_role_policy" "sga_agentcore_s3" {
 # =============================================================================
 # DynamoDB Access Policy
 # =============================================================================
-# Full access to all SGA tables (inventory, HIL tasks, audit log)
+# Full access to all SGA tables (inventory, HIL tasks, audit log, sessions)
 
 data "aws_iam_policy_document" "sga_agentcore_dynamodb" {
   # Main inventory table operations
@@ -288,6 +288,26 @@ data "aws_iam_policy_document" "sga_agentcore_dynamodb" {
     resources = [
       aws_dynamodb_table.sga_audit_log.arn,
       "${aws_dynamodb_table.sga_audit_log.arn}/index/*"
+    ]
+  }
+
+  # Sessions table operations
+  statement {
+    sid    = "DynamoDBSGASessionsAccess"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchGetItem",
+      "dynamodb:BatchWriteItem"
+    ]
+    resources = [
+      aws_dynamodb_table.sga_sessions.arn,
+      "${aws_dynamodb_table.sga_sessions.arn}/index/*"
     ]
   }
 

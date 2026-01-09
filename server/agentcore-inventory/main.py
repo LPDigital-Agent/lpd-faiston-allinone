@@ -140,6 +140,14 @@ def invoke(payload: dict, context) -> dict:
     # Debug logging to trace action routing
     print(f"[SGA Invoke] action={action}, user_id={user_id}, session_id={session_id}")
 
+    # Track session in DynamoDB (non-blocking)
+    try:
+        from tools.dynamodb_client import SGASessionManager
+        session_mgr = SGASessionManager()
+        session_mgr.ensure_session_exists(user_id, session_id, action, agent_type="inventory")
+    except Exception as e:
+        print(f"[Session] Warning: Failed to track session: {e}")
+
     # Route to appropriate handler
     try:
         # =================================================================
