@@ -309,6 +309,73 @@ class GatewayPostgresAdapter(DatabaseAdapter):
             arguments=arguments
         )
 
+    # =========================================================================
+    # Schema Evolution Methods (Dynamic Column Creation)
+    # =========================================================================
+
+    def create_column_safe(
+        self,
+        table_name: str,
+        column_name: str,
+        column_type: str,
+        requested_by: str,
+        original_csv_column: Optional[str] = None,
+        sample_values: Optional[List[str]] = None,
+        lock_timeout_ms: int = 5000,
+    ) -> Dict[str, Any]:
+        """
+        Create a new column in a database table with advisory locking.
+
+        This method is called by the Schema Evolution Agent (SEA) when
+        a user approves the creation of a new column during CSV import.
+
+        Calls: SGAPostgresTools___sga_create_column
+
+        Concurrency safety:
+        - Uses pg_advisory_xact_lock() in Lambda for transaction-scoped locking
+        - Double-checks column existence after acquiring lock
+        - Returns success if column already exists (race condition handled)
+
+        Args:
+            table_name: Target table (must be in allowed list)
+            column_name: Column name (will be sanitized)
+            column_type: PostgreSQL data type (must be in allowed list)
+            requested_by: User ID for audit trail
+            original_csv_column: Original column name from CSV
+            sample_values: Sample values (first 5, for debugging)
+            lock_timeout_ms: Lock acquisition timeout (default 5000ms)
+
+        Returns:
+            Dictionary with:
+            - success: bool
+            - created: bool (True if new column, False if already existed)
+            - column_name: sanitized column name
+            - column_type: validated column type
+            - reason: explanation string
+            - use_metadata_fallback: bool (True if should use JSONB)
+            - error: error type string (if failed)
+            - message: error message (if failed)
+        """
+        arguments = self._clean_none_values({
+            "table_name": table_name,
+            "column_name": column_name,
+            "column_type": column_type,
+            "requested_by": requested_by,
+            "original_csv_column": original_csv_column,
+            "sample_values": sample_values,
+            "lock_timeout_ms": lock_timeout_ms,
+        })
+
+        logger.info(
+            f"[SEA] create_column_safe: table={table_name}, "
+            f"column={column_name}, type={column_type}, user={requested_by}"
+        )
+
+        return self._client.call_tool(
+            tool_name=self._tool_name("sga_create_column"),
+            arguments=arguments
+        )
+
 
 class GatewayAdapterFactory:
     """

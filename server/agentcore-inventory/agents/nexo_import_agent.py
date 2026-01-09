@@ -1742,11 +1742,15 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         Handle user's answer to column creation question.
 
         Possible answers:
-        - "create:{column_name}" - Admin approved creating new column
-        - "custom_fields" - Store in JSONB custom_fields column
+        - "create:{column_name}:{column_type}" - Admin approved creating new column
+        - "metadata" - Store in JSONB metadata column
         - "map_existing" - User wants to map to existing column (generates follow-up)
         - "_ignore" - Ignore this column
         - Existing column name - Direct mapping to existing column
+
+        IMPORTANT: When user approves column creation, this method calls the
+        Schema Evolution Agent (SEA) via MCP Gateway to actually create the column
+        in PostgreSQL with advisory locking for concurrency safety.
 
         Args:
             session: Current import session
@@ -1761,28 +1765,77 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 break
 
         if answer.startswith("create:"):
-            # Admin approved column creation
-            column_name = answer.split(":", 1)[1]
+            # Admin approved column creation - call SEA to create via MCP
+            parts = answer.split(":", 2)
+            column_name = parts[1] if len(parts) > 1 else ""
+            column_type = parts[2] if len(parts) > 2 else "TEXT"
 
             session.reasoning_trace.append(ReasoningStep(
                 step_type="action",
-                content=f"Usuário aprovou criação do campo '{column_name}'",
+                content=f"Criando campo '{column_name}' ({column_type}) via Schema Evolution Agent",
+                tool="SchemaEvolutionAgent",
             ))
 
-            # Mark as approved (will be created during import execution)
-            if target_new_col:
-                target_new_col.approved = True
+            # Get sample values from RequestedNewColumn if available
+            sample_values = target_new_col.sample_values if target_new_col else None
 
-            # Mark mapping as pending creation
-            session.learned_mappings[file_column] = f"__create_column__:{column_name}"
+            # Lazy import SEA to minimize cold start impact
+            from agents.schema_evolution_agent import create_schema_evolution_agent
 
-        elif answer == "custom_fields":
-            # Store in JSONB custom_fields
+            sea = create_schema_evolution_agent()
+            result = await sea.create_column(
+                table_name="pending_entry_items",
+                column_name=column_name,
+                column_type=column_type,
+                requested_by=session.user_id or "unknown",
+                original_csv_column=file_column,
+                sample_values=sample_values,
+            )
+
+            if result.success:
+                if result.created:
+                    # New column was created successfully
+                    session.learned_mappings[file_column] = result.column_name
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="observation",
+                        content=(
+                            f"✅ Campo '{result.column_name}' criado com sucesso "
+                            f"({result.column_type})"
+                        ),
+                    ))
+                else:
+                    # Column already existed (race condition handled gracefully)
+                    session.learned_mappings[file_column] = result.column_name
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="observation",
+                        content=f"ℹ️ Campo '{result.column_name}' já existe, usando existente",
+                    ))
+
+                # Mark as approved regardless
+                if target_new_col:
+                    target_new_col.approved = True
+            else:
+                # Failed - use metadata fallback
+                session.learned_mappings[file_column] = "__metadata__"
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="observation",
+                    content=(
+                        f"⚠️ Criação falhou: {result.reason}. "
+                        f"Usando metadata JSONB como fallback."
+                    ),
+                ))
+                logger.warning(
+                    f"[NexoImportAgent] Column creation failed for '{column_name}': "
+                    f"{result.error} - {result.reason}"
+                )
+
+        elif answer == "metadata":
+            # Store in JSONB metadata column
             session.reasoning_trace.append(ReasoningStep(
                 step_type="observation",
-                content=f"Coluna '{file_column}' será armazenada em custom_fields (JSONB)",
+                content=f"Coluna '{file_column}' será armazenada em metadata (JSONB)",
             ))
-            session.learned_mappings[file_column] = "__custom_fields__"
+            session.learned_mappings[file_column] = "__metadata__"
 
         elif answer == "_ignore":
             # Ignore this column
@@ -2187,23 +2240,23 @@ IMPORTANTE:
                     # FIX (January 2026): Check if it's a FINAL decision or just a pending marker
                     mapping_value = session.learned_mappings[new_col.source_file_column]
                     # __new_column__: markers are PENDING, not final - still need approval!
-                    # Only skip if it's a real column, _ignore, __custom_fields__, or __create_column__
+                    # Only skip if it's a real column, _ignore, __metadata__, or __create_column__
                     if not mapping_value.startswith("__new_column__:"):
                         logger.debug(
                             f"[NexoImportAgent] Skipping column with final mapping: "
                             f"{new_col.source_file_column} → {mapping_value}"
                         )
-                        continue  # Already decided (ignored, custom_fields, or mapped)
+                        continue  # Already decided (ignored, metadata, or mapped)
 
                 # Build options for column creation question
                 options = [
                     {
-                        "value": f"create:{new_col.name}",
+                        "value": f"create:{new_col.name}:{new_col.inferred_type}",
                         "label": f"✅ Criar campo '{new_col.name}' ({new_col.inferred_type})",
                     },
                     {
-                        "value": "custom_fields",
-                        "label": "📦 Armazenar em campos personalizados (JSONB)",
+                        "value": "metadata",
+                        "label": "📦 Armazenar em metadata (JSONB)",
                     },
                     {
                         "value": "_ignore",

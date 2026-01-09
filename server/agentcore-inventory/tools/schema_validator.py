@@ -227,7 +227,8 @@ class SchemaValidator:
         # - "_ignore" → User explicitly chose to skip this column
         # - "__new_column__:xxx" → Pending column creation (needs HIL approval)
         # - "__create_column__:xxx" → Approved column creation (create during import)
-        # - "__custom_fields__" → Store in JSONB custom_fields column
+        # - "__custom_fields__" → Store in JSONB custom_fields column (legacy)
+        # - "__metadata__" → Store in JSONB metadata column (new schema evolution)
         # - "__ai_pending__:xxx" → Waiting for AI interpretation (should be resolved)
         pending_new_columns = []  # Track columns pending creation
 
@@ -273,7 +274,7 @@ class SchemaValidator:
                     )
                 continue
 
-            # Handle custom_fields JSONB storage
+            # Handle custom_fields JSONB storage (legacy)
             if target_col == "__custom_fields__":
                 if "custom_fields" in schema_columns:
                     column_mappings[file_col] = "custom_fields"
@@ -286,6 +287,30 @@ class SchemaValidator:
                         severity="warning",
                     ))
                     del column_mappings[file_col]
+                continue
+
+            # Handle metadata JSONB storage (new schema evolution pattern)
+            if target_col == "__metadata__":
+                if "metadata" in schema_columns:
+                    # Track that metadata column is being used
+                    # The import executor will aggregate all __metadata__ fields into
+                    # a single JSONB object in the metadata column
+                    mapped_schema_columns.add("metadata")
+                    # Store in validated_mappings with special marker for executor
+                    validated_mappings[file_col] = "__metadata__"
+                    logger.info(f"[SchemaValidator] Storing '{file_col}' in metadata JSONB")
+                else:
+                    warnings.append(ValidationIssue(
+                        field=file_col,
+                        issue_type="no_metadata_column",
+                        message=(
+                            f"Cannot store '{file_col}' in metadata - column doesn't exist. "
+                            f"Run migration 006_schema_evolution.sql to add it."
+                        ),
+                        severity="warning",
+                    ))
+                # Remove from column_mappings to skip normal column validation
+                del column_mappings[file_col]
                 continue
 
             # Handle unresolved AI pending markers - should have been resolved!

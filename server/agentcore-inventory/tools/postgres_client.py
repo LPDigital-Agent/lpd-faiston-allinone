@@ -18,9 +18,11 @@ Author: Faiston NEXO Team
 Date: January 2026
 """
 
+import hashlib
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 from datetime import datetime, date
 import boto3
@@ -1129,3 +1131,244 @@ class SGAPostgresClient:
         except Exception as e:
             logger.error(f"Failed to validate column: {e}")
             return False
+
+    # =========================================================================
+    # Schema Evolution Methods (Dynamic Column Creation)
+    # =========================================================================
+
+    # Whitelist of tables that allow dynamic column creation
+    ALLOWED_TABLES = frozenset({"pending_entry_items", "pending_entries"})
+
+    # Whitelist of allowed PostgreSQL types for dynamic columns
+    ALLOWED_TYPES = frozenset({
+        "TEXT", "VARCHAR(100)", "VARCHAR(255)", "VARCHAR(500)",
+        "INTEGER", "BIGINT", "NUMERIC(12,2)", "BOOLEAN",
+        "TIMESTAMPTZ", "DATE", "JSONB", "TEXT[]"
+    })
+
+    def _sanitize_identifier(self, name: str) -> str:
+        """
+        Sanitize a SQL identifier (table/column name) for safety.
+
+        - Lowercase
+        - Replace non-alphanumeric chars with underscore
+        - Remove consecutive underscores
+        - Ensure doesn't start with number
+        - Limit to 63 chars (PostgreSQL limit)
+        """
+        if not name:
+            return "unknown"
+
+        sanitized = name.lower().strip()
+        sanitized = re.sub(r'[^a-z0-9_]', '_', sanitized)
+        sanitized = re.sub(r'_+', '_', sanitized)
+        sanitized = sanitized.strip('_')
+
+        # Ensure doesn't start with number
+        if sanitized and sanitized[0].isdigit():
+            sanitized = f"col_{sanitized}"
+
+        return sanitized[:63] if sanitized else "unknown"
+
+    def _validate_column_type(self, column_type: str) -> str:
+        """
+        Validate and return a safe column type.
+
+        Returns TEXT if type not in whitelist.
+        """
+        if column_type in self.ALLOWED_TYPES:
+            return column_type
+        logger.warning(f"Column type '{column_type}' not in whitelist, using TEXT")
+        return "TEXT"
+
+    def create_column_safe(
+        self,
+        table_name: str,
+        column_name: str,
+        column_type: str,
+        requested_by: str,
+        original_csv_column: Optional[str] = None,
+        sample_values: Optional[List[str]] = None,
+        lock_timeout_ms: int = 5000,
+    ) -> Dict[str, Any]:
+        """
+        Create a new column with advisory locking for concurrency safety.
+
+        Uses pg_advisory_xact_lock() for transaction-scoped locking.
+        If lock cannot be acquired within timeout, returns fallback signal.
+
+        This method is called by the Schema Evolution Agent (SEA) via MCP.
+
+        Concurrency handling:
+        1. Acquire advisory lock based on table.column hash
+        2. Double-check column doesn't exist (race condition protection)
+        3. Execute DDL if column doesn't exist
+        4. Log to schema_evolution_log for audit
+        5. Release lock (automatic on transaction end)
+
+        Args:
+            table_name: Target table (must be in ALLOWED_TABLES)
+            column_name: Column name (will be sanitized)
+            column_type: PostgreSQL type (must be in ALLOWED_TYPES)
+            requested_by: User ID for audit trail
+            original_csv_column: Original column name from CSV
+            sample_values: Sample values (first 5, for debugging)
+            lock_timeout_ms: Lock acquisition timeout (default 5000ms)
+
+        Returns:
+            Dictionary with:
+            - success: bool
+            - created: bool (True if new column, False if already existed)
+            - column_name: sanitized column name
+            - column_type: validated column type
+            - reason: explanation string
+            - use_metadata_fallback: bool (True if should use JSONB)
+            - error: error type string (if failed)
+            - message: error message (if failed)
+        """
+        # Sanitize inputs
+        safe_table = self._sanitize_identifier(table_name)
+        safe_column = self._sanitize_identifier(column_name)
+        safe_type = self._validate_column_type(column_type)
+
+        # Validate table is in whitelist
+        if safe_table not in self.ALLOWED_TABLES:
+            logger.warning(f"Table '{safe_table}' not allowed for dynamic columns")
+            return {
+                "success": False,
+                "error": "table_not_allowed",
+                "message": f"Table '{safe_table}' not in allowed tables: {self.ALLOWED_TABLES}",
+                "use_metadata_fallback": True,
+            }
+
+        # Generate deterministic lock ID from table.column
+        lock_key = f"sga.{safe_table}.{safe_column}"
+        lock_id = int(hashlib.md5(lock_key.encode()).hexdigest()[:8], 16)
+
+        logger.info(
+            f"[SEA] Creating column '{safe_column}' ({safe_type}) in {safe_table} "
+            f"[lock_id={lock_id}, requested_by={requested_by}]"
+        )
+
+        conn = self._get_connection()
+        try:
+            with conn.cursor() as cur:
+                # Set lock timeout
+                cur.execute(f"SET LOCAL lock_timeout = '{lock_timeout_ms}ms'")
+
+                # Acquire transaction-scoped advisory lock
+                # This will wait up to lock_timeout_ms for the lock
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (lock_id,))
+
+                # Double-check column doesn't exist (race condition protection)
+                cur.execute("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'sga'
+                      AND table_name = %s
+                      AND column_name = %s
+                """, (safe_table, safe_column))
+
+                if cur.fetchone():
+                    # Column already exists (likely created by another user)
+                    logger.info(f"[SEA] Column '{safe_column}' already exists (race condition handled)")
+
+                    # Log as ALREADY_EXISTS
+                    cur.execute("""
+                        INSERT INTO sga.schema_evolution_log
+                        (table_name, column_name, column_type, requested_by, status,
+                         original_csv_column, completed_at)
+                        VALUES (%s, %s, %s, %s, 'ALREADY_EXISTS', %s, NOW())
+                    """, (safe_table, safe_column, safe_type, requested_by, original_csv_column))
+
+                    conn.commit()
+
+                    return {
+                        "success": True,
+                        "created": False,
+                        "reason": "already_exists",
+                        "column_name": safe_column,
+                        "column_type": safe_type,
+                        "use_metadata_fallback": False,
+                    }
+
+                # Execute DDL - Use double quotes for column name to preserve case
+                ddl = f'ALTER TABLE sga.{safe_table} ADD COLUMN "{safe_column}" {safe_type}'
+                cur.execute(ddl)
+
+                logger.info(f"[SEA] Column '{safe_column}' created successfully")
+
+                # Audit log - mark as CREATED
+                cur.execute("""
+                    INSERT INTO sga.schema_evolution_log
+                    (table_name, column_name, column_type, requested_by, status,
+                     original_csv_column, sample_values, completed_at)
+                    VALUES (%s, %s, %s, %s, 'CREATED', %s, %s, NOW())
+                """, (
+                    safe_table, safe_column, safe_type, requested_by,
+                    original_csv_column, sample_values
+                ))
+
+                # Also track in dynamic_columns table
+                cur.execute("""
+                    INSERT INTO sga.dynamic_columns
+                    (table_name, column_name, column_type, inferred_from, sample_values, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (table_name, column_name) DO UPDATE
+                    SET usage_count = sga.dynamic_columns.usage_count + 1,
+                        last_used_at = NOW()
+                """, (
+                    safe_table, safe_column, safe_type,
+                    original_csv_column, sample_values, requested_by
+                ))
+
+                conn.commit()
+
+                return {
+                    "success": True,
+                    "created": True,
+                    "column_name": safe_column,
+                    "column_type": safe_type,
+                    "reason": "created",
+                    "use_metadata_fallback": False,
+                }
+
+        except Exception as e:
+            conn.rollback()
+            error_msg = str(e)
+            logger.error(f"[SEA] Failed to create column '{safe_column}': {error_msg}")
+
+            # Log failure
+            try:
+                with conn.cursor() as cur2:
+                    cur2.execute("""
+                        INSERT INTO sga.schema_evolution_log
+                        (table_name, column_name, column_type, requested_by, status,
+                         original_csv_column, error_message, completed_at)
+                        VALUES (%s, %s, %s, %s, 'FAILED', %s, %s, NOW())
+                    """, (
+                        safe_table, safe_column, safe_type, requested_by,
+                        original_csv_column, error_msg
+                    ))
+                    conn.commit()
+            except Exception as log_err:
+                logger.error(f"[SEA] Failed to log failure: {log_err}")
+
+            # Check if it's a lock timeout (recommend metadata fallback)
+            if "lock timeout" in error_msg.lower() or "canceling statement" in error_msg.lower():
+                return {
+                    "success": False,
+                    "error": "lock_timeout",
+                    "message": "Another user is creating the same column. Use metadata fallback.",
+                    "use_metadata_fallback": True,
+                    "column_name": safe_column,
+                    "column_type": safe_type,
+                }
+
+            return {
+                "success": False,
+                "error": "ddl_failed",
+                "message": error_msg,
+                "use_metadata_fallback": True,
+                "column_name": safe_column,
+                "column_type": safe_type,
+            }

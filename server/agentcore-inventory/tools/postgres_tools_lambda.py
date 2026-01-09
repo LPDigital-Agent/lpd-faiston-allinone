@@ -102,6 +102,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             "sga_get_schema_metadata": handle_get_schema_metadata,
             "sga_get_table_columns": handle_get_table_columns,
             "sga_get_enum_values": handle_get_enum_values,
+            # Schema evolution (dynamic column creation)
+            "sga_create_column": handle_create_column,
         }
 
         if actual_tool not in handlers:
@@ -486,3 +488,92 @@ def handle_get_enum_values(arguments: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Failed to get enum values: {e}")
         return {"error": str(e)}
+
+
+# =============================================================================
+# Schema Evolution Handler (Dynamic Column Creation)
+# =============================================================================
+# This tool enables the Schema Evolution Agent (SEA) to dynamically create
+# new columns in PostgreSQL when users import CSV files with unknown fields.
+#
+# Security measures:
+# - Table whitelist (only pending_entry_items, pending_entries)
+# - Type whitelist (only safe PostgreSQL types)
+# - Column name sanitization (SQL injection prevention)
+# - Advisory locking (prevents race conditions)
+# - Audit logging (all changes logged to schema_evolution_log)
+# =============================================================================
+
+
+def handle_create_column(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a new column in a database table with advisory locking.
+
+    This tool is called by the Schema Evolution Agent (SEA) when a user
+    approves the creation of a new column during CSV import.
+
+    Concurrency safety:
+    - Uses pg_advisory_xact_lock() for transaction-scoped locking
+    - Double-checks column existence after acquiring lock
+    - Returns success if column already exists (race condition handled)
+
+    Args:
+        column_name: Name of the column to create (required)
+        table_name: Target table (default: "pending_entry_items")
+        column_type: PostgreSQL data type (default: "TEXT")
+        requested_by: User ID for audit trail
+        original_csv_column: Original column name from CSV
+        sample_values: Sample values for type inference debugging
+        lock_timeout_ms: Lock acquisition timeout (default: 5000ms)
+
+    Returns:
+        Dictionary with:
+        - success: bool
+        - created: bool (True if new column, False if already existed)
+        - column_name: sanitized column name
+        - column_type: validated column type
+        - reason: explanation string
+        - use_metadata_fallback: bool (True if should use JSONB)
+        - error: error type string (if failed)
+        - message: error message (if failed)
+    """
+    from postgres_client import SGAPostgresClient
+
+    client = SGAPostgresClient()
+
+    # Validate required field
+    column_name = arguments.get("column_name")
+    if not column_name:
+        return {
+            "success": False,
+            "error": "validation_failed",
+            "message": "column_name is required",
+            "use_metadata_fallback": True,
+        }
+
+    try:
+        result = client.create_column_safe(
+            table_name=arguments.get("table_name", "pending_entry_items"),
+            column_name=column_name,
+            column_type=arguments.get("column_type", "TEXT"),
+            requested_by=arguments.get("requested_by", "system"),
+            original_csv_column=arguments.get("original_csv_column"),
+            sample_values=arguments.get("sample_values"),
+            lock_timeout_ms=arguments.get("lock_timeout_ms", 5000),
+        )
+
+        logger.info(
+            f"[SEA] create_column result: success={result.get('success')}, "
+            f"created={result.get('created')}, column={result.get('column_name')}"
+        )
+
+        return result
+
+    except Exception as e:
+        logger.exception(f"[SEA] Failed to create column: {e}")
+        return {
+            "success": False,
+            "error": "unexpected_error",
+            "message": str(e),
+            "use_metadata_fallback": True,
+        }
