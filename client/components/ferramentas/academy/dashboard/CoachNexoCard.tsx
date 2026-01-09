@@ -40,13 +40,6 @@ export function CoachNexoCard({ message, xpPotential, onViewRecommendations }: C
               />
             )}
           </div>
-          {/* Online indicator */}
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring', stiffness: 500 }}
-            className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-[#151720]"
-          />
         </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--faiston-magenta-mid,#C31B8C)] to-[var(--faiston-blue-mid,#2226C0)] flex items-center justify-center">
