@@ -365,12 +365,12 @@ After all updates, generate summary:
 
 **Files Updated:**
 
-| File                        | Purpose                        |
-| --------------------------- | ------------------------------ |
+| File                        | Purpose                          |
+| --------------------------- | -------------------------------- |
 | `CLAUDE.md`                 | Global policies (non-negotiable) |
-| `.claude/commands/prime.md` | Context loading command        |
-| `docs/README.md`            | Documentation hub              |
-| MCP Memory                  | Knowledge graph entities       |
+| `.claude/commands/prime.md` | Context loading command          |
+| `docs/README.md`            | Documentation hub                |
+| MCP Memory                  | Knowledge graph entities         |
 
 **When to Use:**
 
