@@ -20,6 +20,7 @@ import {
   InventoryCountProvider,
   OfflineSyncProvider,
 } from "@/contexts/ativos";
+import { NexoAssistantFAB } from "@/components/ferramentas/ativos/NexoAssistantFAB";
 
 // Create a client instance (singleton for the module)
 const queryClient = new QueryClient({
@@ -60,6 +61,9 @@ export default function AssetManagementLayout({
             <NexoEstoqueProvider>
               <InventoryCountProvider>
                 <OfflineSyncProvider>
+                  {/* Nexo Assistant Floating Button */}
+                  <NexoAssistantFAB />
+
                   <div className="flex flex-col min-h-[calc(100vh-4rem-3rem)]">
                     {/* Module Header - Uses negative margin to extend to edges */}
                     <div className="-mx-6 -mt-6 border-b border-border bg-faiston-bg/80 backdrop-blur-sm sticky top-0 z-20">
