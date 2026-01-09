@@ -164,7 +164,8 @@ class LearningAgent(BaseInventoryAgent):
     """
 
     # Memory configuration
-    MEMORY_ID = os.environ.get("AGENTCORE_MEMORY_ID", "faiston-sga-import-memory")
+    # Memory ID from AWS AgentCore - use env var or fallback to provisioned memory
+    MEMORY_ID = os.environ.get("AGENTCORE_MEMORY_ID", "nexo_agent_mem-Z5uQr8CDGf")
     MEMORY_NAMESPACE_BASE = "/strategy/import"
 
     def __init__(self):

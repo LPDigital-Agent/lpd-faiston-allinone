@@ -37,7 +37,7 @@ agents:
       source_bucket: null
     memory:
       mode: STM_AND_LTM
-      memory_id: null
+      memory_id: nexo_agent_mem-Z5uQr8CDGf
       memory_arn: null
       memory_name: null
       event_expiry_days: 30
