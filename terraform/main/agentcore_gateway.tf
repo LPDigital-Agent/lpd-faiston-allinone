@@ -322,6 +322,7 @@ resource "aws_ssm_parameter" "sga_gateway_tools" {
   name        = "/${var.project_name}/sga/gateway/tools"
   description = "MCP tool definitions for SGA Gateway"
   type        = "String"
+  tier        = "Advanced"
   value       = jsonencode(local.sga_mcp_tools)
 
   tags = {
