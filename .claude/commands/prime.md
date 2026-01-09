@@ -1,7 +1,7 @@
 ---
 name: prime
 description: Prime Claude Code context (rules + product + code) after /clear
-allowed-tools: Read, Bash, Glob, Grep, mcp__memory__read_graph, mcp__memory__search_nodes
+allowed-tools: Read, Bash, Glob, Grep
 ---
 
 # Context Prime — Faiston NEXO
@@ -12,7 +12,7 @@ Purpose: After `/clear`, reload **rules**, **what is being built**, and **where 
 
 ## Phase 0: Hard Reset (MANDATORY)
 
-This command assumes `/clear` was just executed.  
+This command assumes `/clear` was just executed.
 If not, STOP and run `/clear` first.
 
 ---
@@ -23,98 +23,129 @@ If not, STOP and run `/clear` first.
 
 ```bash
 cat CLAUDE.md
+```
+
 Rules are NOT duplicated here.
 CLAUDE.md is the only source of truth for architecture, infra, security, and AI policies.
 
-Phase 2: Product Context (MANDATORY)
-Product Definition
-Product: Faiston NEXO
+---
 
-Type: AI-First, 100% Agentic Intranet Platform
+## Phase 2: Product Context (MANDATORY)
 
-AI Orchestrator: NEXO
+### Product Definition
 
-Phase: Phase 1 — Foundation
+| Field              | Value                                    |
+| ------------------ | ---------------------------------------- |
+| **Product**        | Faiston NEXO                             |
+| **Type**           | AI-First, 100% Agentic Intranet Platform |
+| **AI Orchestrator**| NEXO                                     |
+| **Phase**          | Phase 1 — Foundation                     |
 
-Load PRD (Preview Only)
-bash
-Copy code
+### Load PRD (Preview Only)
+
+```bash
 cat product-development/current-feature/PRD.md | head -120
+```
+
 If deeper requirements are needed, open the PRD fully on demand.
 
-Phase 3: Codebase Orientation (MANDATORY)
-High-Level Repository Map (NO DUMPS)
-bash
-Copy code
+---
+
+## Phase 3: Codebase Orientation (MANDATORY)
+
+### High-Level Repository Map (NO DUMPS)
+
+```bash
 ls -la
-Key areas:
+```
 
-client/ → Next.js frontend
+**Key areas:**
 
-server/ → Google ADK + Bedrock AgentCore agents
+| Directory      | Purpose                                  |
+| -------------- | ---------------------------------------- |
+| `client/`      | Next.js 15 frontend (App Router)         |
+| `server/`      | Google ADK + Bedrock AgentCore agents    |
+| `terraform/`   | ALL AWS infrastructure (Terraform only)  |
+| `docs/`        | Documentation                            |
+| `.claude/`     | Claude Code commands and skills          |
 
-terraform/ → ALL AWS infrastructure (Terraform only)
+### AgentCore Runtimes
 
-docs/ → Documentation
+| Runtime                | Agents     | Purpose                   |
+| ---------------------- | ---------- | ------------------------- |
+| `agentcore-inventory`  | 15 agents  | SGA - Gestão de Estoque   |
+| `agentcore-academy`    | 11 agents  | Hive Academy - Learning   |
+| `agentcore-portal`     | 3 agents   | NEXO Orchestrator         |
 
-.claude/ → Claude Code commands and skills
+### Minimal Tree (2 levels max)
 
-Minimal Tree (2 levels max)
-bash
-Copy code
+```bash
 tree -L 2 -I 'node_modules|dist|.git|.next' . | head -40
-Phase 4: Current Work Context (MANDATORY)
-bash
-Copy code
+```
+
+---
+
+## Phase 4: Current Work Context (MANDATORY)
+
+```bash
 git branch --show-current
 git status --short
 git log --oneline -5
+```
+
 This defines what is currently in progress.
 
-Phase 5: Architecture Snapshot (CONCEPTUAL)
-text
-Copy code
+---
+
+## Phase 5: Architecture Snapshot (CONCEPTUAL)
+
+```text
 Frontend (Next.js 15)
   └── AWS Cognito + Microsoft Entra
         └── AWS Bedrock AgentCore
               ├── Runtime (Google ADK agents)
               ├── Memory (STM + LTM)
               └── Gateway (MCP tools)
-Detailed diagrams live in docs/architecture/.
+```
 
-Phase 6: Optional Memory (ON DEMAND)
-Use MCP memory ONLY if required by the task:
+Detailed diagrams live in `docs/architecture/`.
 
-mcp__memory__search_nodes
+---
 
-mcp__memory__read_graph
+## Phase 6: Optional Memory (ON DEMAND)
+
+Use AgentCore Memory resources ONLY if required by the task.
+
+**Memory IDs (Provisioned in AWS):**
+
+- `nexo_agent_mem-Z5uQr8CDGf` — NEXO Smart Import episodic memory
+- `hive_academy_mem-*` — Academy learning memory
 
 Do NOT preload memory unnecessarily.
 
-Phase 7: Prime Complete (MANDATORY NEXT STEP)
+---
+
+## Phase 7: Prime Complete (MANDATORY NEXT STEP)
+
 Before writing any code:
 
-Restate the key constraints from CLAUDE.md
+1. Restate the key constraints from CLAUDE.md
+2. State what you are about to build or change
+3. Create a PLAN
+4. Only then implement
 
-State what you are about to build or change
+---
 
-Create a PLAN
+## PRIME AUDIT RULE (MANDATORY)
 
-Only then implement
+`/prime` MUST stay lightweight.
 
-PRIME AUDIT RULE (MANDATORY)
-/prime MUST stay lightweight.
+**NOT allowed here:**
 
-NOT allowed here:
+- Large file lists
+- Sprint logs
+- Changelogs
+- Component inventories
+- Full architecture documents
 
-Large file lists
-
-Sprint logs
-
-Changelogs
-
-Component inventories
-
-Full architecture documents
-
-If more detail is needed → open the specific document or module CLAUDE.md.
+If more detail is needed → open the specific document or module `CLAUDE.md`.

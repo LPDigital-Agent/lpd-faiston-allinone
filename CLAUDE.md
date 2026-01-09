@@ -204,6 +204,49 @@ This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.a
 ---
 - CLAUDE.md HYGIENE (MANDATORY): Root `CLAUDE.md` is GLOBAL POLICIES ONLY. Routes/components/endpoints/known-issues MUST go to `docs/` or module `CLAUDE.md` files. Do NOT bloat root memory.
 
+---
+
+## 🧠 AGENTCORE MEMORY MODEL — IMMUTABLE & MANDATORY
+
+- **CLARIFICATION (MANDATORY):** Agents in this system run on **AWS Bedrock AgentCore**, **NOT** on traditional AWS Lambda microservices.
+  - AgentCore provides its **OWN MANAGED MEMORY SYSTEM**.
+  - Agents MUST use **AgentCore Memory** and its defined lifecycle, strategies, and APIs.
+
+- **FORBIDDEN:**  
+  - Treating agents as stateless Lambdas  
+  - Implementing custom memory outside AgentCore without explicit approval  
+  - Bypassing or re-implementing AgentCore memory mechanisms
+
+- **MANDATORY MEMORY USAGE:**  
+  All agents MUST follow the **AgentCore Memory model**, including:
+  - Session Memory
+  - Short-Term Memory (STM)
+  - Long-Term Memory (LTM)
+  - Retrieval-Augmented Generation (RAG) where applicable
+  - Built-in or approved custom memory strategies
+
+- **SOURCE OF TRUTH (MANDATORY READING):**  
+  You MUST consult and follow the official AWS Bedrock AgentCore Memory documentation:
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-terminology.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-types.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-strategies.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/built-in-strategies.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-custom-strategy.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-self-managed-strategies.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-organization.html
+  - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory-ltm-rag.html
+
+- **REFERENCE MATERIAL (OPTIONAL BUT RECOMMENDED):**
+  - https://www.aboutamazon.com/news/aws/aws-amazon-bedrock-agent-core-ai-agents
+  - https://aws.amazon.com/blogs/machine-learning/amazon-bedrock-agentcore-memory-building-context-aware-agents/
+  - https://strandsagents.com/latest/documentation/docs/community/session-managers/agentcore-memory/
+  - https://www.youtube.com/watch?v=-N4v6-kJgwA
+  - https://levelup.gitconnected.com/bedrock-agentcore-part2-memory-raw-database-vector-store-some-eventbridge-ish-logics-594aad0389c0
+
+- **ENFORCEMENT:**  
+  If you design, implement, or describe agent memory outside the AgentCore memory model, you MUST **STOP IMMEDIATELY** and **ASK FOR EXPLICIT APPROVAL**.
+
 <!-- ===================================================== -->
 <!-- 🔒 END OF IMMUTABLE BLOCK                             -->
 <!-- ===================================================== -->
