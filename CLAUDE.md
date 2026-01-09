@@ -357,12 +357,20 @@ To be used on web research we are in year 2026.
      - Auto-retry with exponential backoff (max 3 retries)
      - Reference: `client/contexts/ativos/OfflineSyncContext.tsx`
 
+  7. **Schema Evolution Pattern:**
+     - Dynamic column creation via Schema Evolution Agent (SEA)
+     - ALL schema changes via MCP Gateway (never direct DB connections)
+     - JSONB `metadata` column fallback when column creation fails
+     - Advisory locking (`pg_advisory_xact_lock`) for concurrent modifications
+     - Reference: `server/agentcore-inventory/agents/schema_evolution_agent.py`
+
 - **KEY FILE REFERENCES:**
   - **Types**: `client/lib/ativos/types.ts`
   - **Constants**: `client/lib/ativos/constants.ts`
   - **Smart Import Types**: `client/lib/ativos/smartImportTypes.ts`
   - **Backend Main**: `server/agentcore-inventory/main.py`
   - **Backend Agents**: `server/agentcore-inventory/agents/`
+  - **DB Migrations**: `server/agentcore-inventory/schema/` (numbered: `001_*.sql`, `002_*.sql`, ...)
 
 - **ENFORCEMENT:**
   If you implement SGA features without following this architecture, you MUST **STOP IMMEDIATELY** and **CONSULT THE ARCHITECTURE DOC**.
