@@ -18,6 +18,9 @@ This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.a
 
 ---
 
+- REAL STATE OVER DOCUMENTATION (MANDATORY): You MUST base your understanding and decisions on the **actual codebase, IaC, and real AWS resources that exist today**, not on documentation that may be outdated or incomplete. Always verify against the source of truth (code, Terraform state, deployed AWS resources). If documentation and reality diverge, **reality wins**. Validate before proposing or implementing any change.
+
+---
 ## 🧠 FAISTON ONE — MANDATORY CONTEXT
 
 - **FAISTON ONE** is a **100% AUTONOMOUS** and **GENERATIVE** AI agent system.
@@ -149,7 +152,20 @@ This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.a
   Any assumption otherwise is **WRONG** and MUST be fixed.
 
 ---
+- CONTEXT FIRST (MANDATORY): First think through the problem and read the codebase (relevant files) before proposing or implementing a solution.
 
+- MAJOR CHANGES REQUIRE APPROVAL (MANDATORY): Before making any major change (architecture, refactor, broad behavior change), you MUST check in with me and get explicit approval of the plan.
+
+- HIGH-LEVEL CHANGE SUMMARY (MANDATORY): At every step, provide a short high-level explanation of what you changed and why (no long essays).
+
+- SIMPLICITY FIRST (MANDATORY): Keep every task and code change as simple as possible. Avoid massive or complex changes. Each change should impact as little code as possible.
+
+- ARCHITECTURE DOCUMENTATION (MANDATORY): Maintain a documentation file that describes the application architecture end-to-end (how it works inside and out). Keep it updated when architecture changes.
+
+- NO SPECULATION / READ BEFORE ANSWERING (MANDATORY): Never speculate about code you have not opened. If a specific file is referenced, you MUST read it before answering. Investigate and read relevant files BEFORE making any claim. Provide grounded, hallucination-free answers; if uncertain, say so and read more before proceeding.
+
+
+---
 ## 🚨 AGENTCORE COLD START LIMIT — CRITICAL
 
 - Cold start limit: **30 seconds**
