@@ -11,7 +11,7 @@ Claude Code custom agent specialized in designing, building, and deploying AI ag
 3. [Core Expertise](#core-expertise)
 4. [Capabilities](#capabilities)
 5. [Methodology](#methodology)
-6. [Hive Academy Project Rules](#hive-academy-project-rules)
+6. [Faiston NEXO Project Rules](#faiston-nexo-project-rules)
 7. [Usage Example](#usage-example)
 8. [Related Documentation](#related-documentation)
 
@@ -23,11 +23,11 @@ The `adk-agentcore-architect` agent is an elite AI Agent Architect with deep exp
 
 | Technology | Purpose |
 |------------|---------|
-| **Google ADK** | Framework for building AI agents (SashaAgent, FlashcardsAgent, etc.) |
+| **Google ADK** | Framework for building AI agents (NEXOAgent, EstoqueControlAgent, etc.) |
 | **A2A Protocol** | Agent-to-Agent communication patterns |
 | **AWS Bedrock AgentCore** | AWS runtime environment where agents execute |
 
-The Hive Academy project uses a sophisticated architecture that combines these technologies:
+The Faiston NEXO platform uses a sophisticated architecture that combines these technologies:
 
 ```
 Frontend (React SPA)
@@ -54,7 +54,7 @@ This agent understands the entire stack and can provide guidance on any layer.
 | Scenario | Example |
 |----------|---------|
 | Create new agent | "I need to create an agent to help students with math problems" |
-| A2A communication | "How do I make SashaAgent call FlashcardsAgent?" |
+| A2A communication | "How do I make NEXOAgent call EstoqueControlAgent?" |
 | Debug deployment | "My agent doesn't respond after deploying to AgentCore" |
 | Add RAG capabilities | "I want to add document search to ReflectionAgent" |
 | Switch LLM model | "How do I change from Gemini to Claude on Bedrock?" |
@@ -70,7 +70,7 @@ The agent possesses specialized knowledge in the following areas:
 
 ### Why This Specialization Exists
 
-Hive Academy uses a complex AI agent architecture that requires knowledge across multiple domains:
+Faiston NEXO uses a complex AI agent architecture that requires knowledge across multiple domains:
 
 1. **Google ADK** for agent structure and behavior
 2. **AWS Bedrock AgentCore** for runtime execution on AWS
@@ -79,15 +79,15 @@ Hive Academy uses a complex AI agent architecture that requires knowledge across
 
 The agent knows how to navigate this stack and consults updated documentation via MCP tools before responding.
 
-### Existing Agents in Hive Academy
+### Existing Agents in Faiston NEXO
 
 | Agent | Purpose | File |
 |-------|---------|------|
-| SashaAgent | RAG-based tutoring chat | `server/agentcore/agents/sasha_agent.py` |
-| FlashcardsAgent | Study card generation | `server/agentcore/agents/flashcards_agent.py` |
-| MindMapAgent | Concept visualization | `server/agentcore/agents/mindmap_agent.py` |
-| ReflectionAgent | Learning analysis | `server/agentcore/agents/reflection_agent.py` |
-| AudioClassAgent | Audio lessons + TTS | `server/agentcore/agents/audioclass_agent.py` |
+| EstoqueControlAgent | Inventory orchestration | `server/agentcore-inventory/agents/estoque_control_agent.py` |
+| IntakeAgent | NF-e XML intake | `server/agentcore-inventory/agents/intake_agent.py` |
+| ImportAgent | Spreadsheet import | `server/agentcore-inventory/agents/import_agent.py` |
+| NexoImportAgent | NEXO smart import | `server/agentcore-inventory/agents/nexo_import_agent.py` |
+| NewsAgent | Portal news | `server/agentcore-portal/agents/news_agent.py` |
 
 ---
 
@@ -160,9 +160,9 @@ The agent always:
 
 ---
 
-## Hive Academy Project Rules
+## Faiston NEXO Project Rules
 
-The agent is pre-configured with Hive Academy policies:
+The agent is pre-configured with Faiston NEXO policies:
 
 ### Infrastructure Rules
 
@@ -177,9 +177,9 @@ The agent is pre-configured with Hive Academy policies:
 
 | Setting | Value |
 |---------|-------|
-| App Auth | Simple mock authentication (FastAPI backend) |
+| App Auth | Amazon Cognito (faiston-users-prod) |
 | AgentCore Auth | Cognito JWT tokens |
-| Demo Credentials | `demo@hive.academy` / `Password123` |
+| AWS Account | `377311924364` (us-east-2) |
 | Amplify | NEVER use AWS Amplify |
 
 ### Deployment Workflow
@@ -264,25 +264,24 @@ Agents are deployed via: `.github/workflows/deploy-agentcore.yml`
 
 ## Related Documentation
 
-### Hive Academy Docs
+### Faiston NEXO Docs
 
 | Document | Purpose |
 |----------|---------|
 | [AgentCore/IMPLEMENTATION_GUIDE.md](../AgentCore/IMPLEMENTATION_GUIDE.md) | Complete AgentCore implementation reference |
+| [architecture/SGA_ESTOQUE_ARCHITECTURE.md](../architecture/SGA_ESTOQUE_ARCHITECTURE.md) | SGA Inventory module architecture |
 | [INFRASTRUCTURE.md](../INFRASTRUCTURE.md) | AWS infrastructure and Terraform configuration |
-| [FLASHCARDS_BACKEND.md](../FLASHCARDS_BACKEND.md) | Example agent implementation |
-| [AUDIOCLASS_FEATURE.md](../AUDIOCLASS_FEATURE.md) | Agent with TTS integration |
-| [MINDMAP_FEATURE.md](../MINDMAP_FEATURE.md) | Agent with structured output |
+| [TROUBLESHOOTING.md](../TROUBLESHOOTING.md) | Common issues and solutions |
 
 ### Key Source Files
 
 | File | Purpose |
 |------|---------|
-| `server/agentcore/main.py` | BedrockAgentCoreApp entrypoint |
-| `server/agentcore/agents/base.py` | GoogleADKAgentBase with LiteLLM |
-| `client/services/agentcore.ts` | Frontend AgentCore client |
-| `client/services/cognito.ts` | Cognito JWT token acquisition |
-| `.github/workflows/deploy-agentcore.yml` | Deployment workflow |
+| `server/agentcore-inventory/main.py` | SGA Inventory AgentCore entrypoint |
+| `server/agentcore-portal/main.py` | Portal AgentCore entrypoint |
+| `client/services/sgaAgentcore.ts` | Frontend AgentCore client (SGA) |
+| `client/lib/config/agentcore.ts` | AgentCore configuration |
+| `.github/workflows/deploy-agentcore-inventory.yml` | Inventory deployment workflow |
 
 ### External Documentation
 

@@ -2,7 +2,7 @@
 // Academy Types - Faiston Academy
 // =============================================================================
 // Type definitions for Faiston Academy module.
-// Adapted from Hive Academy with NEXO AI (renamed from Sasha).
+// AI Assistant: NEXO
 // =============================================================================
 
 // =============================================================================

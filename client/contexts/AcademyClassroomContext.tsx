@@ -7,10 +7,8 @@
 // - Audio class background generation
 // - Notification states
 //
-// Adapted from Hive Academy ClassroomContext with:
-// - NEXO instead of Sasha
-// - Faiston storage keys
-// - Updated panel configurations
+// AI Assistant: NEXO
+// Platform: Faiston One
 // =============================================================================
 
 'use client';

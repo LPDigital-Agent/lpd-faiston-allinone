@@ -10,9 +10,8 @@
 // - ContentViewerPanel replaces VideoPlayerPanel
 // - No episodes (single training unit)
 //
-// Adapted from Hive Academy TrainingClassroomContext with:
-// - NEXO instead of Sasha
-// - Faiston storage keys
+// AI Assistant: NEXO
+// Platform: Faiston One
 // =============================================================================
 
 'use client';
