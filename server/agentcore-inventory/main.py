@@ -169,6 +169,33 @@ def invoke(payload: dict, context) -> dict:
                 "has_get_nf_upload_url": True,  # Confirms handler exists in code
             }
 
+        elif action == "test_audit":
+            # Test action to verify audit logging is working
+            try:
+                from tools.dynamodb_client import SGAAuditLogger
+                audit = SGAAuditLogger()
+                audit.log_action(
+                    action="AUDIT_TEST",
+                    entity_type="TEST",
+                    entity_id=f"test-{session_id}",
+                    actor=user_id,
+                    details={
+                        "test": True,
+                        "session_id": session_id,
+                        "timestamp": os.environ.get("DEPLOYED_AT", "unknown"),
+                    },
+                )
+                return {
+                    "success": True,
+                    "message": "Audit log entry created successfully",
+                    "entity_id": f"test-{session_id}",
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": str(e),
+                }
+
         # =================================================================
         # Asset Search & Query
         # =================================================================
