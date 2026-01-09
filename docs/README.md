@@ -235,10 +235,22 @@ This platform follows security-first development practices:
 
 ---
 
+## Claude Code Commands
+
+| Command | Purpose |
+|---------|---------|
+| `/prime` | Load project context after `/clear` |
+| `/sync-project` | Sync documentation and memory |
+| `/commit` | Create well-formatted git commit |
+| `/ship` | Commit and push to GitHub |
+| `/branch` | Create feature branch with `fabio/` prefix |
+| `/check` | Run lint, build, and tests |
+
+---
+
 ## Support
 
 - **Claude Code**: Use `/prime` to load project context
-- **Issues**: Check [CLAUDE.md Known Issues](../CLAUDE.md#known-issues--fixes-january-2026)
 - **Skills**: Use available skills for specialized tasks
 
 ---

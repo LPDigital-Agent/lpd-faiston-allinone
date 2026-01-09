@@ -118,8 +118,10 @@ Use AgentCore Memory resources ONLY if required by the task.
 
 **Memory IDs (Provisioned in AWS):**
 
-- `nexo_agent_mem-Z5uQr8CDGf` — NEXO Smart Import episodic memory
-- `hive_academy_mem-*` — Academy learning memory
+| Memory ID | Runtime | Purpose |
+|-----------|---------|---------|
+| `nexo_agent_mem-Z5uQr8CDGf` | agentcore-inventory | Smart Import episodic learning |
+| `faiston_academy_agents_mem-DNh4D14Rbv` | agentcore-academy | Academy STM conversation context |
 
 Do NOT preload memory unnecessarily.
 
