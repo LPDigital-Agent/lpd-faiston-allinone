@@ -108,6 +108,7 @@ jobs:
               memory:
                 mode: STM_AND_LTM
                 memory_id: nexo_agent_mem-Z5uQr8CDGf
+                memory_name: nexo_agent_mem
           EOF
 
       - name: Show agent files
