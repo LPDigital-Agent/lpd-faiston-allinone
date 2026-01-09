@@ -1,16 +1,16 @@
 ---
 name: ui-ux-designer
-description: UI/UX specialist for Hive Academy educational platform. Use for component design, accessibility, responsive layouts, and design system guidance.
+description: UI/UX specialist for Faiston One Platform. Use for component design, accessibility, responsive layouts, and design system guidance.
 allowed-tools: Read, Write, Edit
 ---
 
 # UI/UX Designer Skill
 
-You are a UI/UX designer specializing in educational platforms for the Hive Academy project.
+You are a UI/UX designer specializing in the Faiston One Platform.
 
 ## Focus Areas
 
-- **Educational Platform UX**: LMS patterns, learning flows, progress tracking
+- **Enterprise Platform UX**: Asset management, inventory flows, operational dashboards
 - **Dark Theme**: Deep Space theme with glassmorphism effects
 - **Component Design**: shadcn/ui customization, Tailwind CSS patterns
 - **Accessibility**: WCAG 2.1 AA compliance
@@ -147,7 +147,7 @@ Tailwind: `bg-background-tertiary border border-border-primary rounded-lg px-4 p
 │ 🏆 Conquistas                           │
 │ ⚙️ Configurações                        │
 ├─────────────────────────────────────────┤
-│ [Sasha AI]         ← Gradient accent    │
+│ [NEXO AI]          ← Gradient accent    │
 │ [Sair]                                  │
 │ [Progress bar]                          │
 └─────────────────────────────────────────┘
@@ -255,7 +255,7 @@ When designing UI:
 
 1. **Understand the context**
    - User goal and journey
-   - Educational purpose
+   - Business purpose
    - Device constraints
 
 2. **Apply design system**
@@ -273,11 +273,11 @@ When designing UI:
    - Tailwind class suggestions
    - Animation recommendations
 
-Remember: Educational platforms need to be engaging yet distraction-free!
+Remember: Enterprise platforms need to be efficient yet user-friendly!
 
 ---
 
-## Hive Academy AI Feature UX
+## Faiston One AI Feature UX
 
 ### Classroom Panels System
 
@@ -383,14 +383,14 @@ const handleTimestampClick = (timestamp: number) => {
 }
 ```
 
-### Sasha Chat UI
+### NEXO Chat UI
 
 ```
 ┌─────────────────────────────────────────┐
-│  🤖 Sasha - Tutora IA             [X]   │
+│  🤖 NEXO - Tutora IA              [X]   │
 ├─────────────────────────────────────────┤
 │                                         │
-│  Olá! Sou Sasha, sua tutora.           │  ← AI greeting
+│  Olá! Sou NEXO, sua tutora.            │  ← AI greeting
 │  Como posso ajudar?                     │
 │                                         │
 │  ┌─────────────────────────────────┐   │
@@ -519,5 +519,5 @@ const handleTimestampClick = (timestamp: number) => {
 | `←/→` | Seek 5 seconds |
 | `F` | Toggle flashcards panel |
 | `M` | Toggle mind map panel |
-| `S` | Toggle Sasha chat |
+| `S` | Toggle NEXO chat |
 | `Esc` | Close active panel |

@@ -1,5 +1,5 @@
 # =============================================================================
-# Agent Prompt Template - Hive Academy
+# Agent Prompt Template - Faiston NEXO
 # =============================================================================
 # Template for creating new Google ADK agent prompts.
 # Copy this file and customize for your specific agent.
@@ -93,7 +93,7 @@ from google.genai import types
 from typing import Dict, Any
 
 # Constants
-APP_NAME = "hive-academy"
+APP_NAME = "faiston-nexo"
 MODEL_GEMINI = "gemini-3-pro-preview"
 
 

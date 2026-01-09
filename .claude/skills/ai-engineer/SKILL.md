@@ -1,16 +1,16 @@
 ---
 name: ai-engineer
-description: AI agent specialist for Hive Academy. Use PROACTIVELY for Google ADK agents, Bedrock AgentCore, Gemini API, ElevenLabs TTS, and AI-powered educational features.
+description: AI agent specialist for Faiston NEXO. Use PROACTIVELY for Google ADK agents, Bedrock AgentCore, Gemini API, ElevenLabs TTS, and AI-powered features.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # AI Engineer Skill
 
-AI agent specialist for Hive Academy educational platform.
+AI agent specialist for Faiston NEXO platform.
 
 For detailed implementation guide, see `docs/AgentCore/IMPLEMENTATION_GUIDE.md`.
 
-## Hive Academy AI Stack
+## Faiston NEXO AI Stack
 
 | Component | Technology |
 |-----------|------------|
@@ -36,7 +36,7 @@ AgentCore Runtime (direct invocation)
     v
 BedrockAgentCoreApp
     |
-    +-- SashaAgent (RAG tutoring)
+    +-- NEXOAgent (RAG assistance)
     +-- FlashcardsAgent (study cards)
     +-- MindMapAgent (concept maps)
     +-- ReflectionAgent (learning analysis)
@@ -48,7 +48,7 @@ BedrockAgentCoreApp
 | Purpose | Path |
 |---------|------|
 | AgentCore Entry | `server/agentcore/main.py` |
-| Agent Base | `server/agentcore/agents/sasha_agent.py` |
+| Agent Base | `server/agentcore/agents/nexo_agent.py` |
 | Utilities | `server/agentcore/agents/utils.py` |
 | ElevenLabs Tool | `server/agentcore/tools/elevenlabs_tool.py` |
 | Implementation Guide | `docs/AgentCore/IMPLEMENTATION_GUIDE.md` |
@@ -59,7 +59,7 @@ BedrockAgentCoreApp
 
 | Action | Agent | Purpose |
 |--------|-------|---------|
-| `sasha_chat` | SashaAgent | RAG-based tutoring chat |
+| `nexo_chat` | NEXOAgent | RAG-based assistance chat |
 | `generate_flashcards` | FlashcardsAgent | AI study cards |
 | `generate_mindmap` | MindMapAgent | Concept visualization |
 | `analyze_reflection` | ReflectionAgent | Learning feedback |
@@ -74,7 +74,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 MODEL_GEMINI = "gemini-3-pro-preview"
-APP_NAME = "hive-academy"
+APP_NAME = "faiston-nexo"
 
 class MyAgent:
     def __init__(self):
@@ -169,7 +169,7 @@ from botocore.config import Config
 
 ELEVENLABS_API_KEY = os.environ.get("ELEVENLABS_API_KEY")
 
-# Voice IDs for Hive Academy
+# Voice IDs for Faiston NEXO
 VOICES = {
     "ana": "EXAVITQu4vr4xnSDxMaL",     # Female host
     "carlos": "TX3LPaxmHKxFdv7VOQHJ",  # Male host
@@ -207,7 +207,7 @@ def upload_to_s3(audio_bytes: bytes, key: str) -> str:
         )
     )
 
-    bucket = "hive-academy-audio"
+    bucket = "faiston-nexo-audio"
     s3.put_object(Bucket=bucket, Key=key, Body=audio_bytes, ContentType="audio/mpeg")
 
     return s3.generate_presigned_url(
@@ -222,10 +222,10 @@ def upload_to_s3(audio_bytes: bytes, key: str) -> str:
 ### .bedrock_agentcore.yaml
 
 ```yaml
-default_agent: hive_academy_agents
+default_agent: faiston_nexo_agents
 agents:
-  hive_academy_agents:
-    name: hive_academy_agents
+  faiston_nexo_agents:
+    name: faiston_nexo_agents
     entrypoint: main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11

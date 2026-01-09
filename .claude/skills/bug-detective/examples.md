@@ -1,13 +1,13 @@
 # Bug Detective Examples
 
-Real-world debugging scenarios from Hive Academy.
+Real-world debugging scenarios from Faiston NEXO.
 
 ## Example 1: S3 CORS 307 Redirect
 
 ### Symptom
 Audio class generation fails with CORS error in browser console:
 ```
-Access to fetch at 'https://s3.amazonaws.com/...' from origin 'https://uat.bhive.academy'
+Access to fetch at 'https://s3.amazonaws.com/...' from origin 'https://nexo.faiston.com'
 has been blocked by CORS policy: Response to preflight request doesn't pass...
 ```
 
@@ -81,7 +81,7 @@ Error: AgentCore access denied. Check JWT authorizer configuration.
 3. **Check AgentCore Config**
    ```bash
    aws bedrock-agentcore get-agent-runtime \
-     --agent-runtime-id hive_academy_agents-WNYXe1CyLz \
+     --agent-runtime-id faiston_nexo_agents-WNYXe1CyLz \
      --region us-east-2
    ```
    - `authorizerConfiguration` missing!
@@ -119,7 +119,7 @@ Task timed out after 30.00 seconds
 
 1. **Check CloudWatch Logs**
    ```bash
-   aws logs tail /aws/lambda/hive-academy-api --follow
+   aws logs tail /aws/lambda/faiston-nexo-api --follow
    ```
    - Imports taking 25+ seconds on cold start
 
@@ -214,7 +214,7 @@ Error: A bucket with this name already exists
 
 2. **Check AWS**
    ```bash
-   aws s3 ls | grep hive-academy-frontend
+   aws s3 ls | grep faiston-nexo-frontend
    ```
    - Bucket exists (created manually)
 
@@ -222,7 +222,7 @@ Error: A bucket with this name already exists
 
 ```bash
 # Import existing resource
-terraform import aws_s3_bucket.frontend hive-academy-frontend-prod
+terraform import aws_s3_bucket.frontend faiston-nexo-frontend-prod
 
 # Then plan/apply
 terraform plan
@@ -262,7 +262,7 @@ Cognito authentication failed: InvalidPasswordException
 ### Fix
 
 Ensure demo user has compliant password:
-- Email: `demo@hive.academy`
+- Email: `admin@faiston.com`
 - Password: `Password123` (note capital P)
 
 ### Verification

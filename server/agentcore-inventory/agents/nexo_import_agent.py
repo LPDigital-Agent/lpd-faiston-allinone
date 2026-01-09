@@ -1601,8 +1601,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             for file_col in invalid_columns:
                 target_col = session.learned_mappings.get(file_col, "unknown")
 
+                # FIX: Guard against None values in learned_mappings
                 # Skip special markers
-                if target_col.startswith("__") or target_col == "_ignore":
+                if target_col and (target_col.startswith("__") or target_col == "_ignore"):
                     continue
 
                 # Check if already in requested_new_columns
@@ -1764,7 +1765,8 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 target_new_col = new_col
                 break
 
-        if answer.startswith("create:"):
+        # FIX: Guard against None answer parameter
+        if answer and answer.startswith("create:"):
             # Admin approved column creation - call SEA to create via MCP
             parts = answer.split(":", 2)
             column_name = parts[1] if len(parts) > 1 else ""
@@ -1947,10 +1949,18 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                         content=f"Interpretando {len(interpreted)} instruções do usuário",
                     ))
                     for file_col, db_col in interpreted.items():
+                        # FIX (January 2026): Skip None/empty values from Gemini response
+                        # This prevents 'NoneType' has no attribute 'startswith' errors
+                        if not db_col:
+                            logger.debug(
+                                f"[NexoImportAgent] Skipping None/empty interpretation for: {file_col}"
+                            )
+                            continue
                         # Replace __ai_pending__ placeholders with actual interpretations
                         if file_col in session.learned_mappings:
                             old_value = session.learned_mappings[file_col]
-                            if old_value.startswith("__ai_pending__"):
+                            # FIX: Guard against None values in learned_mappings
+                            if old_value and old_value.startswith("__ai_pending__"):
                                 session.learned_mappings[file_col] = db_col
                                 session.reasoning_trace.append(ReasoningStep(
                                     step_type="observation",
@@ -1996,8 +2006,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                             # Also check learned_mappings for final decisions
                             if source_col and source_col in session.learned_mappings:
                                 mapping = session.learned_mappings[source_col]
+                                # FIX: Guard against None values in learned_mappings
                                 # Skip if user already made a FINAL decision (not pending markers)
-                                if not mapping.startswith("__new_column__:"):
+                                if mapping and not mapping.startswith("__new_column__:"):
                                     logger.debug(
                                         f"[NexoImportAgent] Skipping column with final mapping: "
                                         f"{source_col} → {mapping}"
@@ -2099,10 +2110,11 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         ])
 
         # Format current mappings (excluding __ai_pending__ placeholders)
+        # FIX: Guard against None values in learned_mappings
         mappings_context = "\n".join([
             f"- {col} → {target}"
             for col, target in session.learned_mappings.items()
-            if not target.startswith("__ai_pending__")
+            if target and not target.startswith("__ai_pending__")
         ])
 
         # FIX: Format AI instructions that need Gemini interpretation
@@ -2239,9 +2251,10 @@ IMPORTANTE:
                 if new_col.source_file_column in session.learned_mappings:
                     # FIX (January 2026): Check if it's a FINAL decision or just a pending marker
                     mapping_value = session.learned_mappings[new_col.source_file_column]
+                    # FIX: Guard against None values in learned_mappings
                     # __new_column__: markers are PENDING, not final - still need approval!
                     # Only skip if it's a real column, _ignore, __metadata__, or __create_column__
-                    if not mapping_value.startswith("__new_column__:"):
+                    if mapping_value and not mapping_value.startswith("__new_column__:"):
                         logger.debug(
                             f"[NexoImportAgent] Skipping column with final mapping: "
                             f"{new_col.source_file_column} → {mapping_value}"
@@ -3013,10 +3026,13 @@ IMPORTANTE:
             ))
 
             # Pre-populate learned mappings from memory
+            # FIX: Validate values before storing to prevent None in learned_mappings
             for col, mapping_info in suggested_mappings.items():
                 if isinstance(mapping_info, dict):
-                    session.learned_mappings[col] = mapping_info.get("field", "")
-                else:
+                    value = mapping_info.get("field", "")
+                    if value:  # Only store non-empty values
+                        session.learned_mappings[col] = value
+                elif mapping_info:  # Only store non-None values
                     session.learned_mappings[col] = str(mapping_info)
         else:
             session.reasoning_trace.append(ReasoningStep(

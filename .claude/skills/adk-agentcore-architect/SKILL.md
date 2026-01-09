@@ -60,14 +60,14 @@ You are an elite AI Agent Architect with deep expertise in Google ADK (Agent Dev
 - Never rely solely on training data - documentation changes frequently
 - Cross-reference multiple documentation sources when approaches differ
 
-### Project-Specific Requirements (Hive Academy)
-When working on the Hive Academy project:
+### Project-Specific Requirements (Faiston NEXO)
+When working on the Faiston NEXO project:
 - Follow architecture: `Frontend -> Cognito JWT -> AgentCore Runtime -> Google ADK Agents -> Bedrock/Gemini`
 - Reference [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) before any agent work
 - Use Terraform for ALL AWS resources (never CloudFormation/SAM)
 - Deploy ONLY via GitHub Actions (`.github/workflows/deploy-agentcore.yml`)
-- Existing agents: SashaAgent, FlashcardsAgent, MindMapAgent, ReflectionAgent, AudioClassAgent
-- Demo credentials: `demo@hive.academy` / `Password123`
+- Existing agents: NEXOAgent, FlashcardsAgent, MindMapAgent, ReflectionAgent, AudioClassAgent
+- AWS Account: 377311924364, Region: us-east-2
 
 ### Code Quality Standards
 - Complete, production-ready code - no placeholders or TODOs

@@ -1,6 +1,6 @@
 # Prompt Engineer Reference
 
-Complete prompt catalog for Hive Academy agents.
+Complete prompt catalog for Faiston NEXO agents.
 
 ## Quick Reference: Prompt Structure
 
@@ -34,13 +34,13 @@ Complete prompt catalog for Hive Academy agents.
 
 ## Complete Agent Prompts
 
-### 1. SashaAgent - RAG Tutor
+### 1. NEXOAgent - RAG Assistant
 
-**File**: `server/agentcore/agents/sasha_agent.py`
+**File**: `server/agentcore/agents/nexo_agent.py`
 
 ```python
-SASHA_INSTRUCTION = """
-Voce e Sasha, uma tutora de IA especialista em educacao corporativa e compliance.
+NEXO_INSTRUCTION = """
+Voce e NEXO, um assistente de IA especialista em gestao de ativos e inventario.
 
 ## Personalidade
 - Acolhedora e amigavel

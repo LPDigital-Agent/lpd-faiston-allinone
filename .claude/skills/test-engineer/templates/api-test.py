@@ -1,5 +1,5 @@
 # =============================================================================
-# FastAPI Endpoint Test Template - Hive Academy
+# FastAPI Endpoint Test Template - Faiston NEXO
 # =============================================================================
 # Usage: Copy and adapt for testing FastAPI endpoints
 # Framework: pytest + httpx

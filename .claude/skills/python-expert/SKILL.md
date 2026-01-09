@@ -1,16 +1,16 @@
 ---
 name: python-expert
-description: Python specialist for Hive Academy. Use when writing FastAPI endpoints, Google ADK agents, async patterns, Pydantic models, and Lambda handlers. PROACTIVE for code review and refactoring.
+description: Python specialist for Faiston One Platform. Use when writing FastAPI endpoints, Google ADK agents, async patterns, Pydantic models, and Lambda handlers. PROACTIVE for code review and refactoring.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
 # Python Expert Skill
 
-Python specialist for Hive Academy backend and AI agents.
+Python specialist for Faiston NEXO backend and AI agents.
 
 For detailed patterns, see [reference.md](reference.md).
 
-## Hive Academy Python Stack
+## Faiston NEXO Python Stack
 
 | Component | Technology |
 |-----------|------------|
@@ -33,7 +33,7 @@ server/
 └── agentcore/              # AI agents
     ├── main.py             # BedrockAgentCoreApp
     ├── agents/             # Agent implementations
-    │   ├── sasha_agent.py
+    │   ├── nexo_agent.py
     │   ├── flashcards_agent.py
     │   └── utils.py
     └── tools/              # External integrations
@@ -109,13 +109,13 @@ from google.genai import types
 from .utils import APP_NAME, MODEL_GEMINI, parse_json_safe
 
 SYSTEM_INSTRUCTION = """
-You are an AI agent for Hive Academy.
+You are an AI agent for Faiston NEXO.
 Always respond in Brazilian Portuguese.
 Return valid JSON when requested.
 """
 
 class ExampleAgent:
-    """Agent implementation following Hive Academy patterns."""
+    """Agent implementation following Faiston NEXO patterns."""
 
     def __init__(self):
         self.agent = Agent(
@@ -164,7 +164,7 @@ import re
 import json
 from typing import Dict, Any
 
-APP_NAME = "hive-academy"
+APP_NAME = "faiston-nexo"
 MODEL_GEMINI = "gemini-3-pro-preview"
 
 def extract_json(response: str) -> str:

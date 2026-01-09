@@ -6,9 +6,9 @@ allowed-tools: Read, Write, Edit, TodoWrite, mcp__memory__create_entities, mcp__
 
 # Context Manager Skill
 
-Context management specialist for Hive Academy multi-agent workflows and long-running tasks.
+Context management specialist for Faiston NEXO multi-agent workflows and long-running tasks.
 
-## Hive Academy Architecture Context
+## Faiston NEXO Architecture Context
 
 | Layer | Components | Key Files |
 |-------|------------|-----------|
@@ -26,7 +26,7 @@ Context management specialist for Hive Academy multi-agent workflows and long-ru
 2. Identify reusable patterns and solutions
 3. Document integration points between components
 4. Track unresolved issues and TODOs
-5. **Hive-specific**: Track AgentCore session IDs and Cognito auth state
+5. **Faiston-specific**: Track AgentCore session IDs and Cognito auth state
 
 ### Context Distribution
 
@@ -45,7 +45,7 @@ mcp__memory__add_observations   → Add details to existing entities
 mcp__memory__search_nodes       → Retrieve relevant context
 ```
 
-## Hive Academy Context Templates
+## Faiston NEXO Context Templates
 
 ### Quick Context (< 500 tokens)
 
@@ -93,14 +93,14 @@ mcp__memory__search_nodes       → Retrieve relevant context
 
 ```markdown
 ## AgentCore State
-- **Runtime**: hive_academy_agents-WNYXe1CyLz
-- **Memory ID**: hive_academy_agents_mem-2LaTp8COvj
+- **Runtime**: faiston_nexo_agents-WNYXe1CyLz
+- **Memory ID**: faiston_nexo_agents_mem-2LaTp8COvj
 - **Auth**: Cognito JWT (pool: us-east-2_6Vzhr0J6M)
 
 ## Active Agents
 | Agent | Last Invoked | Status |
 |-------|--------------|--------|
-| SashaAgent | [time] | [status] |
+| NEXOAgent | [time] | [status] |
 | FlashcardsAgent | [time] | [status] |
 ```
 
@@ -127,13 +127,13 @@ When activated:
 ## Memory Entities to Track
 
 ```
-Entity: HiveAcademy_Decision
+Entity: FaistonNEXO_Decision
 Type: architectural_decision
 Observations:
   - "2025-12: Migrated to Gemini 3.0 Pro for better structure"
   - "2025-12: S3 presigned URLs use regional endpoint"
 
-Entity: HiveAcademy_KnownIssue
+Entity: FaistonNEXO_KnownIssue
 Type: bug
 Observations:
   - "S3 307 redirect: Use s3v4 signature with virtual addressing"

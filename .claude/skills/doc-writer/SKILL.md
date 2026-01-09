@@ -1,12 +1,12 @@
 ---
 name: doc-writer
-description: Documentation specialist for Hive Academy. Use when creating README files, API docs, code comments, or explaining complex code. Keeps all docs in docs/ folder.
+description: Documentation specialist for Faiston NEXO. Use when creating README files, API docs, code comments, or explaining complex code. Keeps all docs in docs/ folder.
 allowed-tools: Read, Write, Edit, Grep, Glob
 ---
 
 # Doc Writer Skill
 
-Documentation specialist for the Hive Academy full-stack educational platform.
+Documentation specialist for the Faiston NEXO platform.
 
 ## Project Context
 
@@ -246,7 +246,7 @@ Remember: Good documentation is documentation that gets read!
 
 ---
 
-## Hive Academy Specific Documentation
+## Faiston NEXO Specific Documentation
 
 ### AgentCore Documentation
 
@@ -350,7 +350,7 @@ What AWS resource this manages and why.
 
 \`\`\`hcl
 resource "aws_service_resource" "name" {
-  name = "hive-academy-..."
+  name = "faiston-nexo-..."
   # Key configuration
 }
 \`\`\`
@@ -374,7 +374,7 @@ CORS is configured ONLY in `terraform/main/locals.tf`:
 \`\`\`hcl
 locals {
   cors_allowed_origins = [
-    "https://uat.bhive.academy",
+    "https://nexo.faiston.com",
     "http://localhost:8081"
   ]
 }

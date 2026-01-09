@@ -1,6 +1,6 @@
 # Test Engineer Reference
 
-Comprehensive testing patterns for Hive Academy.
+Comprehensive testing patterns for Faiston NEXO.
 
 ## Testing Philosophy
 

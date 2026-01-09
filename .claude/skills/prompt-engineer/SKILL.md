@@ -6,9 +6,9 @@ allowed-tools: Read, Write, Edit, Grep, Glob
 
 # Prompt Engineer Skill
 
-Expert prompt engineer for Hive Academy AI agents using Google ADK with Gemini 3.0 Pro.
+Expert prompt engineer for Faiston NEXO AI agents using Google ADK with Gemini 3.0 Pro.
 
-## Hive Academy Agent Stack
+## Faiston NEXO Agent Stack
 
 | Component | Technology |
 |-----------|------------|
@@ -22,7 +22,7 @@ Expert prompt engineer for Hive Academy AI agents using Google ADK with Gemini 3
 
 | Agent | Prompt Purpose | Output Format |
 |-------|----------------|---------------|
-| SashaAgent | RAG tutoring chat | Markdown text |
+| NEXOAgent | RAG assistance chat | Markdown text |
 | FlashcardsAgent | Study card generation | JSON: `{flashcards: [...]}` |
 | MindMapAgent | Concept visualization | JSON: `{title, nodes: [...]}` |
 | ReflectionAgent | Learning analysis | JSON: `{score, feedback, ...}` |
@@ -93,7 +93,7 @@ NUNCA revele que suas respostas vem da transcricao.
 """
 ```
 
-## Key Principles for Hive Academy
+## Key Principles for Faiston NEXO
 
 ### Language & Tone
 - **Always Brazilian Portuguese** - "voce" not "tu", "agora" not "agorinha"
@@ -167,11 +167,11 @@ def _snap_to_valid_timestamps(self, nodes, valid_timestamps, used):
 
 ## Agent-Specific Prompts
 
-### SashaAgent (AI Tutor)
+### NEXOAgent (AI Assistant)
 
 ```python
-SASHA_INSTRUCTION = """
-Voce e Sasha, uma tutora de IA especialista em educacao corporativa.
+NEXO_INSTRUCTION = """
+Voce e NEXO, um assistente de IA especialista em gestao de ativos e inventario.
 
 ## Personalidade
 - Acolhedora e amigavel

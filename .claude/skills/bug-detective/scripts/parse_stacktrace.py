@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Hive Academy - Stack Trace Parser
+Faiston NEXO - Stack Trace Parser
 
 Parses and analyzes stack traces from JavaScript/TypeScript and Python errors.
-Highlights relevant Hive Academy files and suggests investigation points.
+Highlights relevant Faiston NEXO files and suggests investigation points.
 
 Usage:
     python parse_stacktrace.py < error.txt
@@ -17,7 +17,7 @@ import argparse
 from typing import List, Dict, Tuple
 
 
-# Hive Academy project paths
+# Faiston NEXO project paths
 PROJECT_PATHS = [
     'client/',
     'server/',

@@ -1,5 +1,5 @@
 // =============================================================================
-// Component Test Template - Hive Academy
+// Component Test Template - Faiston NEXO
 // =============================================================================
 // Usage: Copy and adapt for testing React components
 // Framework: Vitest + React Testing Library

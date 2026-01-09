@@ -1,6 +1,6 @@
 # Bug Detective Reference
 
-Comprehensive error catalog for Hive Academy debugging.
+Comprehensive error catalog for Faiston NEXO debugging.
 
 ## Error Catalog by Layer
 
@@ -112,7 +112,7 @@ Comprehensive error catalog for Hive Academy debugging.
 
 ---
 
-## Known Issues (Hive Academy Specific)
+## Known Issues (Faiston NEXO Specific)
 
 ### S3 CORS 307 Redirect Issue
 
@@ -233,15 +233,15 @@ cd server && pytest
 
 ```bash
 # Check Lambda logs
-aws logs tail /aws/lambda/hive-academy-api --follow
+aws logs tail /aws/lambda/faiston-nexo-api --follow
 
 # List S3 buckets
-aws s3 ls | grep hive
+aws s3 ls | grep faiston
 
 # Check Cognito user
 aws cognito-idp admin-get-user \
   --user-pool-id us-east-2_6Vzhr0J6M \
-  --username demo@hive.academy
+  --username admin@faiston.com
 
 # Invalidate CloudFront
 aws cloudfront create-invalidation \
@@ -270,13 +270,13 @@ terraform state show aws_s3_bucket.frontend
 
 ```bash
 # Check status
-agentcore status --agent hive_academy_agents
+agentcore status --agent faiston_nexo_agents
 
 # View logs
-agentcore logs --agent hive_academy_agents
+agentcore logs --agent faiston_nexo_agents
 
 # Deploy
-agentcore deploy --agent hive_academy_agents --auto-update-on-conflict
+agentcore deploy --agent faiston_nexo_agents --auto-update-on-conflict
 ```
 
 ---

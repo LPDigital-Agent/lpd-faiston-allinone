@@ -1,6 +1,6 @@
 # AgentCore Implementation Guide
 
-Complete guide for implementing AWS Bedrock AgentCore with Google ADK framework in Hive Academy.
+Complete guide for implementing AWS Bedrock AgentCore with Google ADK framework in Faiston One Platform.
 
 ## Table of Contents
 
@@ -34,12 +34,12 @@ flowchart TB
     end
 
     subgraph AgentCore ["AWS Bedrock AgentCore"]
-        RUNTIME[AgentCore Runtime<br/>hive_academy_agents]
+        RUNTIME[AgentCore Runtime<br/>faiston_nexo_agents]
         AUTH_CFG[JWT Authorizer]
     end
 
     subgraph Agents ["Google ADK Agents"]
-        SASHA[SashaAgent]
+        NEXO[NEXOAgent]
         FLASH[FlashcardsAgent]
         MIND[MindMapAgent]
         REFLECT[ReflectionAgent]
@@ -143,7 +143,7 @@ UI updates with generated content
 
 ### Cognito Configuration
 
-Hive Academy uses AWS Cognito for JWT token authentication with AgentCore. The tokens are obtained separately from the app's mock authentication.
+Faiston One Platform uses AWS Cognito for JWT token authentication with AgentCore. The tokens are obtained separately from the app's mock authentication.
 
 **Cognito Details:**
 
@@ -156,7 +156,7 @@ Hive Academy uses AWS Cognito for JWT token authentication with AgentCore. The t
 
 ### cognito.ts Implementation
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/services/cognito.ts`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/services/cognito.ts`
 
 ```typescript
 // =============================================================================
@@ -176,7 +176,7 @@ const COGNITO_USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID || '';
 const COGNITO_CLIENT_ID = import.meta.env.VITE_COGNITO_CLIENT_ID || '';
 
 // Token storage keys
-const STORAGE_KEY = 'hive_cognito_tokens';
+const STORAGE_KEY = 'faiston_cognito_tokens';
 
 export interface CognitoTokens {
   accessToken: string;
@@ -386,7 +386,7 @@ export function getCognitoConfig() {
 
 ### LoginForm Integration
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/components/auth/LoginForm.tsx`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/components/auth/LoginForm.tsx`
 
 The LoginForm performs dual authentication:
 1. **App Authentication**: Mock auth for UI login
@@ -482,7 +482,7 @@ VITE_COGNITO_CLIENT_ID=dqqebean5q4fq14bkp2bofnsj
 
 ### agentcore.ts Overview
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/services/agentcore.ts`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/services/agentcore.ts`
 
 The AgentCore client handles all direct communication with AWS Bedrock AgentCore Runtime.
 
@@ -513,10 +513,10 @@ const AGENTCORE_ENDPOINT =
   'https://bedrock-agentcore.us-east-2.amazonaws.com';
 const AGENTCORE_ARN =
   import.meta.env.VITE_AGENTCORE_ARN ||
-  'arn:aws:bedrock-agentcore:us-east-2:515052777105:runtime/hive_academy_agents-WNYXe1CyLz';
+  'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_nexo_agents-WNYXe1CyLz';
 
 // Session ID storage for conversation continuity
-const SESSION_STORAGE_KEY = 'hive_agentcore_session';
+const SESSION_STORAGE_KEY = 'faiston_agentcore_session';
 
 export interface AgentCoreRequest {
   action: string;
@@ -723,10 +723,10 @@ const sessionId = `session-${crypto.randomUUID().replace(/-/g, '')}`;
 
 ```
 Base URL: https://bedrock-agentcore.us-east-2.amazonaws.com
-ARN: arn:aws:bedrock-agentcore:us-east-2:515052777105:runtime/hive_academy_agents-WNYXe1CyLz
-Encoded ARN: arn%3Aaws%3Abedrock-agentcore%3Aus-east-2%3A515052777105%3Aruntime%2Fhive_academy_agents-WNYXe1CyLz
+ARN: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_nexo_agents-WNYXe1CyLz
+Encoded ARN: arn%3Aaws%3Abedrock-agentcore%3Aus-east-2%3A377311924364%3Aruntime%2Ffaiston_nexo_agents-WNYXe1CyLz
 
-Full URL: https://bedrock-agentcore.us-east-2.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-2%3A515052777105%3Aruntime%2Fhive_academy_agents-WNYXe1CyLz/invocations?qualifier=DEFAULT
+Full URL: https://bedrock-agentcore.us-east-2.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-2%3A377311924364%3Aruntime%2Ffaiston_nexo_agents-WNYXe1CyLz/invocations?qualifier=DEFAULT
 ```
 
 ### Required Headers
@@ -864,7 +864,7 @@ export async function sashaChat(
   params: SashaChatRequest
 ): Promise<AgentCoreResponse<SashaChatResponse>> {
   return invokeAgentCore<SashaChatResponse>({
-    action: 'sasha_chat',
+    action: 'nexo_chat',
     question: params.question,
     transcription: params.transcription,
     episode_title: params.episode_title || '',
@@ -920,7 +920,7 @@ All AI features use TanStack Query's `useMutation` for:
 
 ### useMindMap Hook Example
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/hooks/useMindMap.ts`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/hooks/useMindMap.ts`
 
 ```typescript
 import { useState, useEffect, useCallback } from "react";
@@ -947,7 +947,7 @@ export interface MindMapData {
 
 // Storage key generator
 const getStorageKey = (courseId: string, episodeId: string) =>
-  `hive_mindmap_${courseId}_${episodeId}`;
+  `faiston_mindmap_${courseId}_${episodeId}`;
 
 // Collect all node IDs from hierarchical structure
 function collectAllNodeIds(nodes: MindMapNode[]): string[] {
@@ -1190,7 +1190,7 @@ server/agentcore/
 ├── agents/
 │   ├── __init__.py           # Agent exports
 │   ├── utils.py              # Shared utilities
-│   ├── sasha_agent.py        # AI tutor
+│   ├── nexo_agent.py        # AI tutor
 │   ├── flashcards_agent.py   # Flashcard generator
 │   ├── mindmap_agent.py      # Mind map generator
 │   ├── reflection_agent.py   # Reflection analyzer
@@ -1201,18 +1201,18 @@ server/agentcore/
 
 ### Main Entrypoint
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/server/agentcore/main.py`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore/main.py`
 
 ```python
 # =============================================================================
 # AWS Bedrock AgentCore Runtime Entrypoint
 # =============================================================================
-# Main entrypoint for Hive Academy agents deployed to AgentCore Runtime.
+# Main entrypoint for Faiston One Platform agents deployed to AgentCore Runtime.
 # Uses BedrockAgentCoreApp decorator pattern for serverless deployment.
 #
 # Framework: Google ADK with native Gemini 3.0 Pro (no LiteLLM wrapper)
 # Model: All agents use gemini-3-pro-preview exclusively
-# Memory: AgentCore Memory (hive_academy_agents_mem-2LaTp8COvj)
+# Memory: AgentCore Memory (faiston_nexo_agents_mem-2LaTp8COvj)
 #
 # Migration Note (December 2025):
 # All agents migrated from Claude Sonnet 4.5 (LiteLLM) to Gemini native.
@@ -1231,7 +1231,7 @@ import json
 import os
 
 # Import all agents (these import Google packages internally)
-from agents.sasha_agent import SashaAgent
+from agents.nexo_agent import NEXOAgent
 from agents.flashcards_agent import FlashcardsAgent
 from agents.mindmap_agent import MindMapAgent
 from agents.reflection_agent import ReflectionAgent
@@ -1258,14 +1258,14 @@ def invoke(payload: dict, context) -> dict:
     Returns:
         Agent response as dict
     """
-    action = payload.get("action", "sasha_chat")
+    action = payload.get("action", "nexo_chat")
     user_id = payload.get("user_id", "anonymous")
     session_id = getattr(context, "session_id", "default-session")
 
     # Route to appropriate agent
     try:
-        if action == "sasha_chat":
-            return asyncio.run(_sasha_chat(payload, user_id, session_id))
+        if action == "nexo_chat":
+            return asyncio.run(_nexo_chat(payload, user_id, session_id))
 
         elif action == "generate_flashcards":
             return asyncio.run(_generate_flashcards(payload))
@@ -1291,14 +1291,14 @@ def invoke(payload: dict, context) -> dict:
 # =============================================================================
 
 
-async def _sasha_chat(payload: dict, user_id: str, session_id: str) -> dict:
+async def _nexo_chat(payload: dict, user_id: str, session_id: str) -> dict:
     """
     Handle Sasha AI tutor chat requests.
 
     Sasha is a RAG-based tutoring agent that answers questions
     based on episode transcription content.
     """
-    agent = SashaAgent()
+    agent = NEXOAgent()
 
     question = payload.get("question", "")
     transcription = payload.get("transcription", "")
@@ -1410,11 +1410,11 @@ if __name__ == "__main__":
 
 ### Agent Base Pattern
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/server/agentcore/agents/sasha_agent.py`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore/agents/nexo_agent.py`
 
 ```python
 # =============================================================================
-# Sasha AI Tutor Agent - Gemini 3.0 Pro Native
+# NEXO AI Tutor Agent - Gemini 3.0 Pro Native
 # =============================================================================
 # RAG-based tutoring agent that answers student questions
 # based on episode transcription content.
@@ -1465,9 +1465,9 @@ Voce e Sasha, uma tutora de IA especialista em educacao corporativa e compliance
 """
 
 
-class SashaAgent:
+class NEXOAgent:
     """
-    Sasha AI Tutor - RAG-based tutoring for Hive Academy.
+    NEXO AI Tutor - RAG-based tutoring for Faiston One Platform.
 
     Answers student questions based on episode transcription content
     with a friendly, educational tone.
@@ -1479,12 +1479,12 @@ class SashaAgent:
         """Initialize Sasha with Gemini 3.0 Pro native."""
         self.agent = Agent(
             model=MODEL_GEMINI,
-            name="sasha_agent",
+            name="nexo_agent",
             description="AI tutoring agent that answers questions based on lesson content.",
             instruction=SASHA_INSTRUCTION,
         )
         self.session_service = InMemorySessionService()
-        print(f"SashaAgent initialized with model: {MODEL_GEMINI}")
+        print(f"NEXOAgent initialized with model: {MODEL_GEMINI}")
 
     async def _setup_session_and_runner(self, user_id: str, session_id: str):
         """Set up session and runner for agent execution."""
@@ -1558,11 +1558,11 @@ class SashaAgent:
 
 ### Shared Utilities
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/server/agentcore/agents/utils.py`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore/agents/utils.py`
 
 ```python
 # =============================================================================
-# Shared Utilities for Hive Academy Agents
+# Shared Utilities for Faiston One Platform Agents
 # =============================================================================
 # Common helpers used across all Gemini-native agents.
 #
@@ -1583,7 +1583,7 @@ from typing import Dict, Any
 # Constants
 # =============================================================================
 
-APP_NAME = "hive-academy"
+APP_NAME = "faiston-nexo"
 
 # Model ID - All agents use Gemini 3.0 Pro
 MODEL_GEMINI = "gemini-3-pro-preview"
@@ -1639,7 +1639,7 @@ def parse_json_safe(response: str) -> Dict[str, Any]:
 
 | Agent | Model | Temperature | Purpose |
 |-------|-------|-------------|---------|
-| SashaAgent | gemini-3-pro-preview | 0.7 | AI tutor RAG chat |
+| NEXOAgent | gemini-3-pro-preview | 0.7 | AI tutor RAG chat |
 | FlashcardsAgent | gemini-3-pro-preview | 0.7 | Study card generation |
 | MindMapAgent | gemini-3-pro-preview | 0.7 | Concept visualization |
 | ReflectionAgent | gemini-3-pro-preview | 0.7 | Learning reflection |
@@ -1651,7 +1651,7 @@ def parse_json_safe(response: str) -> Dict[str, Any]:
 
 ### GitHub Actions Workflow
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/.github/workflows/deploy-agentcore.yml`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/.github/workflows/deploy-agentcore.yml`
 
 ```yaml
 # =============================================================================
@@ -1693,7 +1693,7 @@ on:
 env:
   AWS_REGION: us-east-2
   PYTHON_VERSION: '3.11'
-  AGENT_NAME: hive_academy_agents
+  AGENT_NAME: faiston_nexo_agents
 
 jobs:
   deploy:
@@ -1732,20 +1732,20 @@ jobs:
         run: |
           # Update paths in config to use CI/CD workspace
           cat > .bedrock_agentcore.yaml << 'EOF'
-          default_agent: hive_academy_agents
+          default_agent: faiston_nexo_agents
           agents:
-            hive_academy_agents:
-              name: hive_academy_agents
+            faiston_nexo_agents:
+              name: faiston_nexo_agents
               entrypoint: main.py
               deployment_type: direct_code_deploy
               runtime_type: PYTHON_3_11
               platform: linux/arm64
               source_path: .
               aws:
-                execution_role: arn:aws:iam::515052777105:role/AmazonBedrockAgentCoreSDKRuntime-us-east-2-87588e0d61
-                account: '515052777105'
+                execution_role: arn:aws:iam::377311924364:role/AmazonBedrockAgentCoreSDKRuntime-us-east-2-87588e0d61
+                account: '377311924364'
                 region: us-east-2
-                s3_path: s3://bedrock-agentcore-codebuild-sources-515052777105-us-east-2
+                s3_path: s3://bedrock-agentcore-codebuild-sources-377311924364-us-east-2
                 network_configuration:
                   network_mode: PUBLIC
                 protocol_configuration:
@@ -1753,12 +1753,12 @@ jobs:
                 observability:
                   enabled: true
               bedrock_agentcore:
-                agent_id: hive_academy_agents-WNYXe1CyLz
-                agent_arn: arn:aws:bedrock-agentcore:us-east-2:515052777105:runtime/hive_academy_agents-WNYXe1CyLz
+                agent_id: faiston_nexo_agents-WNYXe1CyLz
+                agent_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_nexo_agents-WNYXe1CyLz
               memory:
                 mode: STM_ONLY
-                memory_id: hive_academy_agents_mem-2LaTp8COvj
-                memory_arn: arn:aws:bedrock-agentcore:us-east-2:515052777105:memory/hive_academy_agents_mem-2LaTp8COvj
+                memory_id: faiston_nexo_agents_mem-2LaTp8COvj
+                memory_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:memory/faiston_nexo_agents_mem-2LaTp8COvj
               authorizerConfiguration:
                 customJWTAuthorizer:
                   discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_6Vzhr0J6M/.well-known/openid-configuration
@@ -1794,7 +1794,7 @@ jobs:
           import os
 
           REGION = "us-east-2"
-          AGENT_RUNTIME_ID = "hive_academy_agents-WNYXe1CyLz"
+          AGENT_RUNTIME_ID = "faiston_nexo_agents-WNYXe1CyLz"
           COGNITO_POOL_ID = "us-east-2_6Vzhr0J6M"
           COGNITO_CLIENT_ID = "dqqebean5q4fq14bkp2bofnsj"
 
@@ -1869,20 +1869,20 @@ jobs:
 ### .bedrock_agentcore.yaml Configuration
 
 ```yaml
-default_agent: hive_academy_agents
+default_agent: faiston_nexo_agents
 agents:
-  hive_academy_agents:
-    name: hive_academy_agents
+  faiston_nexo_agents:
+    name: faiston_nexo_agents
     entrypoint: main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
     source_path: .
     aws:
-      execution_role: arn:aws:iam::515052777105:role/AmazonBedrockAgentCoreSDKRuntime-us-east-2-87588e0d61
-      account: '515052777105'
+      execution_role: arn:aws:iam::377311924364:role/AmazonBedrockAgentCoreSDKRuntime-us-east-2-87588e0d61
+      account: '377311924364'
       region: us-east-2
-      s3_path: s3://bedrock-agentcore-codebuild-sources-515052777105-us-east-2
+      s3_path: s3://bedrock-agentcore-codebuild-sources-377311924364-us-east-2
       network_configuration:
         network_mode: PUBLIC
       protocol_configuration:
@@ -1890,12 +1890,12 @@ agents:
       observability:
         enabled: true
     bedrock_agentcore:
-      agent_id: hive_academy_agents-WNYXe1CyLz
-      agent_arn: arn:aws:bedrock-agentcore:us-east-2:515052777105:runtime/hive_academy_agents-WNYXe1CyLz
+      agent_id: faiston_nexo_agents-WNYXe1CyLz
+      agent_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_nexo_agents-WNYXe1CyLz
     memory:
       mode: STM_ONLY
-      memory_id: hive_academy_agents_mem-2LaTp8COvj
-      memory_arn: arn:aws:bedrock-agentcore:us-east-2:515052777105:memory/hive_academy_agents_mem-2LaTp8COvj
+      memory_id: faiston_nexo_agents_mem-2LaTp8COvj
+      memory_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:memory/faiston_nexo_agents_mem-2LaTp8COvj
     authorizerConfiguration:
       customJWTAuthorizer:
         discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_6Vzhr0J6M/.well-known/openid-configuration
@@ -1933,7 +1933,7 @@ This tutorial demonstrates creating a new QuizAgent from scratch.
 
 ### Step 2: Create Backend Agent
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/server/agentcore/agents/quiz_agent.py`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore/agents/quiz_agent.py`
 
 ```python
 # =============================================================================
@@ -2141,7 +2141,7 @@ Formato esperado:
 
 ### Step 3: Register in main.py
 
-**Edit:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/server/agentcore/main.py`
+**Edit:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore/main.py`
 
 ```python
 # Add import
@@ -2170,7 +2170,7 @@ elif action == "generate_quiz":
 
 ### Step 4: Add TypeScript Types
 
-**Edit:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/services/agentcore.ts`
+**Edit:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/services/agentcore.ts`
 
 ```typescript
 // Add interfaces
@@ -2217,7 +2217,7 @@ export async function generateQuiz(
 
 ### Step 5: Create Frontend Hook
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/hooks/useQuiz.ts`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/hooks/useQuiz.ts`
 
 ```typescript
 import { useState, useEffect, useCallback } from "react";
@@ -2233,7 +2233,7 @@ export interface QuizState {
 }
 
 const getStorageKey = (courseId: string, episodeId: string) =>
-  `hive_quiz_${courseId}_${episodeId}`;
+  `faiston_quiz_${courseId}_${episodeId}`;
 
 export function useQuiz(courseId: string, episodeId: string) {
   const [quizState, setQuizState] = useState<QuizState | null>(null);
@@ -2369,7 +2369,7 @@ export function useQuiz(courseId: string, episodeId: string) {
 
 ### Step 6: Create UI Component
 
-**File:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/components/classroom/QuizPanel.tsx`
+**File:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/components/classroom/QuizPanel.tsx`
 
 ```tsx
 import { useState } from "react";
@@ -2635,7 +2635,7 @@ export function QuizPanel({ courseId, episodeId, transcription }: QuizPanelProps
 
 ### Step 7: Add to ClassroomContext
 
-**Edit:** `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/contexts/ClassroomContext.tsx`
+**Edit:** `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/contexts/ClassroomContext.tsx`
 
 Add quiz panel configuration:
 
@@ -2788,7 +2788,7 @@ function generateSessionId(): string {
 4. **Test with curl:**
    ```bash
    curl -X POST \
-     "https://bedrock-agentcore.us-east-2.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-2%3A515052777105%3Aruntime%2Fhive_academy_agents-WNYXe1CyLz/invocations?qualifier=DEFAULT" \
+     "https://bedrock-agentcore.us-east-2.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-2%3A377311924364%3Aruntime%2Ffaiston_nexo_agents-WNYXe1CyLz/invocations?qualifier=DEFAULT" \
      -H "Authorization: Bearer <jwt>" \
      -H "Content-Type: application/json" \
      -H "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: session-test123456789012345678901234" \
@@ -2804,7 +2804,7 @@ function generateSessionId(): string {
 1. Check authorizer config via AWS CLI:
    ```bash
    aws bedrock-agentcore get-agent-runtime \
-     --agent-runtime-id hive_academy_agents-WNYXe1CyLz \
+     --agent-runtime-id faiston_nexo_agents-WNYXe1CyLz \
      --region us-east-2
    ```
 
@@ -2891,13 +2891,13 @@ This guide covered:
 
 | File | Purpose |
 |------|---------|
-| `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/services/cognito.ts` | Cognito authentication |
-| `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/services/agentcore.ts` | AgentCore client |
-| `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/client/hooks/use*.ts` | Feature hooks |
-| `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/server/agentcore/main.py` | Backend entrypoint |
-| `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/server/agentcore/agents/*.py` | Agent implementations |
-| `/Users/fabio.santos/LPD Repos/hive-academy-master-v2/.github/workflows/deploy-agentcore.yml` | CI/CD deployment |
+| `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/services/cognito.ts` | Cognito authentication |
+| `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/services/agentcore.ts` | AgentCore client |
+| `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/client/hooks/use*.ts` | Feature hooks |
+| `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore/main.py` | Backend entrypoint |
+| `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore/agents/*.py` | Agent implementations |
+| `/Users/fabio.santos/LPD Repos/lpd-faiston-allinone/.github/workflows/deploy-agentcore.yml` | CI/CD deployment |
 
 **Demo Credentials:**
-- Email: `demo@hive.academy`
+- Email: `admin@faiston.com`
 - Password: `Password123` (note: uppercase P for Cognito)

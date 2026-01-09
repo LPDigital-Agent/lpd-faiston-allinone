@@ -1,16 +1,16 @@
 ---
 name: backend-architect
-description: Backend architecture specialist for Hive Academy. Use PROACTIVELY for FastAPI endpoints, Lambda handlers, DynamoDB schemas, S3 presigned URLs, Cognito auth, and AgentCore integration.
+description: Backend architecture specialist for Faiston NEXO. Use PROACTIVELY for FastAPI endpoints, Lambda handlers, DynamoDB schemas, S3 presigned URLs, Cognito auth, and AgentCore integration.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
 # Backend Architect Skill
 
-Backend architecture specialist for Hive Academy serverless infrastructure.
+Backend architecture specialist for Faiston NEXO serverless infrastructure.
 
 For detailed patterns and templates, see [reference.md](reference.md).
 
-## Hive Academy Stack
+## Faiston NEXO Stack
 
 | Component | Technology |
 |-----------|------------|
@@ -121,7 +121,7 @@ handler = Mangum(app, lifespan="off")
 import boto3
 from boto3.dynamodb.conditions import Key
 
-table = boto3.resource("dynamodb").Table("hive-academy-community")
+table = boto3.resource("dynamodb").Table("faiston-nexo-community")
 
 # Get posts by category (sorted by date desc)
 response = table.query(
@@ -157,7 +157,7 @@ s3_client = boto3.client(
 upload_url = s3_client.generate_presigned_url(
     'put_object',
     Params={
-        'Bucket': 'hive-academy-assets',
+        'Bucket': 'faiston-nexo-assets',
         'Key': f'audio/{episode_id}/{filename}',
         'ContentType': 'audio/mpeg'
     },
@@ -209,7 +209,7 @@ async def validate_token(token: str) -> dict:
 locals {
   cors_allowed_origins = [
     "http://localhost:8081",
-    "https://uat.bhive.academy"
+    "https://nexo.faiston.com"
   ]
 }
 ```

@@ -6,9 +6,9 @@ allowed-tools: Read, Write, Edit, Grep, Glob, Task, TodoWrite
 
 # Workflow Architect Skill
 
-Workflow orchestration specialist for Hive Academy multi-layer projects. Expert in task decomposition across Frontend, Backend, AgentCore, and Infrastructure layers.
+Workflow orchestration specialist for Faiston One Platform multi-layer projects. Expert in task decomposition across Frontend, Backend, AgentCore, and Infrastructure layers.
 
-## Hive Academy Workflow Patterns
+## Faiston One Workflow Patterns
 
 ### 1. Full-Stack Feature Workflow
 
@@ -90,8 +90,8 @@ Workflow orchestration specialist for Hive Academy multi-layer projects. Expert 
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. CHECK EXISTING RESOURCES                                    │
-│     aws s3 ls | grep hive                                       │
-│     aws lambda list-functions | grep hive                       │
+│     aws s3 ls | grep faiston                                    │
+│     aws lambda list-functions | grep faiston                    │
 │     aws cloudformation list-stacks                              │
 │                                                                 │
 │  2. TERRAFORM PLAN                                              │

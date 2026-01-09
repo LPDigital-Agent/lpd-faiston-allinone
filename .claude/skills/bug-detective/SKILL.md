@@ -1,12 +1,12 @@
 ---
 name: bug-detective
-description: Full-stack debugging specialist for Hive Academy. Use when encountering errors, bugs, test failures, or unexpected behavior in Frontend (React, TypeScript, Vite), Backend (FastAPI, Lambda), Agents (Google ADK, AgentCore), AWS (S3, Cognito, CloudFront), or Terraform.
+description: Full-stack debugging specialist for Faiston NEXO. Use when encountering errors, bugs, test failures, or unexpected behavior in Frontend (React, TypeScript, Vite), Backend (FastAPI, Lambda), Agents (Google ADK, AgentCore), AWS (S3, Cognito, CloudFront), or Terraform.
 allowed-tools: Read, Edit, Bash, Grep, Glob, WebFetch
 ---
 
 # Bug Detective Skill
 
-Full-stack debugging specialist for the Hive Academy project covering ALL layers.
+Full-stack debugging specialist for the Faiston NEXO project covering ALL layers.
 
 For detailed error catalogs and examples, see [reference.md](reference.md) and [examples.md](examples.md).
 
@@ -286,7 +286,7 @@ def handler(event, context):
 **Environment Variables Not Found:**
 ```bash
 # Check SSM parameter store
-aws ssm get-parameter --name "/hive-academy/google-api-key"
+aws ssm get-parameter --name "/faiston-nexo/google-api-key"
 
 # In Lambda, use:
 import os
@@ -364,7 +364,7 @@ Error: Endpoint DEFAULT is not ready
 
 # Wait for deployment to complete
 # Check GitHub Actions workflow status
-# Verify with: agentcore status --agent hive_academy_agents
+# Verify with: agentcore status --agent faiston_nexo_agents
 ```
 
 ### Step 5: AWS Debugging
@@ -418,7 +418,7 @@ if (Date.now() > tokens.expiresAt - fiveMinutes) {
 # Or use AWS CLI:
 aws cognito-idp admin-create-user \
   --user-pool-id us-east-2_6Vzhr0J6M \
-  --username demo@hive.academy
+  --username admin@faiston.com
 ```
 
 #### CloudFront Issues
@@ -471,7 +471,7 @@ terraform import aws_s3_bucket.example bucket-name
 Error: A bucket with this name already exists
 
 # ✅ Fix: Import existing resource
-terraform import aws_s3_bucket.frontend hive-academy-frontend-prod
+terraform import aws_s3_bucket.frontend faiston-nexo-frontend-prod
 
 # Or delete resource if not needed
 aws s3 rb s3://bucket-name --force

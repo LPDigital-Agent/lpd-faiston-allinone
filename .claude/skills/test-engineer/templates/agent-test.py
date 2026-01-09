@@ -1,5 +1,5 @@
 # =============================================================================
-# Google ADK Agent Test Template - Hive Academy
+# Google ADK Agent Test Template - Faiston NEXO
 # =============================================================================
 # Usage: Copy and adapt for testing AI agents
 # Framework: pytest + unittest.mock
@@ -263,8 +263,8 @@ class TestMindMapAgent:
             assert result["title"] == "Test Lesson"
 
 
-class TestSashaAgent:
-    """Tests for SashaAgent (AI Tutor)."""
+class TestNEXOAgent:
+    """Tests for NEXOAgent (AI Tutor)."""
 
     @pytest.mark.asyncio
     async def test_invoke_returns_response(self, sample_transcription):
@@ -283,9 +283,9 @@ class TestSashaAgent:
 
             runner.run_async = mock_run
 
-            from server.agentcore.agents.sasha_agent import SashaAgent
+            from server.agentcore.agents.nexo_agent import NEXOAgent
 
-            agent = SashaAgent()
+            agent = NEXOAgent()
             result = await agent.invoke(
                 prompt=f"O que é Python?\n\nTranscrição: {sample_transcription}",
                 user_id="test-user",
@@ -306,21 +306,21 @@ class TestAgentCoreMain:
 
     def test_invoke_routes_to_correct_agent(self):
         """Should route action to correct agent."""
-        with patch("server.agentcore.main.SashaAgent") as mock_sasha, patch(
+        with patch("server.agentcore.main.NEXOAgent") as mock_nexo, patch(
             "server.agentcore.main.FlashcardsAgent"
         ) as mock_flash:
             # Configure mocks
-            sasha_instance = mock_sasha.return_value
-            sasha_instance.invoke = AsyncMock(return_value="Response")
+            nexo_instance = mock_nexo.return_value
+            nexo_instance.invoke = AsyncMock(return_value="Response")
 
             flash_instance = mock_flash.return_value
             flash_instance.generate = AsyncMock(return_value={"flashcards": []})
 
             from server.agentcore.main import invoke
 
-            # Test sasha_chat action
+            # Test nexo_chat action
             payload = {
-                "action": "sasha_chat",
+                "action": "nexo_chat",
                 "question": "What is Python?",
                 "transcription": "Test transcription",
             }
@@ -384,7 +384,7 @@ class TestAgentIntegration:
 
     @pytest.mark.asyncio
     async def test_conversation_flow(self, sample_transcription):
-        """Test multi-turn conversation with Sasha."""
+        """Test multi-turn conversation with NEXO."""
         responses = [
             "Python é uma linguagem de programação!",
             "Sim, Python é usado para machine learning.",
@@ -403,9 +403,9 @@ class TestAgentIntegration:
 
             runner.run_async = mock_run
 
-            from server.agentcore.agents.sasha_agent import SashaAgent
+            from server.agentcore.agents.nexo_agent import NEXOAgent
 
-            agent = SashaAgent()
+            agent = NEXOAgent()
 
             # First question
             r1 = await agent.invoke(

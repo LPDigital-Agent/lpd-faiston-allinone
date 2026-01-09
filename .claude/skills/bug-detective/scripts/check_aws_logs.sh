@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Hive Academy - AWS Logs Checker
+# Faiston NEXO - AWS Logs Checker
 # =============================================================================
 # Fetches recent logs from CloudWatch for debugging.
 # Usage: ./check_aws_logs.sh [service] [minutes]
@@ -15,8 +15,8 @@ set -e
 
 # Configuration
 REGION="us-east-2"
-LAMBDA_LOG_GROUP="/aws/lambda/hive-academy-api"
-AGENTCORE_LOG_GROUP="/aws/bedrock-agentcore/hive_academy_agents"
+LAMBDA_LOG_GROUP="/aws/lambda/faiston-nexo-api"
+AGENTCORE_LOG_GROUP="/aws/bedrock-agentcore/faiston_nexo_agents"
 
 # Default values
 SERVICE="${1:-all}"
@@ -32,7 +32,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}=== Hive Academy AWS Logs ===${NC}"
+echo -e "${BLUE}=== Faiston NEXO AWS Logs ===${NC}"
 echo -e "Service: ${YELLOW}${SERVICE}${NC}"
 echo -e "Time range: Last ${YELLOW}${MINUTES}${NC} minutes"
 echo ""

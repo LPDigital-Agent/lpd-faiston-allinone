@@ -47,7 +47,7 @@ permit|forbid (
 permit(
   principal,
   action == AgentCore::Action::"FlashcardTarget___generate_flashcards",
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 );
 ```
 
@@ -59,7 +59,7 @@ This permits any authenticated principal to invoke the `generate_flashcards` too
 forbid(
   principal,
   action == AgentCore::Action::"AdminTarget___delete_user",
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 );
 ```
 
@@ -141,7 +141,7 @@ principal.getTag("scope") like "*flashcards:write*"
 
 // Username check
 principal.hasTag("username") &&
-principal.getTag("username") == "admin@hive.academy"
+principal.getTag("username") == "admin@faiston.com"
 ```
 
 ### Pattern Matching with `like`
@@ -153,7 +153,7 @@ Use wildcards for flexible string matching:
 context.input.category like "premium*"
 
 // Suffix match
-context.input.email like "*@hive.academy"
+context.input.email like "*@faiston.com"
 
 // Contains
 principal.getTag("scope") like "*admin*"
@@ -260,7 +260,7 @@ forbid(
   resource
 ) when {
   principal.hasTag("username") &&
-  principal.getTag("username") == "suspended@hive.academy"
+  principal.getTag("username") == "suspended@faiston.com"
 };
 ```
 
@@ -288,8 +288,8 @@ policy_client = PolicyClient(region_name="us-east-2")
 
 # Create or get existing policy engine
 engine = policy_client.create_or_get_policy_engine(
-    name="HiveAcademyPolicyEngine",
-    description="Governance policies for Hive Academy AI tools"
+    name="FaistonNexoPolicyEngine",
+    description="Governance policies for Faiston NEXO AI tools"
 )
 
 print(f"Policy Engine ID: {engine['policyEngineId']}")
@@ -475,9 +475,9 @@ gateway_client.update_gateway_policy_engine(
 ```json
 {
   "timestamp": "2025-12-10T10:30:00Z",
-  "gatewayId": "hive-academy-gateway",
+  "gatewayId": "faiston-nexo-gateway",
   "action": "FlashcardTarget___generate_flashcards",
-  "principal": "user:demo@hive.academy",
+  "principal": "user:admin@faiston.com",
   "decision": "DENY",
   "matchedPolicy": "flashcard_limit_policy",
   "reason": "context.input.num_cards (100) >= 50"
@@ -486,13 +486,13 @@ gateway_client.update_gateway_policy_engine(
 
 ---
 
-## 9. Hive Academy Policy Examples
+## 9. Faiston NEXO Policy Examples
 
-### Complete Policy Set for Hive Academy
+### Complete Policy Set for Faiston NEXO
 
 ```cedar
 // =============================================================================
-// HIVE ACADEMY CEDAR POLICIES
+// FAISTON NEXO CEDAR POLICIES
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -501,7 +501,7 @@ gateway_client.update_gateway_policy_engine(
 permit(
   principal is AgentCore::OAuthUser,
   action == AgentCore::Action::"FlashcardTarget___generate_flashcards",
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 ) when {
   context.input has transcription &&
   context.input has num_cards &&
@@ -514,19 +514,19 @@ permit(
 permit(
   principal is AgentCore::OAuthUser,
   action == AgentCore::Action::"MindMapTarget___generate_mindmap",
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 ) when {
   context.input has transcription &&
   context.input has episode_title
 };
 
 // -----------------------------------------------------------------------------
-// SASHA CHAT: Allow all authenticated users
+// NEXO CHAT: Allow all authenticated users
 // -----------------------------------------------------------------------------
 permit(
   principal is AgentCore::OAuthUser,
-  action == AgentCore::Action::"SashaTarget___chat",
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  action == AgentCore::Action::"NEXOTarget___chat",
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 );
 
 // -----------------------------------------------------------------------------
@@ -535,7 +535,7 @@ permit(
 permit(
   principal is AgentCore::OAuthUser,
   action == AgentCore::Action::"AudioTarget___generate_audio_class",
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 ) when {
   principal.hasTag("subscription") &&
   (principal.getTag("subscription") == "premium" ||
@@ -548,7 +548,7 @@ permit(
 permit(
   principal is AgentCore::OAuthUser,
   action == AgentCore::Action::"ReflectionTarget___analyze_reflection",
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 ) when {
   context.input has transcription &&
   context.input has reflection
@@ -564,7 +564,7 @@ forbid(
     AgentCore::Action::"AdminTarget___reset_data",
     AgentCore::Action::"AdminTarget___export_all"
   ],
-  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:123456789012:gateway/hive-academy"
+  resource == AgentCore::Gateway::"arn:aws:bedrock-agentcore:us-east-2:377311924364:gateway/faiston-nexo"
 ) unless {
   principal.hasTag("role") &&
   principal.getTag("role") == "admin"

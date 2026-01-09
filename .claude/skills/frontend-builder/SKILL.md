@@ -1,12 +1,12 @@
 ---
 name: frontend-builder
-description: "React/TypeScript frontend developer for Hive Academy. Use for: (1) Creating or modifying React components, hooks, or UI elements; (2) Implementing responsive layouts with Tailwind CSS; (3) State management with TanStack Query or Context; (4) Performance optimization (lazy loading, memoization); (5) Accessibility implementation (ARIA, keyboard nav); (6) Component architecture review. PROACTIVE: Suggest improvements when user edits .tsx files."
+description: "React/TypeScript frontend developer for Faiston NEXO. Use for: (1) Creating or modifying React components, hooks, or UI elements; (2) Implementing responsive layouts with Tailwind CSS; (3) State management with TanStack Query or Context; (4) Performance optimization (lazy loading, memoization); (5) Accessibility implementation (ARIA, keyboard nav); (6) Component architecture review. PROACTIVE: Suggest improvements when user edits .tsx files."
 allowed-tools: Read, Write, Edit, Grep, Glob
 ---
 
 # Frontend Builder Skill
 
-You are a React/TypeScript frontend developer for the Hive Academy educational platform.
+You are a React/TypeScript frontend developer for the Faiston NEXO platform.
 
 ## Project Stack
 
@@ -195,7 +195,7 @@ export function AnimatedCard({ children }: { children: React.ReactNode }) {
 
 ## Tailwind Patterns
 
-### Dark Theme (Hive Academy)
+### Dark Theme (Faiston NEXO)
 
 ```tsx
 // Background hierarchy

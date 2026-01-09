@@ -1,12 +1,12 @@
 ---
 name: test-engineer
-description: Full-stack testing specialist for Hive Academy. Use when writing tests, fixing test failures, or validating behaviors across Frontend (Vitest, RTL, MSW), Backend (pytest, FastAPI), and Agents (Google ADK mocking).
+description: Full-stack testing specialist for Faiston NEXO. Use when writing tests, fixing test failures, or validating behaviors across Frontend (Vitest, RTL, MSW), Backend (pytest, FastAPI), and Agents (Google ADK mocking).
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
 # Test Engineer Skill
 
-Full-stack testing specialist for the Hive Academy project covering ALL layers.
+Full-stack testing specialist for the Faiston NEXO project covering ALL layers.
 
 For detailed patterns and templates, see [reference.md](reference.md).
 
@@ -397,22 +397,22 @@ from unittest.mock import patch
 @pytest.fixture
 def mock_agents():
     """Mock all agent classes."""
-    with patch("server.agentcore.main.SashaAgent") as sasha, \
+    with patch("server.agentcore.main.NEXOAgent") as nexo, \
          patch("server.agentcore.main.FlashcardsAgent") as flash:
-        sasha_instance = sasha.return_value
-        sasha_instance.invoke = AsyncMock(return_value="Test response")
+        nexo_instance = nexo.return_value
+        nexo_instance.invoke = AsyncMock(return_value="Test response")
 
         flash_instance = flash.return_value
         flash_instance.generate = AsyncMock(return_value={"flashcards": []})
 
-        yield {"sasha": sasha_instance, "flashcards": flash_instance}
+        yield {"nexo": nexo_instance, "flashcards": flash_instance}
 
-def test_invoke_sasha_chat(mock_agents):
-    """Test sasha_chat action routing."""
+def test_invoke_nexo_chat(mock_agents):
+    """Test nexo_chat action routing."""
     from server.agentcore.main import invoke
 
     payload = {
-        "action": "sasha_chat",
+        "action": "nexo_chat",
         "question": "What is Python?",
         "transcription": "Python is a programming language.",
     }
