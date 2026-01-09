@@ -1723,22 +1723,62 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                                 ))
 
                 # FEATURE: Process requested new columns (dynamic schema evolution)
+                # FIX (January 2026): Deduplicate to prevent re-asking same questions
                 requested_cols = result.get("requested_new_columns", [])
                 if isinstance(requested_cols, list) and requested_cols:
                     session.reasoning_trace.append(ReasoningStep(
                         step_type="observation",
                         content=f"Detectado {len(requested_cols)} campo(s) que não existem no schema",
                     ))
+
+                    # Build lookup of existing requested columns by source_file_column
+                    existing_cols_by_source = {
+                        col.source_file_column: col
+                        for col in session.requested_new_columns
+                        if col.source_file_column
+                    }
+
                     for col_info in requested_cols:
                         if isinstance(col_info, dict):
+                            source_col = col_info.get("source_file_column", "")
+
+                            # FIX: Skip if this column was already processed
+                            if source_col and source_col in existing_cols_by_source:
+                                existing = existing_cols_by_source[source_col]
+                                if existing.approved:
+                                    # Already approved - do NOT re-ask
+                                    logger.debug(
+                                        f"[NexoImportAgent] Skipping already-approved column: {source_col}"
+                                    )
+                                    continue
+                                else:
+                                    # Already in list but not approved - skip duplicate
+                                    logger.debug(
+                                        f"[NexoImportAgent] Skipping duplicate pending column: {source_col}"
+                                    )
+                                    continue
+
+                            # Also check learned_mappings for final decisions
+                            if source_col and source_col in session.learned_mappings:
+                                mapping = session.learned_mappings[source_col]
+                                # Skip if user already made a FINAL decision (not pending markers)
+                                if not mapping.startswith("__new_column__:"):
+                                    logger.debug(
+                                        f"[NexoImportAgent] Skipping column with final mapping: "
+                                        f"{source_col} → {mapping}"
+                                    )
+                                    continue
+
                             new_col = RequestedNewColumn(
                                 name=self._sanitize_column_name(col_info.get("name", "")),
                                 original_name=col_info.get("original_name", col_info.get("name", "")),
                                 user_intent=col_info.get("user_intent", ""),
                                 inferred_type=col_info.get("inferred_type", "TEXT"),
-                                source_file_column=col_info.get("source_file_column", ""),
+                                source_file_column=source_col,
                             )
                             session.requested_new_columns.append(new_col)
+                            existing_cols_by_source[source_col] = new_col  # Track for further iterations
+
                             session.reasoning_trace.append(ReasoningStep(
                                 step_type="thought",
                                 content=f"Usuário quer campo '{new_col.name}' ({new_col.inferred_type}): {new_col.user_intent}",
@@ -1942,15 +1982,35 @@ IMPORTANTE:
             schema = provider.get_table_schema("pending_entry_items") if provider else None
             existing_options = self._build_schema_aware_options(schema) if schema else []
 
+            # FIX (January 2026): Build set of columns already answered to avoid re-asking
+            answered_columns = set()
+            for q in session.questions:
+                if q.topic == "column_creation" and q.column and q.id in session.answers:
+                    answered_columns.add(q.column)
+                    logger.debug(f"[NexoImportAgent] Column already answered: {q.column}")
+
             for new_col in session.requested_new_columns:
                 if new_col.approved:
+                    logger.debug(f"[NexoImportAgent] Skipping approved column: {new_col.source_file_column}")
                     continue  # Already approved in previous round
+
+                # FIX: Defense-in-depth - also check if this column was answered
+                if new_col.source_file_column in answered_columns:
+                    logger.debug(
+                        f"[NexoImportAgent] Skipping already-answered column: {new_col.source_file_column}"
+                    )
+                    continue
+
                 if new_col.source_file_column in session.learned_mappings:
                     # FIX (January 2026): Check if it's a FINAL decision or just a pending marker
                     mapping_value = session.learned_mappings[new_col.source_file_column]
                     # __new_column__: markers are PENDING, not final - still need approval!
                     # Only skip if it's a real column, _ignore, __custom_fields__, or __create_column__
                     if not mapping_value.startswith("__new_column__:"):
+                        logger.debug(
+                            f"[NexoImportAgent] Skipping column with final mapping: "
+                            f"{new_col.source_file_column} → {mapping_value}"
+                        )
                         continue  # Already decided (ignored, custom_fields, or mapped)
 
                 # Build options for column creation question
