@@ -1941,35 +1941,23 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 if isinstance(suggested, dict):
                     session.learned_mappings.update(suggested)
 
-                # FIX: Process interpreted instructions from "Outros:" answers
-                interpreted = result.get("interpreted_instructions", {})
-                if isinstance(interpreted, dict) and interpreted:
-                    session.reasoning_trace.append(ReasoningStep(
-                        step_type="action",
-                        content=f"Interpretando {len(interpreted)} instruções do usuário",
-                    ))
-                    for file_col, db_col in interpreted.items():
-                        # FIX (January 2026): Skip None/empty values from Gemini response
-                        # This prevents 'NoneType' has no attribute 'startswith' errors
-                        if not db_col:
-                            logger.debug(
-                                f"[NexoImportAgent] Skipping None/empty interpretation for: {file_col}"
-                            )
-                            continue
-                        # Replace __ai_pending__ placeholders with actual interpretations
-                        if file_col in session.learned_mappings:
-                            old_value = session.learned_mappings[file_col]
-                            # FIX: Guard against None values in learned_mappings
-                            if old_value and old_value.startswith("__ai_pending__"):
-                                session.learned_mappings[file_col] = db_col
-                                session.reasoning_trace.append(ReasoningStep(
-                                    step_type="observation",
-                                    content=f"Interpretado: '{file_col}' → '{db_col}'",
-                                ))
+                # =============================================================
+                # FIX (January 2026): PRIORITY INVERSION BUG
+                # Process requested_new_columns BEFORE interpreted_instructions!
+                #
+                # When Gemini returns BOTH for the same column:
+                # - interpreted_instructions: {"COL": "existing_field"}
+                # - requested_new_columns: [{source_file_column: "COL", ...}]
+                #
+                # The user's intent to CREATE a new field must take priority.
+                # Otherwise, interpreted_instructions overwrites learned_mappings
+                # and requested_new_columns gets skipped due to "final mapping" check.
+                # =============================================================
 
-                # FEATURE: Process requested new columns (dynamic schema evolution)
-                # FIX (January 2026): Deduplicate to prevent re-asking same questions
+                # STEP 1: Process requested new columns FIRST (dynamic schema evolution)
+                # This ensures user's intent to create new fields is respected
                 requested_cols = result.get("requested_new_columns", [])
+                new_column_sources = set()  # Track columns marked for creation
                 if isinstance(requested_cols, list) and requested_cols:
                     session.reasoning_trace.append(ReasoningStep(
                         step_type="observation",
@@ -1987,31 +1975,17 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                         if isinstance(col_info, dict):
                             source_col = col_info.get("source_file_column", "")
 
-                            # FIX: Skip if this column was already processed
+                            # Skip if this column was already processed in previous rounds
                             if source_col and source_col in existing_cols_by_source:
                                 existing = existing_cols_by_source[source_col]
                                 if existing.approved:
-                                    # Already approved - do NOT re-ask
                                     logger.debug(
                                         f"[NexoImportAgent] Skipping already-approved column: {source_col}"
                                     )
                                     continue
                                 else:
-                                    # Already in list but not approved - skip duplicate
                                     logger.debug(
                                         f"[NexoImportAgent] Skipping duplicate pending column: {source_col}"
-                                    )
-                                    continue
-
-                            # Also check learned_mappings for final decisions
-                            if source_col and source_col in session.learned_mappings:
-                                mapping = session.learned_mappings[source_col]
-                                # FIX: Guard against None values in learned_mappings
-                                # Skip if user already made a FINAL decision (not pending markers)
-                                if mapping and not mapping.startswith("__new_column__:"):
-                                    logger.debug(
-                                        f"[NexoImportAgent] Skipping column with final mapping: "
-                                        f"{source_col} → {mapping}"
                                     )
                                     continue
 
@@ -2023,15 +1997,53 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                                 source_file_column=source_col,
                             )
                             session.requested_new_columns.append(new_col)
-                            existing_cols_by_source[source_col] = new_col  # Track for further iterations
+                            existing_cols_by_source[source_col] = new_col
 
                             session.reasoning_trace.append(ReasoningStep(
                                 step_type="thought",
                                 content=f"Usuário quer campo '{new_col.name}' ({new_col.inferred_type}): {new_col.user_intent}",
                             ))
+
                             # Mark as pending column creation decision
                             if new_col.source_file_column:
                                 session.learned_mappings[new_col.source_file_column] = f"__new_column__:{new_col.name}"
+                                new_column_sources.add(new_col.source_file_column)
+
+                # STEP 2: Process interpreted instructions from "Outros:" answers
+                # BUT skip columns already marked for new field creation
+                interpreted = result.get("interpreted_instructions", {})
+                if isinstance(interpreted, dict) and interpreted:
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="action",
+                        content=f"Interpretando {len(interpreted)} instruções do usuário",
+                    ))
+                    for file_col, db_col in interpreted.items():
+                        # Skip None/empty values from Gemini response
+                        if not db_col:
+                            logger.debug(
+                                f"[NexoImportAgent] Skipping None/empty interpretation for: {file_col}"
+                            )
+                            continue
+
+                        # FIX: Skip if this column was marked for NEW FIELD creation
+                        # User's intent to create new field takes priority over mapping to existing
+                        if file_col in new_column_sources:
+                            logger.debug(
+                                f"[NexoImportAgent] Skipping interpreted_instruction for '{file_col}' - "
+                                f"column marked for new field creation (priority: requested_new_columns)"
+                            )
+                            continue
+
+                        # Replace __ai_pending__ placeholders with actual interpretations
+                        if file_col in session.learned_mappings:
+                            old_value = session.learned_mappings[file_col]
+                            # Guard against None values in learned_mappings
+                            if old_value and old_value.startswith("__ai_pending__"):
+                                session.learned_mappings[file_col] = db_col
+                                session.reasoning_trace.append(ReasoningStep(
+                                    step_type="observation",
+                                    content=f"Interpretado: '{file_col}' → '{db_col}'",
+                                ))
 
                 session.reasoning_trace.append(ReasoningStep(
                     step_type="conclusion",

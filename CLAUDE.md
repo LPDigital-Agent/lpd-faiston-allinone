@@ -364,6 +364,13 @@ To be used on web research we are in year 2026.
      - Advisory locking (`pg_advisory_xact_lock`) for concurrent modifications
      - Reference: `server/agentcore-inventory/agents/schema_evolution_agent.py`
 
+  8. **LLM Response Validation Pattern:**
+     - LLM JSON responses can contain `null` values that cause runtime errors
+     - ALWAYS validate before storing: `if value:` guard before assignment
+     - ALWAYS guard before string methods: `if val and val.startswith(...)`
+     - Apply "belt-and-suspenders": preventive (validate before store) + defensive (guard before use)
+     - Reference: `server/agentcore-inventory/agents/nexo_import_agent.py:1950-1963`
+
 - **KEY FILE REFERENCES:**
   - **Types**: `client/lib/ativos/types.ts`
   - **Constants**: `client/lib/ativos/constants.ts`

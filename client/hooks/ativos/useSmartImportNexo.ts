@@ -114,6 +114,18 @@ export interface NexoAnalysisResult {
 }
 
 /**
+ * New column requested for dynamic schema evolution.
+ */
+export interface NexoNewColumn {
+  name: string;
+  originalName: string;
+  userIntent: string;
+  inferredType: string;
+  sourceFileColumn: string;
+  approved: boolean;
+}
+
+/**
  * Review summary shown before final import approval.
  */
 export interface NexoReviewSummary {
@@ -135,6 +147,9 @@ export interface NexoReviewSummary {
     totalRows: number;
     partNumberColumn?: string;
   } | null;
+  // New columns for dynamic schema evolution (January 2026)
+  // These are columns that will be created in the database
+  newColumns?: NexoNewColumn[];
 }
 
 /**
@@ -635,6 +650,27 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
           console.log('[NEXO] Aggregation enabled:', aggregationInfo);
         }
 
+        // Extract new columns from session state for user approval display
+        const newColumnsFromSession: NexoReviewSummary['newColumns'] = (
+          newSessionState.requested_new_columns || []
+        )
+          .filter(col => col.approved)  // Only show approved columns
+          .map(col => ({
+            name: col.name,
+            originalName: col.original_name,
+            userIntent: col.user_intent,
+            inferredType: col.inferred_type,
+            sourceFileColumn: col.source_file_column,
+            approved: col.approved,
+          }));
+
+        // Add new columns info to validations if any
+        if (newColumnsFromSession.length > 0) {
+          validations.push(
+            `${newColumnsFromSession.length} novo(s) campo(s) será(ão) criado(s) no banco de dados`
+          );
+        }
+
         const reviewSummary: NexoReviewSummary = {
           filename: state.analysis!.filename,
           mainSheet: mainSheet?.name || 'Desconhecida',
@@ -647,6 +683,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
           readyToImport: true,
           userFeedback: userFeedback || null,
           aggregation: aggregationInfo,
+          newColumns: newColumnsFromSession.length > 0 ? newColumnsFromSession : undefined,
         };
 
         // Go to reviewing stage for HIL approval

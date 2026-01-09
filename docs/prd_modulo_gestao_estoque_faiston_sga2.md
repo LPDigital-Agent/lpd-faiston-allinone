@@ -1,882 +1,881 @@
-# PRD — SGA 2.0 (Faiston)  
-## Módulo 2: Gestão de Estoque (+/–) — AI‑First, Autônomo (Observa → Pensa → Aprende → Executa)
+# PRD — SGA 2.0 (Faiston)
+## Module 2: Inventory Management (+/–) — AI-First, Autonomous (Observe → Think → Learn → Execute)
 
-**Status:** Draft (v0.1)  
-**Produto:** Faiston SGA 2.0  
-**Módulo:** Gestão de Estoque (+/–) — *core* operacional  
-**Owner:** Produto (LPDigital)  
-**Stakeholders:** Logística (Bruna), Operação (Rodrigo), Financeiro/Fiscal, Técnicos de campo, Gestão (Diretoria), TI/Segurança
-
----
-
-## 1) Resumo executivo
-
-O Módulo de Gestão de Estoque é o “coração” do SGA 2.0: ele mantém a **fonte única de verdade** sobre **onde está cada ativo**, **qual o saldo** por **base/técnico/projeto**, e **quais movimentações** aconteceram (entrada, saída, transferência, reversa, ajustes).
-
-A refatoração no SGA 2.0 muda o paradigma:
-
-- Sai o modo “planilha + ponte com chamados”.  
-- Entra um **motor autônomo** (AI‑First) que:
-  1) **Observa** eventos (chamados, envios, reversas, notas fiscais, confirmações de técnicos, inventários);
-  2) **Pensa** (planeja o fluxo correto e identifica inconsistências);
-  3) **Aprende** (ajusta regras, extrações e previsões com feedback real);
-  4) **Executa** (atualiza saldos, cria tarefas, solicita aprovações, notifica pessoas, e mantém auditoria).
-
-O módulo deve ser projetado para operar com **estoque distribuído** (centro logístico, bases, self storage, “estoque avançado” com técnicos e service storages), com rastreio por **Part Number** e, quando aplicável, **Serial Number/RFID**, e com governança rígida (Human‑in‑the‑Loop) nos pontos de risco.
+**Status:** Draft (v0.1)
+**Product:** Faiston SGA 2.0
+**Module:** Inventory Management (+/–) — operational *core*
+**Owner:** Product (LPDigital)
+**Stakeholders:** Logistics (Bruna), Operations (Rodrigo), Finance/Tax, Field Technicians, Management (Executive Board), IT/Security
 
 ---
 
-## 2) Problema e contexto
+## 1) Executive Summary
 
-Hoje o controle “+ / –” e a visibilidade do estoque não se sustentam de ponta a ponta, principalmente por:
+The Inventory Management Module is the "heart" of SGA 2.0: it maintains the **single source of truth** about **where each asset is**, **what the balance is** by **base/technician/project**, and **what movements** occurred (inbound, outbound, transfer, reverse, adjustments).
 
-- Estoque distribuído (bases + técnicos + storage) com controle manual e fragmentado.
-- Dificuldade de responder perguntas simples em tempo real: “quantos switches existem?”, “onde estão?”, “quantos em trânsito?”, “quantos em reversa?”.
-- Movimentações e decisões dependem de *expertise* individual e troca manual de mensagens.
-- A entrada de mercadoria depende de processo fiscal (NF/SAP) e depois “espelha” algo no SGA — com risco de divergência e retrabalho.
-- O chamado (Tiflux) é o gatilho real de operação, mas o estoque não “fecha o ciclo” automaticamente.
+The SGA 2.0 refactoring changes the paradigm:
 
-O SGA 2.0 precisa tornar o inventário **auditável, vivo e autocorretivo**.
+- Out with the "spreadsheet + ticket bridge" mode.
+- In with an **autonomous engine** (AI-First) that:
+  1) **Observes** events (tickets, shipments, returns, invoices, technician confirmations, inventories);
+  2) **Thinks** (plans the correct flow and identifies inconsistencies);
+  3) **Learns** (adjusts rules, extractions, and predictions with real feedback);
+  4) **Executes** (updates balances, creates tasks, requests approvals, notifies people, and maintains audit trail).
 
----
-
-## 3) Objetivos de produto (e como medir)
-
-### 3.1 Objetivos (O)
-
-**O1.** Tornar o estoque distribuído “consultável” e confiável em tempo real (base única de verdade).  
-**O2.** Reduzir drasticamente o trabalho manual (planilhas, conferências repetidas, consultas em múltiplas telas).  
-**O3.** Garantir rastreabilidade ponta a ponta por ativo (do recebimento à expedição, instalação e reversa).  
-**O4.** Permitir operação segura com autonomia (agents executam, humanos aprovam quando necessário).  
-**O5.** Preparar base de dados e eventos para expedição, tracking, reversa e fiscal operarem “plug‑and‑play”.
-
-### 3.2 KPIs sugeridos (K)
-
-- **Acuracidade do estoque:** divergência ≤ 2% (global e por base).  
-- **Tempo para localizar um item (serial ou PN):** P50 ≤ 30s, P90 ≤ 2 min.  
-- **% de movimentações registradas automaticamente** (sem digitação manual): meta incremental por fase.  
-- **Redução de inventários manuais** (quantidade e tempo gasto).  
-- **Taxa de exceções por 1.000 movimentos** (itens sem serial, duplicidade, “sumiu”, etc.).  
-- **Tempo de atualização por movimento** (da evidência → saldo atualizado).  
-- **% de movimentos com evidência vinculada** (NF, comprovante, tracking, confirmação técnico, foto).
+The module must be designed to operate with **distributed inventory** (logistics center, bases, self storage, "advanced stock" with technicians and service storages), with tracking by **Part Number** and, when applicable, **Serial Number/RFID**, and with strict governance (Human-in-the-Loop) at risk points.
 
 ---
 
-## 4) Princípios do módulo (AI‑First + Safety)
+## 2) Problem and Context
 
-### 4.1 Autonomia por níveis (importante para governança)
+Today the "+ / –" control and inventory visibility do not sustain end-to-end, mainly due to:
 
-- **Nível A — Sugere:** o agente recomenda; humano confirma.  
-- **Nível B — Executa com revisão:** o agente executa e coloca na fila de revisão (prazo curto).  
-- **Nível C — Executa autonomamente:** permitido apenas quando:
-  - risco é baixo,
-  - evidência é forte,
-  - e há rollback simples.
+- Distributed inventory (bases + technicians + storage) with manual and fragmented control.
+- Difficulty answering simple questions in real-time: "how many switches exist?", "where are they?", "how many in transit?", "how many in reverse?".
+- Movements and decisions depend on individual *expertise* and manual message exchanges.
+- Goods receipt depends on tax process (Invoice/SAP) and then "mirrors" something in SGA — with risk of divergence and rework.
+- The ticket (Tiflux) is the real operational trigger, but inventory doesn't "close the loop" automatically.
 
-### 4.2 “Evidência antes de ação”
-
-Toda movimentação deve ter:
-- **Evidência mínima** (ex.: NF, comprovante, tracking, foto de recebimento, confirmação de técnico, checklist de inventário).  
-- **Trilha de auditoria** (quem/qual agente fez, quando, por qual motivo, com quais dados).
-
-### 4.3 Human‑in‑the‑Loop obrigatório
-
-Obrigatório em:
-- Movimentos de alto valor / alto risco.
-- Transferência entre projetos/contratos quando houver restrição contratual.
-- Ajustes de inventário (diferença entre físico e sistema).
-- Baixa/Descarte (BAD → Descarte) e perdas/extravio.
-- Criação/alteração de Part Number quando impacta fiscal/contratos.
+SGA 2.0 needs to make inventory **auditable, live, and self-correcting**.
 
 ---
 
-## 5) Escopo
+## 3) Product Objectives (and How to Measure)
 
-### 5.1 Dentro do escopo (MVP do módulo)
+### 3.1 Objectives (O)
 
-1. Cadastro e catálogo de itens (Part Number) com regras de controle por serial e reversa obrigatória.  
-2. Cadastro e rastreio de ativos (serial, RFID, etiqueta patrimonial).  
-3. Estrutura de “locais de estoque” (bases, técnicos, storage, CD) e saldo por local.  
-4. Movimentações (+/–): entrada, saída, transferência, reserva, reversa (entrada/saída) e ajuste.  
-5. Integração conceitual com chamados: vínculo de movimento ↔ chamado (pai/filho) e “projeto”.  
-6. Modo AI‑First:
-   - leitura de NF por voz/documento,
-   - atualização automática do saldo quando evidência existe,
-   - detecção de divergências e abertura de tarefas.  
-7. Inventário/cycle count com reconciliação assistida por IA.  
-8. Permissões, logs e trilhas de auditoria do módulo (mesmo que o “Admin” completo esteja em outro módulo).
+**O1.** Make distributed inventory "queryable" and reliable in real-time (single source of truth).
+**O2.** Drastically reduce manual work (spreadsheets, repeated checks, queries across multiple screens).
+**O3.** Ensure end-to-end traceability per asset (from receipt to dispatch, installation, and reverse).
+**O4.** Allow safe operation with autonomy (agents execute, humans approve when necessary).
+**O5.** Prepare database and events for dispatch, tracking, reverse, and tax to operate "plug-and-play".
 
-### 5.2 Fora do escopo (neste PRD)
+### 3.2 Suggested KPIs (K)
 
-- Modelagem completa de expedição (cotação, etiqueta, picking/packing avançado) — apenas o que o estoque precisa para reservar/baixar.
-- Tracking automatizado por transportadora — apenas vínculo do tracking code ao movimento.
-- Fiscal/contábil completo — aqui focamos em “dados que o fiscal precisa”.
-- GeoDispatch e otimização de rota de técnicos — apenas tratar “técnico como local de estoque”.
-
-### 5.3 Futuro (para não perder a trilha)
-
-- Otimização preditiva: previsão de demanda por base/técnico e auto‑reposição.
-- Detecção de fraudes/anomalias (compliance avançado).
-- Simulação “what‑if” de estoque por contrato e SLA.
+- **Inventory accuracy:** divergence ≤ 2% (global and per base).
+- **Time to locate an item (serial or PN):** P50 ≤ 30s, P90 ≤ 2 min.
+- **% of movements recorded automatically** (without manual entry): incremental target per phase.
+- **Reduction in manual inventories** (quantity and time spent).
+- **Exception rate per 1,000 movements** (items without serial, duplicates, "missing", etc.).
+- **Update time per movement** (from evidence → updated balance).
+- **% of movements with attached evidence** (Invoice, receipt, tracking, technician confirmation, photo).
 
 ---
 
-## 6) Personas e necessidades
+## 4) Module Principles (AI-First + Safety)
 
-### 6.1 Logística (Operação de estoque)
+### 4.1 Autonomy by Levels (important for governance)
 
-- Precisa saber rapidamente **onde está** e **quantos existem**.
-- Precisa registrar entradas/saídas com o mínimo de atrito.
-- Precisa de um “inbox” de tarefas e pendências que o sistema gera.
+- **Level A — Suggests:** the agent recommends; human confirms.
+- **Level B — Executes with review:** the agent executes and places in review queue (short deadline).
+- **Level C — Executes autonomously:** allowed only when:
+  - risk is low,
+  - evidence is strong,
+  - and there is simple rollback.
 
-### 6.2 Operação (gestão de chamados)
+### 4.2 "Evidence before action"
 
-- Precisa solicitar expedição/reversa com dados completos.
-- Precisa visibilidade de disponibilidade antes de acionar logística.
+Every movement must have:
+- **Minimum evidence** (e.g., Invoice, receipt, tracking, receipt photo, technician confirmation, inventory checklist).
+- **Audit trail** (who/which agent did it, when, for what reason, with what data).
 
-### 6.3 Técnico de campo (estoque avançado)
+### 4.3 Mandatory Human-in-the-Loop
 
-- Precisa confirmar recebimento/uso/devolução com poucos cliques/WhatsApp.
-- Precisa visibilidade do “seu” estoque e do que está pendente de reversa.
-
-### 6.4 Financeiro/Fiscal
-
-- Precisa consistência entre estoque operacional e registros fiscais.
-- Precisa rastreabilidade e relatórios auditáveis (NF ↔ movimentos ↔ ativos).
-
-### 6.5 Gestão / Direção
-
-- Precisa KPIs: acuracidade, perdas, custo logístico, eficiência, SLA e tendências.
-
----
-
-## 7) Glossário (termos do domínio)
-
-- **Projeto:** unidade operacional que, na prática, funciona como “cliente/contrato” dentro do SGA.  
-- **Cliente final:** o cliente atendido dentro de um projeto.  
-- **Part Number (PN):** cadastro do item (modelo/tipo) — pode ou não exigir serial.  
-- **Serial Number:** identificador individual do ativo.  
-- **RFID / Etiqueta patrimonial:** identificadores físicos adicionais.  
-- **Local (Base):** qualquer lugar onde estoque pode “existir” (CD, base técnica, self storage, service storage, casa do técnico).  
-- **Depósito/Status fiscal:** classificação do estoque por tipo/propriedade/condição (ex.: Recebimento, BAD, Itens de terceiros).  
-- **Movimentação:** evento que altera (ou reserva) saldo em um local e registra rastreabilidade.  
-- **Reserva (Reservation):** separa saldo para um chamado antes de expedir.  
-- **Staging:** separação física para expedição (área de preparação).  
-- **Reversa:** processo de devolução/retorno do ativo ao estoque.
+Mandatory for:
+- High-value / high-risk movements.
+- Transfer between projects/contracts when there are contractual restrictions.
+- Inventory adjustments (difference between physical and system).
+- Write-off/Disposal (BAD → Disposal) and losses/missing.
+- Creation/modification of Part Number when it impacts tax/contracts.
 
 ---
 
-## 8) Modelo de domínio (o que existe no módulo)
+## 5) Scope
 
-> Não é um documento técnico de banco de dados; é o “mapa mental” do produto.
+### 5.1 Within Scope (Module MVP)
 
-### 8.1 Entidades essenciais
+1. Item registration and catalog (Part Number) with rules for serial control and mandatory reverse.
+2. Asset registration and tracking (serial, RFID, asset tag).
+3. "Inventory locations" structure (bases, technicians, storage, DC) and balance per location.
+4. Movements (+/–): inbound, outbound, transfer, reservation, reverse (inbound/outbound), and adjustment.
+5. Conceptual integration with tickets: movement ↔ ticket linkage (parent/child) and "project".
+6. AI-First mode:
+   - invoice reading by voice/document,
+   - automatic balance update when evidence exists,
+   - divergence detection and task creation.
+7. Inventory/cycle count with AI-assisted reconciliation.
+8. Permissions, logs, and module audit trails (even if complete "Admin" is in another module).
+
+### 5.2 Out of Scope (in this PRD)
+
+- Complete dispatch modeling (quote, label, advanced picking/packing) — only what inventory needs to reserve/withdraw.
+- Automated tracking by carrier — only tracking code linkage to movement.
+- Complete tax/accounting — here we focus on "data that tax needs".
+- GeoDispatch and technician route optimization — only treat "technician as inventory location".
+
+### 5.3 Future (to keep track)
+
+- Predictive optimization: demand forecast by base/technician and auto-replenishment.
+- Fraud/anomaly detection (advanced compliance).
+- "What-if" inventory simulation by contract and SLA.
+
+---
+
+## 6) Personas and Needs
+
+### 6.1 Logistics (Inventory Operations)
+
+- Needs to know quickly **where it is** and **how many exist**.
+- Needs to register inbound/outbound with minimum friction.
+- Needs an "inbox" of tasks and pending items that the system generates.
+
+### 6.2 Operations (Ticket Management)
+
+- Needs to request dispatch/reverse with complete data.
+- Needs availability visibility before engaging logistics.
+
+### 6.3 Field Technician (Advanced Stock)
+
+- Needs to confirm receipt/use/return with few clicks/WhatsApp.
+- Needs visibility of "their" inventory and what is pending reverse.
+
+### 6.4 Finance/Tax
+
+- Needs consistency between operational inventory and tax records.
+- Needs traceability and auditable reports (Invoice ↔ movements ↔ assets).
+
+### 6.5 Management / Executive
+
+- Needs KPIs: accuracy, losses, logistics cost, efficiency, SLA, and trends.
+
+---
+
+## 7) Glossary (Domain Terms)
+
+- **Project:** operational unit that, in practice, functions as "client/contract" within SGA.
+- **End client:** the client served within a project.
+- **Part Number (PN):** item registration (model/type) — may or may not require serial.
+- **Serial Number:** individual asset identifier.
+- **RFID / Asset Tag:** additional physical identifiers.
+- **Location (Base):** any place where inventory can "exist" (DC, technical base, self storage, service storage, technician's home).
+- **Warehouse/Tax Status:** inventory classification by type/ownership/condition (e.g., Receiving, BAD, Third-party items).
+- **Movement:** event that changes (or reserves) balance at a location and records traceability.
+- **Reservation:** sets aside balance for a ticket before dispatch.
+- **Staging:** physical separation for dispatch (preparation area).
+- **Reverse:** process of returning/bringing back the asset to inventory.
+
+---
+
+## 8) Domain Model (What Exists in the Module)
+
+> This is not a technical database document; it's the product's "mental map".
+
+### 8.1 Essential Entities
 
 1. **Item (Part Number)**
-   - nome/descrição, grupo/categoria
-   - controle por serial? (sim/não)
-   - reversa obrigatória? (sim/não)
-   - atributos obrigatórios por tipo (ex.: voltagem, versão, compatibilidade)
+   - name/description, group/category
+   - serial control? (yes/no)
+   - mandatory reverse? (yes/no)
+   - required attributes by type (e.g., voltage, version, compatibility)
 
-2. **Ativo (Asset)**
+2. **Asset**
    - PN
-   - serial (se aplicável)
-   - RFID/etiqueta (opcional)
-   - condição: novo / usado / BAD / descarte / quarentena / em manutenção
-   - propriedade: Faiston / terceiro (cliente) / parceiro
-   - projeto/cliente final associado (quando aplicável)
-   - histórico (linha do tempo)
+   - serial (if applicable)
+   - RFID/tag (optional)
+   - condition: new / used / BAD / disposal / quarantine / under maintenance
+   - ownership: Faiston / third-party (client) / partner
+   - associated project/end client (when applicable)
+   - history (timeline)
 
-3. **Local de estoque (Location)**
-   - tipo: Centro Logístico, Base Técnica, Self Storage, Service Storage, Técnico
-   - capacidade/limitações (opcional)
-   - políticas (ex.: “não pode receber terceiros”, “só estoque avançado”, etc.)
+3. **Inventory Location**
+   - type: Logistics Center, Technical Base, Self Storage, Service Storage, Technician
+   - capacity/limitations (optional)
+   - policies (e.g., "cannot receive third-party", "advanced stock only", etc.)
 
-4. **Saldo (Stock Balance)**
-   - por PN e/ou por ativo (serial)
-   - por local
-   - por condição (normal, BAD, etc.)
-   - disponível vs reservado vs em trânsito (status)
+4. **Stock Balance**
+   - by PN and/or by asset (serial)
+   - by location
+   - by condition (normal, BAD, etc.)
+   - available vs reserved vs in transit (status)
 
-5. **Movimentação (Stock Movement)**
-   - tipo: entrada / saída / transferência / reversa / ajuste / reserva / cancelamento
-   - origem e destino (quando aplicável)
-   - vínculo com chamado (pai/filho) e projeto
-   - evidências anexas (NF, comprovante, foto, etc.)
-   - autor (humano ou agente) + “nível de autonomia”
-   - confiança do sistema (score) + justificativa
+5. **Stock Movement**
+   - type: inbound / outbound / transfer / reverse / adjustment / reservation / cancellation
+   - origin and destination (when applicable)
+   - linkage with ticket (parent/child) and project
+   - attached evidence (Invoice, receipt, photo, etc.)
+   - author (human or agent) + "autonomy level"
+   - system confidence (score) + justification
 
-6. **Documento**
-   - NF, DANFE, XML (quando existir), comprovante, checklist, foto
-   - metadados extraídos por IA (PN, serial, quantidades, valores)
+6. **Document**
+   - Invoice, DANFE, XML (when exists), receipt, checklist, photo
+   - AI-extracted metadata (PN, serial, quantities, values)
 
 ---
 
-## 9) Estados e regras do estoque
+## 9) Inventory States and Rules
 
-### 9.1 Estados do ativo (serializado)
+### 9.1 Asset States (serialized)
 
-- **EM_ESTOQUE (Disponível)**
-- **RESERVADO**
-- **EM_SEPARAÇÃO (Staging)**
-- **EM_TRANSITO**
-- **EM_USO (com técnico / em cliente)**
-- **AGUARDANDO_REVERSA**
-- **EM_REVERSA (postado/coletado)**
-- **EM_MANUTENÇÃO**
+- **IN_STOCK (Available)**
+- **RESERVED**
+- **IN_STAGING**
+- **IN_TRANSIT**
+- **IN_USE (with technician / at client)**
+- **AWAITING_REVERSE**
+- **IN_REVERSE (posted/collected)**
+- **UNDER_MAINTENANCE**
 - **BAD**
-- **QUARENTENA (aguardando inspeção)**
-- **DESCARTE**
-- **EXTRAVIADO (apenas com aprovação e evidência)**
+- **QUARANTINE (awaiting inspection)**
+- **DISPOSAL**
+- **MISSING (only with approval and evidence)**
 
-### 9.2 Tipos de movimentação (mínimo viável)
+### 9.2 Movement Types (minimum viable)
 
-- **Internalização (Entrada):** NF/recebimento → estoque  
-- **Expedição (Saída):** estoque → técnico/base/cliente  
-- **Transferência:** base A → base B (ou técnico ↔ base)  
-- **Reversa:** retorno → estoque (com ou sem triagem)  
-- **Ajuste:** correções por inventário/auditoria (sempre com aprovação)  
-- **Reserva/Desreserva:** bloqueio temporário para atendimento
-
----
-
-## 10) Jornadas principais (end‑to‑end)
-
-### Jornada A — Entrada de mercadoria (internalização)
-
-**Gatilhos típicos**
-- Chegada de NF por e‑mail / documento entregue junto do equipamento.
-- Chegada de equipamento sem aviso (o sistema precisa suportar).
-
-**Resultado esperado**
-- Ativos cadastrados (PN/serial), saldo atualizado, e evidências anexadas.
-- Caso falte dado crítico (ID/projeto), criar tarefa e bloquear avanço.
-
-**Fluxo (alto nível)**
-1. Usuário informa “chegou NF/equipamento” no portal *ou* encaminha a NF para um canal monitorado.
-2. **Agente de Intake** lê NF (documento/voz), extrai PN, serial, RFID, quantidade, valores e sugere projeto/cliente final.
-3. **Agente de Estoque** valida:
-   - PN existe? se não, abre “tarefa de cadastro PN”.
-   - serial duplicado? se sim, abre exceção.
-   - projeto/ID existe? se não, solicita cadastro/validação.
-4. **Human‑in‑the‑Loop** valida pontos obrigatórios (configurável por risco/confiança).
-5. Sistema registra a entrada e atualiza o saldo.
-6. Sistema registra “qualidade de dados” (confiança, evidências) para auditoria futura.
-
-**Critérios de aceite**
-- Entrada suporta item serializado e não‑serializado.
-- Sistema impede entrada “sem projeto” quando regra exigir.
-- Cada entrada gera movimento com evidências e trilha de auditoria.
+- **Internalization (Inbound):** Invoice/receipt → inventory
+- **Dispatch (Outbound):** inventory → technician/base/client
+- **Transfer:** base A → base B (or technician ↔ base)
+- **Reverse:** return → inventory (with or without sorting)
+- **Adjustment:** corrections by inventory/audit (always with approval)
+- **Reservation/Unreservation:** temporary block for service
 
 ---
 
-### Jornada B — Consulta de disponibilidade e localização (o “Google do estoque”)
+## 10) Main Journeys (End-to-End)
 
-**Gatilho típico**
-- Operação quer saber se existe peça para atender chamado.
-- Logística precisa localizar onde está o item e quem está com ele.
+### Journey A — Goods Receipt (Internalization)
 
-**Resultado esperado**
-- Busca por PN/serial retorna: saldo por local, estado, e recomendações.
+**Typical Triggers**
+- Invoice arrival by email / document delivered with equipment.
+- Equipment arrival without notice (system must support).
 
-**UX essencial**
-- Busca unificada por:
-  - PN (descrição, modelo, categoria),
-  - serial/RFID/etiqueta,
-  - projeto/cliente final,
-  - local/base/técnico.
+**Expected Result**
+- Assets registered (PN/serial), balance updated, and evidence attached.
+- If critical data missing (ID/project), create task and block progress.
 
-**Critérios de aceite**
-- Retorno mostra “onde” e “status” (disponível/reservado/em trânsito/…).
-- Retorno mostra evidência e histórico (para evitar “alucinação operacional”).
+**Flow (High Level)**
+1. User informs "Invoice/equipment arrived" in portal *or* forwards Invoice to monitored channel.
+2. **Intake Agent** reads Invoice (document/voice), extracts PN, serial, RFID, quantity, values, and suggests project/end client.
+3. **Inventory Agent** validates:
+   - PN exists? if not, opens "PN registration task".
+   - duplicate serial? if yes, opens exception.
+   - project/ID exists? if not, requests registration/validation.
+4. **Human-in-the-Loop** validates mandatory points (configurable by risk/confidence).
+5. System records inbound and updates balance.
+6. System records "data quality" (confidence, evidence) for future audit.
 
----
-
-### Jornada C — Reserva e separação (pré‑expedição)
-
-**Gatilhos típicos**
-- Chamado filho de logística solicita item (ex.: AP, servidor, switch).
-- Operação cria necessidade de peça e o sistema deve reservar.
-
-**Resultado esperado**
-- Item reservado e “pronto para separar”, evitando “duas pessoas pegarem o mesmo”.
-
-**Fluxo (alto nível)**
-1. Chega solicitação vinculada ao chamado (com PN ou requisitos).
-2. **Agente de Alocação** recomenda:
-   - melhor local de origem (custo/prazo),
-   - alternativa se não houver no local preferido.
-3. Sistema cria **reserva** do saldo (ou do serial específico).
-4. Gera **lista de separação (pick list)** e tarefa para logística.
-5. Ao confirmar separação, muda status para staging.
-
-**Critérios de aceite**
-- Reserva bloqueia duplicidade.
-- Cancelamento do chamado desfaz reserva com trilha.
+**Acceptance Criteria**
+- Inbound supports serialized and non-serialized items.
+- System prevents inbound "without project" when rule requires.
+- Each inbound generates movement with evidence and audit trail.
 
 ---
 
-### Jornada D — Transferência entre bases e/ou técnicos
+### Journey B — Availability and Location Query (the "Inventory Google")
 
-**Gatilhos típicos**
-- Reposição de estoque avançado.
-- Realocação por mudança de demanda.
-- Pegar item “mais perto” do incidente (quando aplicável).
+**Typical Trigger**
+- Operations wants to know if part exists to serve ticket.
+- Logistics needs to locate where item is and who has it.
 
-**Regras importantes**
-- Transferência entre projetos/contratos pode exigir aprovação (policy).
-- Toda transferência deve manter rastreabilidade.
+**Expected Result**
+- Search by PN/serial returns: balance by location, state, and recommendations.
 
-**Critérios de aceite**
-- Transferência altera saldos corretamente.
-- Regras de aprovação são respeitadas (HIL).
+**Essential UX**
+- Unified search by:
+  - PN (description, model, category),
+  - serial/RFID/tag,
+  - project/end client,
+  - location/base/technician.
 
----
-
-### Jornada E — Reversa (retorno do ativo)
-
-**Gatilhos típicos**
-- Instalação gerou BAD e precisa retornar.
-- Substituição de equipamento.
-- Fim de uso / devolução de equipamento de terceiro.
-
-**Resultado esperado**
-- Sistema sabe “o que deveria voltar”, “o que voltou”, e atualiza saldo/condição.
-
-**Fluxo (alto nível)**
-1. Chamado / regra define reversa obrigatória.
-2. Sistema cria pendência: “ativo X precisa retornar”.
-3. Técnico confirma status (WhatsApp/app) e posta/coleta.
-4. Ao receber, logística faz triagem (condição) e atualiza estado.
-5. Divergências viram exceções (ex.: serial diferente, item faltante).
-
-**Critérios de aceite**
-- Reversa cria e fecha o ciclo no estoque com rastreabilidade.
+**Acceptance Criteria**
+- Return shows "where" and "status" (available/reserved/in transit/…).
+- Return shows evidence and history (to avoid "operational hallucination").
 
 ---
 
-### Jornada F — Inventário e auditoria (cycle count AI‑assisted)
+### Journey C — Reservation and Staging (Pre-Dispatch)
 
-**Gatilhos típicos**
-- Ciclo mensal, auditoria contratual, ou divergência detectada por IA.
+**Typical Triggers**
+- Logistics child ticket requests item (e.g., AP, server, switch).
+- Operations creates part need and system must reserve.
 
-**Resultado esperado**
-- Sistema propõe contagem, identifica divergências e sugere ajustes (com HIL).
+**Expected Result**
+- Item reserved and "ready to stage", avoiding "two people taking the same".
 
-**Fluxo (alto nível)**
-1. Sistema sugere um “roteiro de contagem” por risco/valor/atividade.
-2. Usuário registra contagem (mobile/portal) e anexa evidências (fotos).
-3. **Agente de Reconciliação** compara:
-   - saldo esperado vs contado,
-   - padrões históricos,
-   - possíveis causas (erro de entrada, expedição sem baixa, extravio).
-4. Sistema gera proposta de ajuste + justificativa + risco.
-5. Humano aprova ou rejeita.
+**Flow (High Level)**
+1. Request arrives linked to ticket (with PN or requirements).
+2. **Allocation Agent** recommends:
+   - best origin location (cost/deadline),
+   - alternative if not available at preferred location.
+3. System creates balance **reservation** (or specific serial).
+4. Generates **pick list** and task for logistics.
+5. Upon confirming staging, changes status to staging.
 
-**Critérios de aceite**
-- Ajuste não ocorre sem aprovação.
-- Divergências ficam rastreáveis com causa provável.
-
----
-
-## 11) Requisitos funcionais (detalhados)
-
-### RF‑01 — Cadastro de Part Number (PN)
-
-**Descrição**  
-Permitir criar e manter o catálogo de itens (PN) com atributos mínimos e regras de controle.
-
-**Campos mínimos**
-- Tipo (produto), grupo/categoria (se aplicável)
-- Controle por serial (sim/não)
-- Reversa obrigatória (sim/não)
-- Nome/descrição e tags
-
-**Regras**
-- Se “controle por serial = sim”, sistema exige serial em entradas e saídas.
-- PN pode ter “atributos obrigatórios” configuráveis (por cliente/projeto).
-
-**Critérios de aceite**
-- Não permite movimentar item serializado sem serial.
-- Log de alteração de PN (quem alterou, antes/depois).
+**Acceptance Criteria**
+- Reservation blocks duplication.
+- Ticket cancellation undoes reservation with trail.
 
 ---
 
-### RF‑02 — Cadastro e rastreio de ativos (serializados)
+### Journey D — Transfer Between Bases and/or Technicians
 
-**Descrição**  
-Permitir registrar ativos individualmente com serial e histórico.
+**Typical Triggers**
+- Advanced stock replenishment.
+- Reallocation due to demand change.
+- Get item "closer" to incident (when applicable).
 
-**Regras**
-- Serial deve ser único por PN (ou global, conforme regra).
-- Identificadores alternativos (RFID/etiqueta) podem existir, mas serial domina.
+**Important Rules**
+- Transfer between projects/contracts may require approval (policy).
+- Every transfer must maintain traceability.
 
-**Critérios de aceite**
-- Busca por serial retorna a “linha do tempo” do ativo.
-- Movimentos do serial atualizam seu estado automaticamente.
+**Acceptance Criteria**
+- Transfer changes balances correctly.
+- Approval rules are respected (HIL).
 
 ---
 
-### RF‑03 — Estrutura de locais (bases, técnicos, storage)
+### Journey E — Reverse (Asset Return)
 
-**Descrição**  
-Cadastrar locais e tratá‑los como nós de estoque.
+**Typical Triggers**
+- Installation generated BAD and needs to return.
+- Equipment replacement.
+- End of use / return of third-party equipment.
 
-**Tipos suportados**
-- Centro Logístico
-- Base Técnica
+**Expected Result**
+- System knows "what should return", "what returned", and updates balance/condition.
+
+**Flow (High Level)**
+1. Ticket / rule defines mandatory reverse.
+2. System creates pending: "asset X needs to return".
+3. Technician confirms status (WhatsApp/app) and posts/collects.
+4. Upon receipt, logistics does sorting (condition) and updates state.
+5. Divergences become exceptions (e.g., different serial, missing item).
+
+**Acceptance Criteria**
+- Reverse creates and closes the cycle in inventory with traceability.
+
+---
+
+### Journey F — Inventory and Audit (AI-Assisted Cycle Count)
+
+**Typical Triggers**
+- Monthly cycle, contractual audit, or divergence detected by AI.
+
+**Expected Result**
+- System proposes count, identifies divergences, and suggests adjustments (with HIL).
+
+**Flow (High Level)**
+1. System suggests a "count route" by risk/value/activity.
+2. User records count (mobile/portal) and attaches evidence (photos).
+3. **Reconciliation Agent** compares:
+   - expected vs counted balance,
+   - historical patterns,
+   - possible causes (entry error, dispatch without withdrawal, missing).
+4. System generates adjustment proposal + justification + risk.
+5. Human approves or rejects.
+
+**Acceptance Criteria**
+- Adjustment does not occur without approval.
+- Divergences remain traceable with probable cause.
+
+---
+
+## 11) Functional Requirements (Detailed)
+
+### FR-01 — Part Number (PN) Registration
+
+**Description**
+Allow creation and maintenance of item catalog (PN) with minimum attributes and control rules.
+
+**Minimum Fields**
+- Type (product), group/category (if applicable)
+- Serial control (yes/no)
+- Mandatory reverse (yes/no)
+- Name/description and tags
+
+**Rules**
+- If "serial control = yes", system requires serial on inbound and outbound.
+- PN can have configurable "required attributes" (by client/project).
+
+**Acceptance Criteria**
+- Does not allow moving serialized item without serial.
+- PN change log (who changed, before/after).
+
+---
+
+### FR-02 — Asset Registration and Tracking (Serialized)
+
+**Description**
+Allow individual asset registration with serial and history.
+
+**Rules**
+- Serial must be unique per PN (or global, according to rule).
+- Alternative identifiers (RFID/tag) may exist, but serial dominates.
+
+**Acceptance Criteria**
+- Search by serial returns asset "timeline".
+- Serial movements automatically update its state.
+
+---
+
+### FR-03 — Location Structure (Bases, Technicians, Storage)
+
+**Description**
+Register locations and treat them as inventory nodes.
+
+**Supported Types**
+- Logistics Center
+- Technical Base
 - Self Storage
-- Service Storage (local com “chave” e acesso controlado)
-- Técnico (estoque avançado individual)
+- Service Storage (location with "key" and controlled access)
+- Technician (individual advanced stock)
 
-**Regras**
-- Local pode ser associado a um projeto/cliente (quando houver segregação).
-- Local pode ter políticas: “pode receber terceiros”, “somente BAD”, etc.
+**Rules**
+- Location can be associated with a project/client (when there is segregation).
+- Location can have policies: "can receive third-party", "BAD only", etc.
 
-**Critérios de aceite**
-- Consulta mostra saldo por local e por tipo.
-- Transferência entre locais respeita políticas.
-
----
-
-### RF‑04 — Movimentações (+/–) com trilha e evidência
-
-**Descrição**  
-Registrar e automatizar movimentações de estoque com evidência.
-
-**Movimentos suportados**
-- Entrada (internalização)
-- Saída (expedição/uso)
-- Transferência
-- Reversa (entrada/saída)
-- Reserva / cancelamento
-- Ajuste (sempre com HIL)
-
-**Regras**
-- Toda movimentação deve ter:
-  - projeto,
-  - tipo,
-  - origem/destino (quando aplicável),
-  - evidência mínima (configurável),
-  - autor (humano/agente) + nível de autonomia.
-- Movimentação pode ser “pendente” até evidência ficar completa.
-
-**Critérios de aceite**
-- Movimentos alteram saldo e estados corretamente.
-- É possível auditar: “o que mudou, quando, por quê e por quem”.
+**Acceptance Criteria**
+- Query shows balance by location and by type.
+- Transfer between locations respects policies.
 
 ---
 
-### RF‑05 — Saldo por base/técnico/projeto (visão operacional)
+### FR-04 — Movements (+/–) with Trail and Evidence
 
-**Descrição**  
-Exibir saldo consolidado e segmentado.
+**Description**
+Record and automate inventory movements with evidence.
 
-**Visões mínimas**
-- Por projeto (cliente)
-- Por local (base/técnico)
-- Por estado (disponível, reservado, em trânsito, BAD, etc.)
-- Por criticidade (itens críticos, alto valor)
+**Supported Movements**
+- Inbound (internalization)
+- Outbound (dispatch/use)
+- Transfer
+- Reverse (inbound/outbound)
+- Reservation / cancellation
+- Adjustment (always with HIL)
 
-**Critérios de aceite**
-- Exportar visão (CSV/PDF) para auditoria quando necessário.
-- Filtros rápidos (projeto, PN, local, estado).
+**Rules**
+- Every movement must have:
+  - project,
+  - type,
+  - origin/destination (when applicable),
+  - minimum evidence (configurable),
+  - author (human/agent) + autonomy level.
+- Movement can be "pending" until evidence is complete.
 
----
-
-### RF‑06 — Entrada por voz / leitura de NF (AI‑First)
-
-**Descrição**  
-Substituir digitação por captura inteligente: o usuário “lê” a NF (ou envia o PDF) e o sistema preenche.
-
-**Regras**
-- O sistema deve:
-  - extrair PN, quantidades, valores, serial (se existir), NF e dados relevantes,
-  - sugerir projeto/cliente final,
-  - indicar campos incertos e pedir confirmação.
-- Deve existir “modo aprendizado” com correções do usuário.
-
-**Critérios de aceite**
-- Usuário consegue completar uma entrada sem digitar campos principais.
-- Correções alimentam memória/treino (ex.: fornecedor X sempre usa layout Y).
+**Acceptance Criteria**
+- Movements change balance and states correctly.
+- It is possible to audit: "what changed, when, why, and by whom".
 
 ---
 
-### RF‑07 — Detecção de divergências e auditoria (AI)
+### FR-05 — Balance by Base/Technician/Project (Operational View)
 
-**Descrição**  
-Detectar automaticamente sinais de divergência e abrir tarefas.
+**Description**
+Display consolidated and segmented balance.
 
-**Exemplos de divergência**
-- Serial aparece em dois locais ao mesmo tempo.
-- Saída sem evidência de expedição.
-- Reversa prevista não ocorreu no prazo.
-- Saldo negativo em algum local.
-- Mudança brusca fora do padrão (picos de consumo).
+**Minimum Views**
+- By project (client)
+- By location (base/technician)
+- By state (available, reserved, in transit, BAD, etc.)
+- By criticality (critical items, high value)
 
-**Critérios de aceite**
-- Divergências geram alerta/tarefa com contexto e recomendação.
-- Ajuste de saldo só ocorre com HIL.
-
----
-
-### RF‑08 — Integração conceitual com chamados (Tiflux)
-
-**Descrição**  
-Cada movimentação relevante precisa estar vinculada a um chamado (pai/filho) quando existir.
-
-**Regras**
-- O módulo deve suportar:
-  - referência do chamado (ID) e do projeto,
-  - múltiplos movimentos por chamado,
-  - “chamado filho” para logística quando não há peça em bases/estoque avançado (via processo de operação).
-
-**Critérios de aceite**
-- Do ativo, consigo ver “quais chamados ele serviu”.
-- Do chamado, consigo ver “quais ativos foram movimentados”.
+**Acceptance Criteria**
+- Export view (CSV/PDF) for audit when necessary.
+- Quick filters (project, PN, location, state).
 
 ---
 
-### RF‑09 — Permissões, auditoria e rastreabilidade
+### FR-06 — Voice / Invoice Reading Input (AI-First)
 
-**Descrição**  
-Garantir controle de acesso e logs completos.
+**Description**
+Replace typing with intelligent capture: user "reads" Invoice (or sends PDF) and system fills.
 
-**Papéis mínimos**
+**Rules**
+- System must:
+  - extract PN, quantities, values, serial (if exists), Invoice and relevant data,
+  - suggest project/end client,
+  - indicate uncertain fields and request confirmation.
+- Must have "learning mode" with user corrections.
+
+**Acceptance Criteria**
+- User can complete an inbound without typing main fields.
+- Corrections feed memory/training (e.g., supplier X always uses layout Y).
+
+---
+
+### FR-07 — Divergence Detection and Audit (AI)
+
+**Description**
+Automatically detect divergence signals and open tasks.
+
+**Divergence Examples**
+- Serial appears in two locations at same time.
+- Outbound without dispatch evidence.
+- Expected reverse did not occur on time.
+- Negative balance at any location.
+- Abrupt change outside pattern (consumption spikes).
+
+**Acceptance Criteria**
+- Divergences generate alert/task with context and recommendation.
+- Balance adjustment only occurs with HIL.
+
+---
+
+### FR-08 — Conceptual Integration with Tickets (Tiflux)
+
+**Description**
+Each relevant movement needs to be linked to a ticket (parent/child) when exists.
+
+**Rules**
+- Module must support:
+  - ticket reference (ID) and project,
+  - multiple movements per ticket,
+  - "child ticket" for logistics when there is no part in bases/advanced stock (via operations process).
+
+**Acceptance Criteria**
+- From asset, I can see "which tickets it served".
+- From ticket, I can see "which assets were moved".
+
+---
+
+### FR-09 — Permissions, Audit, and Traceability
+
+**Description**
+Ensure access control and complete logs.
+
+**Minimum Roles**
 - Admin
-- Logística
-- Operação
-- Técnico
-- Financeiro/Fiscal
-- Leitura (gestão/auditoria)
+- Logistics
+- Operations
+- Technician
+- Finance/Tax
+- Read (management/audit)
 
-**Critérios de aceite**
-- Ação sensível (ajuste, descarte, transferência restrita) exige papel/aprovação.
-- Log mostra usuário/agente, data/hora, e dados alterados.
-
----
-
-## 12) Agentes do módulo (Observa → Pensa → Aprende → Executa)
-
-> O módulo é “AI‑First”: agentes não são enfeite; são o motor do fluxo.
-
-### 12.1 Agent — Controle de Estoque (+/–) (core)
-
-**Observa**
-- eventos de chamado (solicitação de peça, atualização, encerramento)
-- eventos de expedição/reversa (quando existirem)
-- entradas de NF / documentos / confirmações
-- contagens de inventário
-
-**Pensa**
-- qual movimentação deve ocorrer?
-- existe evidência suficiente?
-- qual é o risco? precisa HIL?
-- há inconsistência com histórico?
-
-**Aprende**
-- quando humanos corrigem uma sugestão, registra:
-  - regra corrigida,
-  - exceção por projeto,
-  - padrão de fornecedor.
-
-**Executa**
-- cria/reserva/baixa/transferência conforme nível de autonomia
-- cria tarefas para logística/financeiro quando faltam dados
-- registra log e justificativa
+**Acceptance Criteria**
+- Sensitive action (adjustment, disposal, restricted transfer) requires role/approval.
+- Log shows user/agent, date/time, and changed data.
 
 ---
 
-### 12.2 Agent — Intake (NF/Documentos por voz/PDF)
+## 12) Module Agents (Observe → Think → Learn → Execute)
 
-**Observa**
-- uploads, e‑mails monitorados, gravações por voz, anexos.
+> The module is "AI-First": agents are not decoration; they are the flow engine.
 
-**Pensa**
-- extrair campos, validar consistência (PN x serial x qty),
-- estimar confiança por campo,
-- sugerir projeto e depósito/status.
+### 12.1 Agent — Inventory Control (+/–) (Core)
 
-**Aprende**
-- templates por fornecedor,
-- correções recorrentes (ex.: “PN vem no campo X”).
+**Observes**
+- ticket events (part request, update, closure)
+- dispatch/reverse events (when they exist)
+- Invoice / document / confirmation inputs
+- inventory counts
 
-**Executa**
-- pré‑preenche cadastro de entrada,
-- sinaliza campos incertos e abre revisão.
+**Thinks**
+- what movement should occur?
+- is there sufficient evidence?
+- what is the risk? need HIL?
+- is there inconsistency with history?
 
----
+**Learns**
+- when humans correct a suggestion, records:
+  - corrected rule,
+  - exception by project,
+  - supplier pattern.
 
-### 12.3 Agent — Reconciliação (SAP/planilhas/inventário)
-
-**Observa**
-- exportações, relatórios e contagens,
-- divergências recorrentes.
-
-**Pensa**
-- onde está a diferença?
-- qual causa provável (movimento faltante, erro de serial, etc.)?
-
-**Aprende**
-- padrões por projeto/base,
-- sazonalidade de divergência.
-
-**Executa**
-- propõe ajustes (sempre com HIL),
-- cria tarefas de investigação.
+**Executes**
+- creates/reserves/withdraws/transfers according to autonomy level
+- creates tasks for logistics/finance when data is missing
+- records log and justification
 
 ---
 
-### 12.4 Agent — Compliance (políticas e contratos)
+### 12.2 Agent — Intake (Invoice/Documents by Voice/PDF)
 
-**Observa**
-- transferências sensíveis,
-- ajustes, descartes, “extraviados”,
-- movimentações entre projetos.
+**Observes**
+- uploads, monitored emails, voice recordings, attachments.
 
-**Pensa**
-- está permitido?
-- precisa de aprovação de qual papel?
+**Thinks**
+- extract fields, validate consistency (PN x serial x qty),
+- estimate confidence by field,
+- suggest project and warehouse/status.
 
-**Aprende**
-- exceções contratuais por projeto,
-- perfis de risco.
+**Learns**
+- templates by supplier,
+- recurring corrections (e.g., "PN comes in field X").
 
-**Executa**
-- bloqueia, solicita aprovação e registra justificativa.
-
----
-
-### 12.5 Agent — Comunicação com técnicos (WhatsApp / app)
-
-**Observa**
-- pendências de confirmação e reversa,
-- eventos críticos (atrasos, item errado, etc.)
-
-**Pensa**
-- quem contatar?
-- qual mensagem, com qual contexto?
-
-**Aprende**
-- padrões de resposta por técnico,
-- melhores horários/canais.
-
-**Executa**
-- envia mensagens e coleta confirmações (com registro).
+**Executes**
+- pre-fills inbound registration,
+- signals uncertain fields and opens review.
 
 ---
 
-## 13) Matriz Human‑in‑the‑Loop (HIL)
+### 12.3 Agent — Reconciliation (SAP/Spreadsheets/Inventory)
 
-| Ação | Autonomia padrão | Exceções |
+**Observes**
+- exports, reports, and counts,
+- recurring divergences.
+
+**Thinks**
+- where is the difference?
+- what probable cause (missing movement, serial error, etc.)?
+
+**Learns**
+- patterns by project/base,
+- divergence seasonality.
+
+**Executes**
+- proposes adjustments (always with HIL),
+- creates investigation tasks.
+
+---
+
+### 12.4 Agent — Compliance (Policies and Contracts)
+
+**Observes**
+- sensitive transfers,
+- adjustments, disposals, "missing",
+- movements between projects.
+
+**Thinks**
+- is it allowed?
+- need approval from which role?
+
+**Learns**
+- contractual exceptions by project,
+- risk profiles.
+
+**Executes**
+- blocks, requests approval, and records justification.
+
+---
+
+### 12.5 Agent — Technician Communication (WhatsApp / App)
+
+**Observes**
+- pending confirmations and reverse,
+- critical events (delays, wrong item, etc.)
+
+**Thinks**
+- who to contact?
+- what message, with what context?
+
+**Learns**
+- response patterns by technician,
+- best times/channels.
+
+**Executes**
+- sends messages and collects confirmations (with record).
+
+---
+
+## 13) Human-in-the-Loop (HIL) Matrix
+
+| Action | Default Autonomy | Exceptions |
 |---|---:|---|
-| Criar PN novo | HIL | Autônomo só se categoria já existir e risco baixo |
-| Entrada por NF com alta confiança | Executa com revisão | HIL se valor alto ou serial crítico |
-| Reserva por chamado | Autônomo | HIL se transferir entre projetos |
-| Transferência entre bases do mesmo projeto | Autônomo | HIL se “local restrito” ou “estoque de terceiros” |
-| Ajuste de inventário | HIL obrigatório | Nunca autônomo |
-| Descarte / extravio | HIL obrigatório | Nunca autônomo |
+| Create new PN | HIL | Autonomous only if category already exists and low risk |
+| Inbound by Invoice with high confidence | Executes with review | HIL if high value or critical serial |
+| Reservation by ticket | Autonomous | HIL if transferring between projects |
+| Transfer between bases of same project | Autonomous | HIL if "restricted location" or "third-party stock" |
+| Inventory adjustment | Mandatory HIL | Never autonomous |
+| Disposal / missing | Mandatory HIL | Never autonomous |
 
 ---
 
-## 14) Experiência do usuário (UI/UX) — requisitos mínimos
+## 14) User Experience (UI/UX) — Minimum Requirements
 
-### 14.1 “Inbox” de tarefas (operacional)
+### 14.1 Task "Inbox" (Operational)
 
-Um painel único onde o usuário vê:
-- entradas pendentes (NF lida, faltou confirmar)
-- divergências detectadas
-- reservas a separar (pick list)
-- reversas atrasadas
-- solicitações de aprovação (HIL)
+A single panel where user sees:
+- pending inbound (Invoice read, missing confirmation)
+- detected divergences
+- reservations to stage (pick list)
+- overdue reverses
+- approval requests (HIL)
 
-### 14.2 Busca unificada + Copiloto (“Sasha”)
+### 14.2 Unified Search + Copilot ("Sasha")
 
-- Campo de busca universal + modo chat:
-  - “Onde está o serial X?”
-  - “Quantos switches PN Y existem em RJ e DF?”
-  - “Quais reversas estão pendentes há mais de 5 dias?”
+- Universal search field + chat mode:
+  - "Where is serial X?"
+  - "How many PN Y switches exist in RJ and DF?"
+  - "Which reverses are pending for more than 5 days?"
 
-Respostas devem incluir:
-- números + locais,
+Responses must include:
+- numbers + locations,
 - status,
-- “por que o sistema acha isso” (evidência/histórico).
+- "why the system thinks this" (evidence/history).
 
-### 14.3 Mobile/PWA (mínimo viável)
+### 14.3 Mobile/PWA (Minimum Viable)
 
-- Confirmar recebimento / uso / devolução (técnicos).
-- Scanner (câmera) para serial/QR (se adotado).
-- Checklist rápido de inventário.
-
----
-
-## 15) Relatórios mínimos (dentro do módulo)
-
-Mesmo antes do “Módulo de Dashboards” completo, o estoque precisa ter:
-
-- Saldo por projeto e por local (com filtros).
-- Itens críticos abaixo do mínimo (quando definido).
-- Pendências de reversa (por técnico/projeto).
-- Divergências e ajustes (histórico).
-- Linha do tempo por ativo (serial).
+- Confirm receipt / use / return (technicians).
+- Scanner (camera) for serial/QR (if adopted).
+- Quick inventory checklist.
 
 ---
 
-## 16) Migração e transição do legado (produto)
+## 15) Minimum Reports (Within Module)
 
-### 16.1 Estratégia
+Even before the complete "Dashboards Module", inventory needs to have:
 
-- Importar planilhas atuais como “estado inicial”, mas marcando **qualidade/certeza**.
-- Rodar um período de convivência onde:
-  - o sistema sugere correções,
-  - humanos confirmam,
-  - e a confiança cresce.
-- Substituir gradualmente o uso de planilhas por:
-  - consulta no portal,
-  - inbox de tarefas,
-  - automações por agente.
-
-### 16.2 Requisitos de migração (produto)
-
-- Importação deve aceitar diferentes “esquemas” de planilha.
-- Sistema deve mapear colunas para campos, com sugestão por IA.
-- Deve haver relatório de “campos faltantes” e “possíveis duplicidades”.
+- Balance by project and by location (with filters).
+- Critical items below minimum (when defined).
+- Reverse pending (by technician/project).
+- Divergences and adjustments (history).
+- Timeline by asset (serial).
 
 ---
 
-## 17) Riscos e mitigação
+## 16) Legacy Migration and Transition (Product)
 
-- **Risco:** dados históricos inconsistentes → *Mitigação:* marcar confiança, não automatizar ajustes sem HIL, reconciliação assistida.  
-- **Risco:** agente executar movimento errado → *Mitigação:* níveis de autonomia, evidência mínima, rollback e auditoria.  
-- **Risco:** regras contratuais não codificadas → *Mitigação:* Compliance Agent + política configurável por projeto.  
-- **Risco:** baixa adesão do técnico → *Mitigação:* UX mínima (WhatsApp), mensagens contextualizadas, redução de esforço.
+### 16.1 Strategy
 
----
+- Import current spreadsheets as "initial state", but marking **quality/certainty**.
+- Run a coexistence period where:
+  - system suggests corrections,
+  - humans confirm,
+  - and confidence grows.
+- Gradually replace spreadsheet use with:
+  - portal query,
+  - task inbox,
+  - agent automations.
 
-## 18) Dependências
+### 16.2 Migration Requirements (Product)
 
-- Integração/orquestração de eventos (MCP Core) para ligar chamados ↔ estoque.  
-- Catálogo de usuários e permissões (Admin).  
-- Acesso a evidências (NF, anexos, fotos) e políticas de retenção.  
-- Definição (mesmo que incremental) de:
-  - tipos de estoque/locais,
-  - atributos obrigatórios por projeto,
-  - regras de transferência entre projetos,
-  - itens críticos e mínimos (quando aplicável).
-
----
-
-## 19) Critérios de sucesso do MVP (checklist)
-
-- ✅ Conseguir registrar entrada/saída/transferência com trilha e evidência.  
-- ✅ Conseguir consultar saldo por base/técnico/projeto em tempo real.  
-- ✅ Conseguir rastrear um serial do recebimento até a saída e retorno (quando houver).  
-- ✅ Conseguir operar estoque avançado (técnico como “local”) com confirmações simples.  
-- ✅ Conseguir detectar divergências básicas e criar tarefas.  
-- ✅ Conseguir fazer entrada por voz/PDF (com HIL) sem digitação pesada.
+- Import must accept different spreadsheet "schemas".
+- System must map columns to fields, with AI suggestion.
+- Must have "missing fields" and "possible duplicates" report.
 
 ---
 
-## Apêndice A — Exemplos de cenários (para testes de aceitação)
+## 17) Risks and Mitigation
 
-1. **Entrada serializada**: chegam 10 APs com serial; 2 seriais duplicados → sistema bloqueia e abre exceção.  
-2. **Entrada não‑serializada**: chegam 50 cabos; saldo aumenta e fica disponível.  
-3. **Reserva por chamado**: operação abre chamado filho pedindo 1 switch; sistema reserva e cria pick list.  
-4. **Transferência para técnico**: repor estoque avançado em DF; sistema transfere e pede confirmação do técnico no recebimento.  
-5. **Reversa obrigatória**: ativo usado deve voltar; técnico não posta em 5 dias → sistema alerta e escala.  
-6. **Inventário**: contagem física difere; sistema propõe ajuste e pede aprovação.
+- **Risk:** inconsistent historical data → *Mitigation:* mark confidence, do not automate adjustments without HIL, assisted reconciliation.
+- **Risk:** agent executes wrong movement → *Mitigation:* autonomy levels, minimum evidence, rollback, and audit.
+- **Risk:** contractual rules not coded → *Mitigation:* Compliance Agent + configurable policy by project.
+- **Risk:** low technician adoption → *Mitigation:* minimal UX (WhatsApp), contextualized messages, effort reduction.
+
+---
+
+## 18) Dependencies
+
+- Event integration/orchestration (MCP Core) to link tickets ↔ inventory.
+- User and permissions catalog (Admin).
+- Access to evidence (Invoice, attachments, photos) and retention policies.
+- Definition (even if incremental) of:
+  - inventory types/locations,
+  - required attributes by project,
+  - transfer rules between projects,
+  - critical items and minimums (when applicable).
+
+---
+
+## 19) MVP Success Criteria (Checklist)
+
+- ✅ Able to record inbound/outbound/transfer with trail and evidence.
+- ✅ Able to query balance by base/technician/project in real-time.
+- ✅ Able to track a serial from receipt to outbound and return (when exists).
+- ✅ Able to operate advanced stock (technician as "location") with simple confirmations.
+- ✅ Able to detect basic divergences and create tasks.
+- ✅ Able to do inbound by voice/PDF (with HIL) without heavy typing.
+
+---
+
+## Appendix A — Scenario Examples (for Acceptance Testing)
+
+1. **Serialized inbound**: 10 APs arrive with serial; 2 duplicate serials → system blocks and opens exception.
+2. **Non-serialized inbound**: 50 cables arrive; balance increases and becomes available.
+3. **Reservation by ticket**: operations opens child ticket requesting 1 switch; system reserves and creates pick list.
+4. **Transfer to technician**: replenish advanced stock in DF; system transfers and requests technician confirmation on receipt.
+5. **Mandatory reverse**: used asset must return; technician does not post in 5 days → system alerts and escalates.
+6. **Inventory**: physical count differs; system proposes adjustment and requests approval.
 
 
 
 ---
 
-## Apêndice B — Catálogo inicial de “Locais/Estoques” (exemplo para parametrização)
+## Appendix B — Initial Catalog of "Locations/Inventories" (Example for Parameterization)
 
-> **Objetivo:** já começar o módulo com um *starter pack* de locais que espelha a operação real.  
-> **Observação:** nomes abaixo são exemplos e podem/Devem ser normalizados (ID único + apelido).  
-> **Produto:** o SGA 2.0 deve permitir que **Projeto** e **Local** sejam relacionados, mas não sejam a mesma coisa (para evitar confusão quando um projeto tiver múltiplas bases).
+> **Objective:** start the module with a *starter pack* of locations that mirrors actual operation.
+> **Note:** names below are examples and can/should be normalized (unique ID + nickname).
+> **Product:** SGA 2.0 must allow **Project** and **Location** to be related, but not be the same thing (to avoid confusion when a project has multiple bases).
 
-### B.1 Estoques por Projeto/Cliente (exemplos)
-- NTT – Arcos Dourados  
-- NTT – Necxt  
-- NTT – IPB  
-- NTT – KONAMI  
-- NTT – NTT_ROUTERLINK  
-- FAISTON  
-- IMAGINARIUM  
-- IDM  
-- ITAÚ  
-- Linker  
-- MADERO  
-- MDS  
-- ONETRUST  
-- PORTO SEGURO  
-- RENNER  
-- SEM PARAR  
-- SODEXO  
-- SUL AMÉRICA  
-- ZAMP  
-- SYNGENTA  
-- Unimed Nacional  
-- BACKUP  
+### B.1 Inventories by Project/Client (Examples)
+- NTT – Arcos Dourados
+- NTT – Necxt
+- NTT – IPB
+- NTT – KONAMI
+- NTT – NTT_ROUTERLINK
+- FAISTON
+- IMAGINARIUM
+- IDM
+- ITAÚ
+- Linker
+- MADERO
+- MDS
+- ONETRUST
+- PORTO SEGURO
+- RENNER
+- SEM PARAR
+- SODEXO
+- SUL AMÉRICA
+- ZAMP
+- SYNGENTA
+- Unimed Nacional
+- BACKUP
 
-### B.2 Bases Técnicas (exemplos)
-- NTT – Montes Claros  
-- NTT – Rio do Sul  
-- NTT – Ponta Grossa  
-- NTT – Ponta Porã  
-- NTT – Araraquara  
-- NTT – Itajaí  
-- NTT – Taubaté  
-- NTT – Três Lagoas  
-- NTT – Araçatuba  
-- NTT – Caruaru  
-- NTT – Marabá  
-- NTT – Vitória da Conquista  
-- NTT – Uruguaiana  
+### B.2 Technical Bases (Examples)
+- NTT – Montes Claros
+- NTT – Rio do Sul
+- NTT – Ponta Grossa
+- NTT – Ponta Porã
+- NTT – Araraquara
+- NTT – Itajaí
+- NTT – Taubaté
+- NTT – Três Lagoas
+- NTT – Araçatuba
+- NTT – Caruaru
+- NTT – Marabá
+- NTT – Vitória da Conquista
+- NTT – Uruguaiana
 
-### B.3 Self Storage (exemplos)
-- Self Storage – MG  
-- Self Storage – SC  
+### B.3 Self Storage (Examples)
+- Self Storage – MG
+- Self Storage – SC
 
-### B.4 Service Storage (exemplos)
-- NTT – Santander SP  
-- NTT – Santander BV  
-- NTT – Santander BSB  
+### B.4 Service Storage (Examples)
+- NTT – Santander SP
+- NTT – Santander BV
+- NTT – Santander BSB
 
 ---
 
-## Apêndice C — Modelos de dados (exemplos de 10 ativos/linhas)
+## Appendix C — Data Models (Examples of 10 Assets/Rows)
 
-> **Nota:** exemplos fictícios (para alinhar campos e telas). Substituir por 5–10 itens reais assim que a operação enviar.
+> **Note:** fictional examples (to align fields and screens). Replace with 5–10 real items as soon as operations sends.
 
-| asset_id | part_number | serial | projeto | cliente_final | local_atual | tipo_local | condição | status | propriedade |
+| asset_id | part_number | serial | project | end_client | current_location | location_type | condition | status | ownership |
 |---|---|---|---|---|---|---|---|---|---|
-| AST-0001 | SW-CISCO-C9200-24T | FOC1234A1B2 | NTT_ROUTERLINK | NTT | Barueri-CD | Centro Logístico | Novo | EM_ESTOQUE | Faiston |
-| AST-0002 | AP-ARUBA-515 | CNF9KX1234 | NTT – Arcos Dourados | Arcos Dourados | NTT – Taubaté | Base Técnica | Usado | EM_USO | Terceiro |
-| AST-0003 | SSD-1TB-SATA | (n/a) | FAISTON | Interno | Barueri-CD | Centro Logístico | Novo | EM_ESTOQUE | Faiston |
-| AST-0004 | NOTE-DELL-5430 | 7H2K9L1 | ITAÚ | Itaú | Técnico: João Silva | Técnico | Usado | EM_USO | Terceiro |
-| AST-0005 | SWITCH-HP-1920 | HPX1920ZZ9 | NTT – Necxt | Necxt | Em trânsito (Gollog) | Em trânsito | Usado | EM_TRANSITO | Terceiro |
-| AST-0006 | ROUTER-MIKROTIK-RB4011 | MKT4011A77 | ZAMP | Zamp | BAD – Barueri | Centro Logístico | BAD | BAD | Terceiro |
-| AST-0007 | AP-UBIQUITI-U6-LR | U6LR00991 | PORTO SEGURO | Porto | Service Storage – Santander SP | Service Storage | Novo | EM_ESTOQUE | Faiston |
-| AST-0008 | UPS-APC-1500VA | APC15K8890 | MADERO | Madero | Self Storage – MG | Self Storage | Usado | EM_ESTOQUE | Terceiro |
-| AST-0009 | SERVER-DELL-R640 | R640SN0008 | ONETRUST | OneTrust | Barueri-CD (Staging) | Centro Logístico | Usado | EM_SEPARAÇÃO | Faiston |
-| AST-0010 | SWITCH-CISCO-2960X | FCW2960X22 | NTT – IPB | IPB | NTT – Ponta Grossa | Base Técnica | Usado | AGUARDANDO_REVERSA | Terceiro |
+| AST-0001 | SW-CISCO-C9200-24T | FOC1234A1B2 | NTT_ROUTERLINK | NTT | Barueri-DC | Logistics Center | New | IN_STOCK | Faiston |
+| AST-0002 | AP-ARUBA-515 | CNF9KX1234 | NTT – Arcos Dourados | Arcos Dourados | NTT – Taubaté | Technical Base | Used | IN_USE | Third-party |
+| AST-0003 | SSD-1TB-SATA | (n/a) | FAISTON | Internal | Barueri-DC | Logistics Center | New | IN_STOCK | Faiston |
+| AST-0004 | NOTE-DELL-5430 | 7H2K9L1 | ITAÚ | Itaú | Technician: João Silva | Technician | Used | IN_USE | Third-party |
+| AST-0005 | SWITCH-HP-1920 | HPX1920ZZ9 | NTT – Necxt | Necxt | In transit (Gollog) | In transit | Used | IN_TRANSIT | Third-party |
+| AST-0006 | ROUTER-MIKROTIK-RB4011 | MKT4011A77 | ZAMP | Zamp | BAD – Barueri | Logistics Center | BAD | BAD | Third-party |
+| AST-0007 | AP-UBIQUITI-U6-LR | U6LR00991 | PORTO SEGURO | Porto | Service Storage – Santander SP | Service Storage | New | IN_STOCK | Faiston |
+| AST-0008 | UPS-APC-1500VA | APC15K8890 | MADERO | Madero | Self Storage – MG | Self Storage | Used | IN_STOCK | Third-party |
+| AST-0009 | SERVER-DELL-R640 | R640SN0008 | ONETRUST | OneTrust | Barueri-DC (Staging) | Logistics Center | Used | IN_STAGING | Faiston |
+| AST-0010 | SWITCH-CISCO-2960X | FCW2960X22 | NTT – IPB | IPB | NTT – Ponta Grossa | Technical Base | Used | AWAITING_REVERSE | Third-party |
 
 ---
 
-## Apêndice D — Campos mínimos de uma movimentação (checklist de produto)
+## Appendix D — Minimum Fields of a Movement (Product Checklist)
 
-**Uma movimentação só é “válida” quando tiver:**
-- Tipo de movimentação (entrada/saída/transferência/reversa/ajuste/reserva)
-- Projeto (e, quando aplicável, cliente final)
-- Origem e destino (ou “origem = externo” em entradas; “destino = externo” em saídas)
-- PN e/ou serial (conforme regra do PN)
-- Quantidade (para não‑serializados)
-- Evidência mínima (anexo, referência, confirmação, etc.)
-- Referência de chamado (quando existir)
-- Autor e modo de execução:
-  - humano (nome/usuário),
-  - ou agente (nome do agente + autonomia A/B/C)
-- Carimbo de data/hora + trilha de auditoria
-
+**A movement is only "valid" when it has:**
+- Movement type (inbound/outbound/transfer/reverse/adjustment/reservation)
+- Project (and, when applicable, end client)
+- Origin and destination (or "origin = external" on inbound; "destination = external" on outbound)
+- PN and/or serial (according to PN rule)
+- Quantity (for non-serialized)
+- Minimum evidence (attachment, reference, confirmation, etc.)
+- Ticket reference (when exists)
+- Author and execution mode:
+  - human (name/user),
+  - or agent (agent name + autonomy A/B/C)
+- Timestamp + audit trail

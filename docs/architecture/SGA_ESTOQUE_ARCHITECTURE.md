@@ -1,25 +1,25 @@
-# Arquitetura do Módulo SGA Estoque - Faiston NEXO
+# SGA Inventory Module Architecture - Faiston NEXO
 
-## Visão Geral
+## Overview
 
-O módulo **SGA Estoque** (Sistema de Gestão de Ativos - Estoque) é um sistema completo de gestão de inventário com recursos de IA, workflows de aprovação humana (HIL), e suporte offline/PWA.
+The **SGA Inventory** module (Asset Management System - Inventory) is a complete inventory management system with AI capabilities, human-in-the-loop (HIL) approval workflows, and offline/PWA support.
 
 ---
 
-## 1. Arquitetura de Alto Nível
+## 1. High-Level Architecture
 
 ```mermaid
 flowchart TB
-    subgraph "Frontend - Next.js 15"
+    subgraph "Frontend - Next.js 16"
         CF[CloudFront CDN]
         S3F[S3 Frontend Bucket]
         URLRw[URL Rewriter Function]
     end
 
-    subgraph "Cliente React"
+    subgraph "React Client"
         Pages[25+ Pages/Routes]
         Contexts[6 Contexts]
-        Hooks[17 Hooks]
+        Hooks[29 Hooks]
         Services[sgaAgentcore.ts]
     end
 
@@ -31,9 +31,17 @@ flowchart TB
             EstoqueCtrl[EstoqueControl Agent]
             Intake[Intake Agent]
             Import[Import Agent]
-            Reconciliacao[Reconciliacao Agent]
+            NexoImport[NexoImport Agent]
+            Reconciliacao[Reconciliation Agent]
             Compliance[Compliance Agent]
-            Comunicacao[Comunicacao Agent]
+            Comunicacao[Communication Agent]
+            Carrier[Carrier Agent]
+            Expedition[Expedition Agent]
+            Reverse[Reverse Agent]
+            Observation[Observation Agent]
+            EquipResearch[EquipmentResearch Agent]
+            Learning[Learning Agent]
+            InvCount[InventoryCount Agent]
         end
 
         subgraph "Tools"
@@ -54,26 +62,26 @@ flowchart TB
         Gemini[Google Gemini 3.0 Pro]
     end
 
-    User((Usuário)) --> CF
+    User((User)) --> CF
     CF --> URLRw --> S3F
     S3F --> Pages
     Pages --> Contexts --> Hooks --> Services
     Services -->|JWT Auth| Runtime
     Runtime --> Memory
-    Runtime --> EstoqueCtrl & Intake & Import & Reconciliacao & Compliance & Comunicacao
-    Intake & Import --> FileDetect
+    Runtime --> EstoqueCtrl & Intake & Import & NexoImport & Reconciliacao & Compliance & Comunicacao & Carrier & Expedition & Reverse & Observation & EquipResearch & Learning & InvCount
+    Intake & Import & NexoImport --> FileDetect
     Intake --> NFParser
-    EstoqueCtrl & Intake & Import & Reconciliacao --> DDBInv
-    EstoqueCtrl & Intake & Import --> DDBHIL
-    EstoqueCtrl & Intake & Import & Reconciliacao --> DDBAudit
-    Intake & Import --> S3Docs
-    EstoqueCtrl & Intake & Import --> Gemini
+    EstoqueCtrl & Intake & Import & NexoImport & Reconciliacao --> DDBInv
+    EstoqueCtrl & Intake & Import & NexoImport --> DDBHIL
+    EstoqueCtrl & Intake & Import & NexoImport & Reconciliacao --> DDBAudit
+    Intake & Import & NexoImport --> S3Docs
+    EstoqueCtrl & Intake & Import & NexoImport --> Gemini
     Services -->|Token| Cognito
 ```
 
 ---
 
-## 2. Estrutura de Rotas do Frontend
+## 2. Frontend Route Structure
 
 ```mermaid
 flowchart LR
@@ -81,30 +89,30 @@ flowchart LR
         Dashboard["/\nDashboard"]
 
         subgraph "Asset Management"
-            Lista["/lista\nLista de Ativos"]
-            Detail["/[id]\nDetalhe do Ativo"]
+            Lista["/lista\nAsset List"]
+            Detail["/[id]\nAsset Detail"]
         end
 
         subgraph "/cadastros - Master Data"
             CadHub["/cadastros\nHub"]
             PN["/part-numbers\nPart Numbers"]
-            Locais["/locais\nLocalizações"]
-            Projetos["/projetos\nProjetos"]
+            Locais["/locais\nLocations"]
+            Projetos["/projetos\nProjects"]
         end
 
         subgraph "/movimentacoes - Movements"
             MovHub["/movimentacoes\nHub"]
-            Entrada["/entrada\nEntrada NF"]
-            Saida["/saida\nExpedição"]
-            Transfer["/transferencia\nTransferência"]
-            Reserva["/reserva\nReserva"]
-            Ajuste["/ajuste\nAjuste"]
+            Entrada["/entrada\nNF Entry"]
+            Saida["/saida\nExpedition"]
+            Transfer["/transferencia\nTransfer"]
+            Reserva["/reserva\nReservation"]
+            Ajuste["/ajuste\nAdjustment"]
         end
 
         subgraph "/inventario - Counting"
-            InvList["/inventario\nCampanhas"]
-            InvNew["/novo\nNova Campanha"]
-            InvDetail["/[id]\nContagem"]
+            InvList["/inventario\nCampaigns"]
+            InvNew["/novo\nNew Campaign"]
+            InvDetail["/[id]\nCounting"]
         end
     end
 
@@ -117,7 +125,7 @@ flowchart LR
 
 ---
 
-## 3. Hierarquia de Context Providers
+## 3. Context Provider Hierarchy
 
 ```mermaid
 flowchart TB
@@ -143,7 +151,7 @@ flowchart TB
 
 ---
 
-## 4. Arquitetura dos Agentes Backend (Google ADK)
+## 4. Backend Agent Architecture (Google ADK)
 
 ```mermaid
 flowchart TB
@@ -176,7 +184,14 @@ flowchart TB
         IMP5[_extract_with_gemini]
     end
 
-    subgraph "ReconciliacaoAgent"
+    subgraph "NexoImportAgent"
+        NI1[smart_import_upload]
+        NI2[validate_schema]
+        NI3[interactive_qa]
+        NI4[learn_from_import]
+    end
+
+    subgraph "ReconciliationAgent"
         RA1[start_campaign]
         RA2[submit_count_result]
         RA3[analyze_divergences]
@@ -189,10 +204,45 @@ flowchart TB
         CA3[check_restricted_locations]
     end
 
-    subgraph "ComunicacaoAgent"
+    subgraph "CommunicationAgent"
         CM1[send_notification]
         CM2[send_reminder]
         CM3[send_escalation]
+    end
+
+    subgraph "CarrierAgent"
+        CR1[manage_carriers]
+        CR2[track_shipment]
+    end
+
+    subgraph "ExpeditionAgent"
+        EX1[process_outbound]
+        EX2[generate_shipping_label]
+    end
+
+    subgraph "ReverseAgent"
+        RV1[process_return]
+        RV2[handle_reverse_logistics]
+    end
+
+    subgraph "ObservationAgent"
+        OB1[record_field_observation]
+        OB2[analyze_patterns]
+    end
+
+    subgraph "EquipmentResearchAgent"
+        EQ1[search_equipment_kb]
+        EQ2[find_specifications]
+    end
+
+    subgraph "LearningAgent"
+        LA1[continuous_learning]
+        LA2[improve_predictions]
+    end
+
+    subgraph "InventoryCountAgent"
+        IC1[manage_count_sessions]
+        IC2[validate_counts]
     end
 
     subgraph "Tools"
@@ -206,13 +256,22 @@ flowchart TB
     Router --> EC1 & EC2 & EC3 & EC4 & EC5 & EC6 & EC7
     Router --> IA1 & IA2 & IA3
     Router --> IMP1 & IMP2 & IMP3
+    Router --> NI1 & NI2 & NI3 & NI4
     Router --> RA1 & RA2 & RA3 & RA4
     Router --> CA1
     Router --> CM1 & CM2 & CM3
+    Router --> CR1 & CR2
+    Router --> EX1 & EX2
+    Router --> RV1 & RV2
+    Router --> OB1 & OB2
+    Router --> EQ1 & EQ2
+    Router --> LA1 & LA2
+    Router --> IC1 & IC2
 
     EC1 & EC2 & EC3 & EC4 & EC5 --> DDB & HIL
     IA1 & IA2 & IA3 --> DDB & S3C & NFP & HIL
     IMP1 & IMP2 & IMP3 --> DDB & S3C & FD & HIL
+    NI1 & NI2 & NI3 & NI4 --> DDB & S3C & FD & HIL
     RA1 & RA2 & RA3 & RA4 --> DDB & HIL
     CA1 --> DDB
     CM1 & CM2 --> DDB
@@ -220,7 +279,7 @@ flowchart TB
 
 ---
 
-## 5. Modelo de Dados DynamoDB (Single-Table Design)
+## 5. DynamoDB Data Model (Single-Table Design)
 
 ```mermaid
 erDiagram
@@ -260,33 +319,33 @@ erDiagram
     HIL_TASKS_TABLE ||--o{ AUDIT_LOG_TABLE : "logs decisions"
 ```
 
-### Prefixos de Entidade (PK Pattern)
+### Entity Prefixes (PK Pattern)
 
-| Prefixo | Entidade | Exemplo PK |
+| Prefix | Entity | Example PK |
 |---------|----------|------------|
 | `PN#` | Part Number | `PN#pn_001` |
-| `ASSET#` | Ativo Serializado | `ASSET#asset_123` |
-| `LOC#` | Localização | `LOC#loc_warehouse_01` |
-| `BALANCE#` | Saldo Projetado | `BALANCE#pn_001#loc_01` |
-| `MOVE#` | Movimento (Imutável) | `MOVE#move_456` |
-| `RESERVE#` | Reserva (TTL) | `RESERVE#res_789` |
-| `TASK#` | Tarefa HIL | `TASK#task_abc` |
-| `DIV#` | Divergência | `DIV#div_xyz` |
-| `DOC#` | Documento | `DOC#nf_12345` |
-| `PROJ#` | Projeto | `PROJ#proj_cliente_01` |
+| `ASSET#` | Serialized Asset | `ASSET#asset_123` |
+| `LOC#` | Location | `LOC#loc_warehouse_01` |
+| `BALANCE#` | Projected Balance | `BALANCE#pn_001#loc_01` |
+| `MOVE#` | Movement (Immutable) | `MOVE#move_456` |
+| `RESERVE#` | Reservation (TTL) | `RESERVE#res_789` |
+| `TASK#` | HIL Task | `TASK#task_abc` |
+| `DIV#` | Divergence | `DIV#div_xyz` |
+| `DOC#` | Document | `DOC#nf_12345` |
+| `PROJ#` | Project | `PROJ#proj_cliente_01` |
 
 ---
 
 ## 6. Smart Universal File Importer
 
-O **Smart Import** é um importador inteligente que aceita QUALQUER formato de arquivo e detecta automaticamente o tipo, roteando para o agente apropriado.
+The **Smart Import** is an intelligent importer that accepts ANY file format and automatically detects the type, routing to the appropriate agent.
 
-### Filosofia: Observe → Think → Learn → Act
+### Philosophy: Observe → Think → Learn → Act
 
 ```mermaid
 flowchart TB
     subgraph "OBSERVE"
-        U((Usuário)) -->|Drop File| UZ[SmartUploadZone]
+        U((User)) -->|Drop File| UZ[SmartUploadZone]
         UZ -->|Detect| FD[FileDetector\nMagic Bytes]
     end
 
@@ -314,27 +373,27 @@ flowchart TB
     REVIEW -->|Approve| MOV
 ```
 
-### Redesign de Tabs (4 → 2)
+### Tab Redesign (4 → 2)
 
 ```mermaid
 flowchart LR
-    subgraph "ANTES (4 Tabs)"
+    subgraph "BEFORE (4 Tabs)"
         T1[NF\nXML/PDF]
-        T2[Foto\nJPG/PNG]
+        T2[Photo\nJPG/PNG]
         T3[SAP\nCSV/XLSX]
         T4[Manual]
     end
 
-    subgraph "DEPOIS (2 Tabs)"
-        ST[📁 Upload Inteligente\nTODOS os formatos]
-        MT[✏️ Manual\nSem arquivo]
+    subgraph "AFTER (2 Tabs)"
+        ST[📁 Smart Upload\nALL formats]
+        MT[✏️ Manual\nNo file]
     end
 
     T1 & T2 & T3 -.->|Consolidated| ST
     T4 -.->|Unchanged| MT
 ```
 
-### Detecção de Tipo por Magic Bytes
+### Type Detection by Magic Bytes
 
 ```mermaid
 flowchart TB
@@ -366,7 +425,7 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-    participant U as Usuário
+    participant U as User
     participant FE as SmartUploadZone
     participant H as useSmartImporter
     participant S3 as S3 Bucket
@@ -416,7 +475,7 @@ sequenceDiagram
     AC-->>FE: Success
 ```
 
-### Arquitetura Frontend Smart Import
+### Frontend Smart Import Architecture
 
 ```mermaid
 flowchart TB
@@ -449,25 +508,127 @@ flowchart TB
     Router -.->|Type Guards| DU
 ```
 
-### Formatos Suportados
+### Supported Formats
 
-| Formato | Magic Bytes | Agent | Confiança Base | Auto-Confirm |
+| Format | Magic Bytes | Agent | Base Confidence | Auto-Confirm |
 |---------|------------|-------|----------------|--------------|
-| **XML** | `<?xml` | IntakeAgent | 95% | ✅ Sim |
-| **PDF** | `%PDF` | IntakeAgent | 85% | ✅ Sim |
-| **JPG** | `0xFFD8` | IntakeAgent (Vision) | 70% | ⚠️ Se >80% |
-| **PNG** | `0x89PNG` | IntakeAgent (Vision) | 70% | ⚠️ Se >80% |
-| **CSV** | Extension | ImportAgent | 90% | ✅ Se match >80% |
-| **XLSX** | `PK\x03\x04` | ImportAgent | 90% | ✅ Se match >80% |
-| **TXT** | Extension | ImportAgent + Gemini | 60% | ❌ **Sempre HIL** |
+| **XML** | `<?xml` | IntakeAgent | 95% | ✅ Yes |
+| **PDF** | `%PDF` | IntakeAgent | 85% | ✅ Yes |
+| **JPG** | `0xFFD8` | IntakeAgent (Vision) | 70% | ⚠️ If >80% |
+| **PNG** | `0x89PNG` | IntakeAgent (Vision) | 70% | ⚠️ If >80% |
+| **CSV** | Extension | ImportAgent | 90% | ✅ If match >80% |
+| **XLSX** | `PK\x03\x04` | ImportAgent | 90% | ✅ If match >80% |
+| **TXT** | Extension | ImportAgent + Gemini | 60% | ❌ **Always HIL** |
 
 ---
 
-## 7. Fluxo de Entrada via NF (Legacy)
+## 6.1. NEXO Smart Import
+
+**NEXO Smart Import** is the next-generation AI-powered import system that combines intelligent file processing with continuous learning capabilities.
+
+### Key Features
+
+```mermaid
+flowchart TB
+    subgraph "NEXO Import Pipeline"
+        UP[User Upload] --> PF[Pre-Flight\nSchema Validation]
+        PF -->|Valid| AI[AI Processing\nNexoImportAgent]
+        PF -->|Invalid| ERR[Schema Error\nUser Feedback]
+
+        AI --> QA[Interactive Q&A\nAmbiguous Data]
+        QA --> PR[Preview\nReady for Processing]
+        PR --> EX[Execute Import]
+        EX --> LRN[Learning Loop\nStore Patterns]
+    end
+
+    subgraph "Core Capabilities"
+        C1[PostgreSQL Schema\nIntrospection]
+        C2[Real-time Validation\nBefore Processing]
+        C3[Interactive Disambiguation\nQ&A Dialog]
+        C4[Pattern Learning\nFrom Past Imports]
+    end
+
+    subgraph "Benefits"
+        B1[Zero Invalid Imports\nCatch Errors Early]
+        B2[Reduced HIL Tasks\nAI Learns User Preferences]
+        B3[Faster Processing\nSmart Field Mapping]
+    end
+```
+
+### Pre-Flight Validation Flow
 
 ```mermaid
 sequenceDiagram
-    participant U as Usuário
+    participant U as User
+    participant FE as Frontend
+    participant NI as NexoImportAgent
+    participant PG as PostgreSQL
+    participant VAL as SchemaValidator
+    participant AI as Gemini AI
+
+    U->>FE: Upload file
+    FE->>NI: smart_import_upload()
+
+    Note over NI: PRE-FLIGHT VALIDATION
+    NI->>PG: Introspect schema
+    PG-->>NI: Table structure, constraints
+
+    NI->>VAL: Validate against schema
+
+    alt Schema Valid
+        VAL-->>NI: Validation passed
+        NI->>AI: Process with context
+        AI-->>NI: Extracted data + confidence
+
+        alt High Confidence (≥80%)
+            NI-->>FE: Preview (ready_for_processing)
+        else Low Confidence
+            NI-->>FE: Interactive Q&A required
+            U->>FE: Answer questions
+            FE->>NI: User responses
+            NI->>AI: Re-process with answers
+            AI-->>NI: Updated data
+            NI-->>FE: Preview (ready_for_processing)
+        end
+
+        U->>FE: Confirm import
+        FE->>NI: execute_import()
+        NI->>PG: Insert validated data
+        NI->>NI: Learn from successful import
+        NI-->>FE: Success + learning stored
+
+    else Schema Invalid
+        VAL-->>NI: Validation errors
+        NI-->>FE: Schema violation details
+        FE-->>U: Show errors + suggestions
+    end
+```
+
+### NEXO Import Agent Actions
+
+| Action | Purpose | HIL Decision |
+|--------|---------|--------------|
+| `validate_schema` | Pre-flight check against PostgreSQL schema | None - Auto |
+| `interactive_qa` | Ask user to disambiguate low-confidence fields | Optional |
+| `smart_import_upload` | Process file with learning context | If <80% confidence |
+| `learn_from_import` | Store successful patterns for future use | None - Auto |
+
+### Learning Patterns
+
+The NEXO Import Agent continuously improves by:
+
+1. **Field Mapping Memory**: Remembers successful column → database field mappings
+2. **Data Pattern Recognition**: Learns common data formats (dates, part numbers, locations)
+3. **User Preference Learning**: Adapts to how specific users prefer to resolve ambiguities
+4. **Error Prevention**: Stores past validation errors to prevent recurrence
+
+---
+
+## 7. NF Entry Flow (Legacy)
+
+```mermaid
+sequenceDiagram
+    participant U as User
     participant FE as Frontend
     participant AC as AgentCore
     participant IA as IntakeAgent
@@ -514,11 +675,11 @@ sequenceDiagram
 
 ---
 
-## 7. Fluxo de Reserva e Expedição
+## 8. Reservation and Expedition Flow
 
 ```mermaid
 sequenceDiagram
-    participant U as Usuário
+    participant U as User
     participant FE as Frontend
     participant AC as AgentCore
     participant EC as EstoqueControlAgent
@@ -526,8 +687,8 @@ sequenceDiagram
     participant DDB as DynamoDB
     participant HIL as HIL Tasks
 
-    %% Reserva
-    U->>FE: Criar Reserva (PN, Qty, Projeto)
+    %% Reservation
+    U->>FE: Create Reservation (PN, Qty, Project)
     FE->>AC: createReservation()
     AC->>EC: create_reservation()
     EC->>DDB: Check available balance
@@ -545,11 +706,11 @@ sequenceDiagram
             EC-->>FE: Pending manager approval
         end
     else Insufficient Balance
-        EC-->>FE: Error: Saldo insuficiente
+        EC-->>FE: Error: Insufficient balance
     end
 
-    %% Expedição
-    U->>FE: Processar Expedição
+    %% Expedition
+    U->>FE: Process Expedition
     FE->>AC: processExpedition(reservation_id)
     AC->>EC: process_expedition()
     EC->>DDB: Validate reservation exists
@@ -562,63 +723,63 @@ sequenceDiagram
 
 ---
 
-## 8. Fluxo de Contagem de Inventário
+## 9. Inventory Counting Flow
 
 ```mermaid
 sequenceDiagram
     participant M as Manager
-    participant O as Operador
+    participant O as Operator
     participant FE as Frontend
     participant AC as AgentCore
-    participant RA as ReconciliacaoAgent
+    participant RA as ReconciliationAgent
     participant DDB as DynamoDB
     participant HIL as HIL Tasks
 
-    %% Criar Campanha
-    M->>FE: Criar Campanha (locations[], PNs[])
+    %% Create Campaign
+    M->>FE: Create Campaign (locations[], PNs[])
     FE->>AC: startCampaign()
     AC->>RA: start_campaign()
     RA->>DDB: Create campaign record
     RA->>DDB: Generate items_to_count[]
     RA-->>FE: Campaign created (DRAFT)
 
-    %% Contagem
-    M->>FE: Ativar Campanha
+    %% Counting
+    M->>FE: Activate Campaign
     FE->>AC: activateCampaign()
 
     loop For each location
-        O->>FE: Iniciar Sessão de Contagem
+        O->>FE: Start Counting Session
         FE->>AC: startCountingSession(location)
 
         loop For each item
-            O->>FE: Escanear Serial / Informar Qty
+            O->>FE: Scan Serial / Enter Qty
             FE->>AC: submitCountResult()
             AC->>RA: submit_count()
             RA->>DDB: Record count result
 
             alt Divergence Detected
                 RA->>DDB: Create DIV# record
-                RA-->>FE: Divergência detectada!
+                RA-->>FE: Divergence detected!
             end
         end
     end
 
-    %% Análise
-    M->>FE: Analisar Divergências
+    %% Analysis
+    M->>FE: Analyze Divergences
     FE->>AC: analyzeDivergences()
     AC->>RA: analyze_divergences()
     RA-->>FE: Divergences[] + Summary
 
-    %% Ajuste (SEMPRE HIL)
-    M->>FE: Propor Ajuste
+    %% Adjustment (ALWAYS HIL)
+    M->>FE: Propose Adjustment
     FE->>AC: proposeAdjustment()
     AC->>RA: propose_adjustment()
     RA->>HIL: Create APPROVAL_ADJUSTMENT task
-    Note over HIL: Ajustes SEMPRE requerem aprovação
+    Note over HIL: Adjustments ALWAYS require approval
     RA-->>FE: Pending approval
 
-    %% Aprovação
-    M->>FE: Aprovar Ajuste
+    %% Approval
+    M->>FE: Approve Adjustment
     FE->>AC: approveTask(task_id)
     AC->>DDB: Create ADJUSTMENT movement
     AC->>DDB: Update balance
@@ -627,7 +788,7 @@ sequenceDiagram
 
 ---
 
-## 9. Workflow HIL (Human-in-the-Loop)
+## 10. HIL Workflow (Human-in-the-Loop)
 
 ```mermaid
 stateDiagram-v2
@@ -661,24 +822,24 @@ stateDiagram-v2
     end note
 ```
 
-### Matriz de Decisão HIL
+### HIL Decision Matrix
 
-| Operação | Condição | Decisão |
+| Operation | Condition | Decision |
 |----------|----------|---------|
-| Reserva mesmo projeto | - | ✅ Autônomo |
-| Reserva cross-project | - | 🔒 HIL Obrigatório |
-| Transferência normal | - | ✅ Autônomo |
-| Transferência p/ COFRE/QUARENTENA | - | 🔒 HIL Obrigatório |
-| Entrada NF | Confidence ≥ 80% | ✅ Autônomo |
-| Entrada NF | Confidence < 80% | 🔒 HIL Obrigatório |
-| Entrada NF | Itens não mapeados | 🔒 HIL Obrigatório |
-| Ajuste de inventário | Qualquer | 🔒 **SEMPRE** HIL |
-| Descarte/Perda | Qualquer | 🔒 **SEMPRE** HIL |
-| Novo Part Number | Qualquer | 🔒 HIL Obrigatório |
+| Same-project reservation | - | ✅ Autonomous |
+| Cross-project reservation | - | 🔒 HIL Required |
+| Normal transfer | - | ✅ Autonomous |
+| Transfer to VAULT/QUARANTINE | - | 🔒 HIL Required |
+| NF Entry | Confidence ≥ 80% | ✅ Autonomous |
+| NF Entry | Confidence < 80% | 🔒 HIL Required |
+| NF Entry | Unmapped items | 🔒 HIL Required |
+| Inventory adjustment | Any | 🔒 **ALWAYS** HIL |
+| Discard/Loss | Any | 🔒 **ALWAYS** HIL |
+| New Part Number | Any | 🔒 HIL Required |
 
 ---
 
-## 10. Estrutura S3 Documents
+## 11. S3 Documents Structure
 
 ```mermaid
 flowchart TB
@@ -713,13 +874,13 @@ flowchart TB
 
 ---
 
-## 11. Componentes Frontend Chave
+## 12. Key Frontend Components
 
 ### NEXO AI Components
 
 ```mermaid
 flowchart TB
-    subgraph "NEXO Estoque Components"
+    subgraph "NEXO Inventory Components"
         NC[NexoCopilot]
         NS[NexoSearchBar]
         US[UnifiedSearch]
@@ -727,7 +888,7 @@ flowchart TB
 
     subgraph "NexoCopilot Features"
         CH[Chat History\nMarkdown Rendering]
-        QA[Quick Actions\n6 predefined queries]
+        QA[Quick Actions\n7 predefined queries]
         SG[Suggestions\nAI-generated next steps]
         MI[Message Input\nSend/Clear]
     end
@@ -735,15 +896,16 @@ flowchart TB
     NC --> CH & QA & SG & MI
 
     subgraph "Quick Actions"
-        Q1["Verificar saldo"]
-        Q2["Localizar serial"]
-        Q3["Reversas pendentes"]
-        Q4["Minhas tarefas"]
-        Q5["Itens abaixo mínimo"]
-        Q6["Movimentações hoje"]
+        Q1["Check balance"]
+        Q2["Locate serial"]
+        Q3["Pending returns"]
+        Q4["My tasks"]
+        Q5["Items below minimum"]
+        Q6["Today's movements"]
+        Q7["Equipment search"]
     end
 
-    QA --> Q1 & Q2 & Q3 & Q4 & Q5 & Q6
+    QA --> Q1 & Q2 & Q3 & Q4 & Q5 & Q6 & Q7
 ```
 
 ### Mobile/PWA Components
@@ -752,8 +914,8 @@ flowchart TB
 flowchart LR
     subgraph "Mobile Components"
         MS[MobileScanner\nBarcode/QR]
-        MC[MobileChecklist\nContagem Progressiva]
-        CB[ConfirmationButton\nFeedback Visual]
+        MC[MobileChecklist\nProgressive Counting]
+        CB[ConfirmationButton\nVisual Feedback]
     end
 
     subgraph "OfflineSyncContext"
@@ -768,19 +930,19 @@ flowchart LR
 
 ---
 
-## 12. Resumo da Infraestrutura AWS
+## 13. AWS Infrastructure Summary
 
-| Recurso | Nome | Propósito |
+| Resource | Name | Purpose |
 |---------|------|-----------|
-| **DynamoDB** | `faiston-one-sga-inventory-prod` | Tabela principal (6 GSIs, Streams) |
-| **DynamoDB** | `faiston-one-sga-hil-tasks-prod` | Tarefas de aprovação (4 GSIs) |
-| **DynamoDB** | `faiston-one-sga-audit-log-prod` | Audit trail imutável (4 GSIs) |
-| **S3** | `faiston-one-sga-documents-prod` | NF, evidências, fotos |
-| **IAM Role** | `faiston-one-sga-agentcore-role` | Execução AgentCore |
-| **CloudFront** | `faiston-one-cdn` | CDN com URL Rewriter |
-| **Cognito** | Pool compartilhado | Autenticação JWT |
+| **DynamoDB** | `faiston-one-sga-inventory-prod` | Main table (6 GSIs, Streams) |
+| **DynamoDB** | `faiston-one-sga-hil-tasks-prod` | Approval tasks (4 GSIs) |
+| **DynamoDB** | `faiston-one-sga-audit-log-prod` | Immutable audit trail (4 GSIs) |
+| **S3** | `faiston-one-sga-documents-prod` | NF, evidence, photos |
+| **IAM Role** | `faiston-one-sga-agentcore-role` | AgentCore execution |
+| **CloudFront** | `faiston-one-cdn` | CDN with URL Rewriter |
+| **Cognito** | Shared pool | JWT authentication |
 
-### Região e Conta
+### Region and Account
 
 - **AWS Account**: `377311924364`
 - **Region**: `us-east-2` (Ohio)
@@ -788,7 +950,7 @@ flowchart LR
 
 ---
 
-## Arquivos Relacionados
+## Related Files
 
 ### Frontend
 - **Routes**: `client/app/(main)/ferramentas/ativos/estoque/`
@@ -822,5 +984,6 @@ flowchart LR
 
 ---
 
-*Documento gerado em: 2026-01-05*
-*Versão: 1.1 - Adicionado Smart Universal File Importer*
+**Platform**: Faiston NEXO
+**Last Updated**: January 2026
+**Version**: 2.0 - Full English translation, updated agent count (14), NEXO Smart Import added

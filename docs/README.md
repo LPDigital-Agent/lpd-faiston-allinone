@@ -12,11 +12,12 @@
 |--------|---------|
 | **Platform** | Faiston One (intranet portal) |
 | **AI Assistant** | NEXO (central orchestrator) |
-| **Frontend** | Next.js 15 + TypeScript + Tailwind CSS 4.0 + shadcn/ui |
+| **Frontend** | Next.js 16 + React 19 + TypeScript + Tailwind CSS 4.0 + shadcn/ui |
 | **Backend** | Python 3.13 + Google ADK v1.0 + AWS Lambda (arm64) |
 | **AI Runtime** | AWS Bedrock AgentCore (Runtime + Memory + Gateway) |
 | **Infrastructure** | Terraform + GitHub Actions CI/CD |
-| **Auth** | Amazon Cognito + Microsoft Entra (SSO) |
+| **Auth** | Amazon Cognito (NO Amplify) |
+| **AWS Account** | 377311924364 (us-east-2) |
 
 ---
 
@@ -51,6 +52,17 @@
 | Document | Purpose |
 |----------|---------|
 | [SGA_ESTOQUE_ARCHITECTURE.md](architecture/SGA_ESTOQUE_ARCHITECTURE.md) | SGA Inventory module architecture |
+| [INFRASTRUCTURE.md](INFRASTRUCTURE.md) | AWS infrastructure documentation |
+
+### Operations Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common issues and solutions |
+| [CI_CD_WORKFLOWS.md](CI_CD_WORKFLOWS.md) | GitHub Actions deployment workflows |
+| [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) | Aurora PostgreSQL and DynamoDB schemas |
+| [AGENT_CATALOG.md](AGENT_CATALOG.md) | Complete inventory of all 22 AI agents |
+| [SGA_EQUIPMENT_KB_SETUP.md](SGA_EQUIPMENT_KB_SETUP.md) | Equipment Knowledge Base setup |
 
 ### Claude Code Best Practices
 
@@ -165,8 +177,8 @@ Asset/inventory management system with AI-First architecture:
 - SAP reconciliation
 - Analytics dashboard
 
-**Backend**: 14 agents, 18 tools (PostgreSQL, schema validation, S3, HIL)
-**Frontend**: 6 contexts, 17 hooks, 25+ pages
+**Backend**: 14 agents, 20 tools (PostgreSQL, schema validation, S3, HIL)
+**Frontend**: 6 contexts, 29 hooks, 25+ pages
 
 **Location**: `/ferramentas/ativos/estoque/`
 
@@ -223,7 +235,7 @@ This platform follows security-first development practices:
 2. **Format**: Markdown with proper headings
 3. **Code Examples**: Test before committing
 4. **Links**: Use relative paths
-5. **Language**: English for code docs, Portuguese for user-facing content
+5. **Language**: ALL documentation in English (standardized)
 
 ### Adding New Documentation
 
@@ -253,4 +265,5 @@ This platform follows security-first development practices:
 
 ---
 
-*Last updated: January 9, 2026*
+*Last updated: January 2026*
+*Platform: Faiston NEXO*

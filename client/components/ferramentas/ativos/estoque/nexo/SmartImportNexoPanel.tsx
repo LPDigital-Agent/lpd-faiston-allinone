@@ -788,6 +788,39 @@ function ImportReviewPanel({
           </div>
         )}
 
+        {/* New columns to be created (Dynamic Schema Evolution) */}
+        {reviewSummary.newColumns && reviewSummary.newColumns.length > 0 && (
+          <div className="pt-3 border-t border-white/10">
+            <p className="text-sm text-text-muted mb-2 flex items-center gap-2">
+              <Columns3 className="w-4 h-4 text-purple-400" />
+              Novos campos a criar no banco de dados:
+            </p>
+            <div className="space-y-2">
+              {reviewSummary.newColumns.map((col, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between p-2 bg-purple-500/10 rounded border border-purple-500/20"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-purple-500/20 text-purple-400 text-xs">
+                      {col.inferredType}
+                    </Badge>
+                    <span className="text-sm font-medium text-text-primary">
+                      {col.name}
+                    </span>
+                  </div>
+                  <span className="text-xs text-text-muted">
+                    {col.sourceFileColumn && `de "${col.sourceFileColumn}"`}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-text-muted mt-2 italic">
+              Estes campos serão criados automaticamente no schema do banco de dados.
+            </p>
+          </div>
+        )}
+
         {/* User feedback if provided */}
         {userFeedback && (
           <div className="pt-3 border-t border-white/10">
@@ -1154,6 +1187,128 @@ export function SmartImportNexoPanel({
             <Button variant="outline" onClick={onCancel}>
               Tentar novamente
             </Button>
+          </div>
+        </GlassCardContent>
+      </GlassCard>
+    );
+  }
+
+  // Success state - import completed successfully
+  if (state.stage === 'complete') {
+    return (
+      <GlassCard>
+        <GlassCardHeader>
+          <div className="flex items-center gap-2">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+              className="p-1.5 rounded-lg bg-gradient-to-br from-green-500 to-cyan-500"
+            >
+              <CheckCircle2 className="w-5 h-5 text-white" />
+            </motion.div>
+            <GlassCardTitle>Importação Concluída!</GlassCardTitle>
+          </div>
+        </GlassCardHeader>
+        <GlassCardContent>
+          <div className="space-y-6">
+            {/* Success animation and message */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-6"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-500/20 to-cyan-500/20 flex items-center justify-center"
+              >
+                <CheckCircle2 className="w-10 h-10 text-green-400" />
+              </motion.div>
+
+              <h3 className="text-xl font-semibold text-text-primary mb-2">
+                Dados Importados com Sucesso!
+              </h3>
+
+              <p className="text-text-muted">
+                {reviewSummary?.totalItems
+                  ? `${reviewSummary.totalItems.toLocaleString()} itens foram adicionados às entradas pendentes`
+                  : 'Os dados foram processados e estão aguardando revisão'}
+              </p>
+            </motion.div>
+
+            {/* Summary card */}
+            {reviewSummary && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="p-4 bg-white/5 rounded-lg border border-white/10 space-y-3"
+              >
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="w-5 h-5 text-cyan-400" />
+                  <div>
+                    <p className="font-medium">{reviewSummary.filename}</p>
+                    <p className="text-sm text-text-muted">
+                      {reviewSummary.mainSheet}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-2 gap-4 pt-3 border-t border-white/10">
+                  <div>
+                    <p className="text-sm text-text-muted">Itens importados</p>
+                    <p className="text-xl font-bold text-green-400">
+                      {reviewSummary.totalItems.toLocaleString()}
+                    </p>
+                  </div>
+                  {reviewSummary.projectName && (
+                    <div>
+                      <p className="text-sm text-text-muted">Projeto</p>
+                      <p className="text-lg font-medium">{reviewSummary.projectName}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* New columns created (if any) */}
+                {reviewSummary.newColumns && reviewSummary.newColumns.length > 0 && (
+                  <div className="pt-3 border-t border-white/10">
+                    <p className="text-sm text-text-muted mb-2 flex items-center gap-2">
+                      <Columns3 className="w-4 h-4 text-purple-400" />
+                      Novos campos criados:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {reviewSummary.newColumns.map((col, i) => (
+                        <Badge key={i} className="bg-purple-500/20 text-purple-400">
+                          {col.name} ({col.inferredType})
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* NEXO Explanation */}
+            <NexoExplanation
+              summary={SUCCESS_EXPLANATION.summary}
+              details={SUCCESS_EXPLANATION.details}
+              action={SUCCESS_EXPLANATION.action}
+              variant="success"
+            />
+
+            {/* Actions */}
+            <div className="flex justify-center gap-3 pt-4">
+              <Button
+                onClick={onCancel}
+                className="bg-gradient-to-r from-cyan-500 to-purple-500 text-white"
+              >
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                Nova Importação
+              </Button>
+            </div>
           </div>
         </GlassCardContent>
       </GlassCard>

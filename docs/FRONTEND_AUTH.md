@@ -1,19 +1,31 @@
-# Frontend Authentication Guide
+# Frontend Authentication Guide - Faiston NEXO
 
-Complete guide for implementing AWS Cognito authentication in your React frontend for the Faiston Backend API.
+Complete guide for AWS Cognito authentication in the Faiston NEXO platform.
+
+## Faiston Configuration
+
+| Setting | Value |
+|---------|-------|
+| **AWS Account** | `377311924364` |
+| **Region** | `us-east-2` |
+| **Cognito User Pool** | `us-east-2_lkBXr4kjy` (faiston-users-prod) |
+| **Cognito Client ID** | `7ovjm09dr94e52mpejvbu9v1cg` (faiston-client-prod) |
+
+**IMPORTANT**: This platform uses Amazon Cognito directly - **NO AWS Amplify**.
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Installation](#installation)
-3. [Configuration](#configuration)
-4. [Authentication Service](#authentication-service)
-5. [React Integration](#react-integration)
-6. [Authentication Flows](#authentication-flows)
-7. [GraphQL API Integration](#graphql-api-integration)
-8. [Error Handling](#error-handling)
-9. [Security Best Practices](#security-best-practices)
-10. [Troubleshooting](#troubleshooting)
+2. [AgentCore Gateway Authentication](#agentcore-gateway-authentication)
+3. [Installation](#installation)
+4. [Configuration](#configuration)
+5. [Authentication Service](#authentication-service)
+6. [React Integration](#react-integration)
+7. [Authentication Flows](#authentication-flows)
+8. [GraphQL API Integration](#graphql-api-integration)
+9. [Error Handling](#error-handling)
+10. [Security Best Practices](#security-best-practices)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -24,19 +36,30 @@ Complete guide for implementing AWS Cognito authentication in your React fronten
 ```
 ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
 │                 │      │                 │      │                 │
-│  React Frontend │─────▶│  AWS Cognito    │─────▶│  DynamoDB       │
-│                 │      │  (Auth)         │      │  (User Sync)    │
+│  React Frontend │─────▶│  AWS Cognito    │      │  AgentCore      │
+│  (Next.js 16)   │      │  (Auth)         │      │  Gateway        │
 │                 │      │                 │      │                 │
-└────────┬────────┘      └─────────────────┘      └─────────────────┘
-         │
-         │ (JWT Token)
-         ▼
-┌─────────────────┐      ┌─────────────────┐
-│                 │      │                 │
-│  AWS AppSync    │─────▶│  DynamoDB       │
-│  (GraphQL API)  │      │  (Data)         │
-│                 │      │                 │
-└─────────────────┘      └─────────────────┘
+└────────┬────────┘      └────────┬────────┘      └────────┬────────┘
+         │                        │                        │
+         │ (JWT Token)            │ (Validates)            │
+         └────────────────────────┼────────────────────────┘
+                                  │
+                                  ▼
+                    ┌─────────────────────────┐
+                    │  AgentCore Runtimes     │
+                    │  - Inventory (14 agents)│
+                    │  - Academy (6 agents)   │
+                    │  - Portal (2 agents)    │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │                         │
+                    ▼                         ▼
+          ┌─────────────────┐      ┌─────────────────┐
+          │  Aurora         │      │  DynamoDB       │
+          │  PostgreSQL     │      │  (Events/Tasks) │
+          │  (Inventory)    │      │                 │
+          └─────────────────┘      └─────────────────┘
 ```
 
 ### What the Frontend Handles
@@ -55,9 +78,164 @@ Complete guide for implementing AWS Cognito authentication in your React fronten
 ### Security Features
 
 - **SRP Authentication**: Password never sent over the network (zero-knowledge proof)
-- **Token-based Auth**: JWT tokens validated by AppSync
+- **Token-based Auth**: JWT tokens validated by AgentCore Gateway
 - **Email Verification**: Required before account activation
 - **User Enumeration Prevention**: Generic error messages protect user privacy
+
+---
+
+## AgentCore Gateway Authentication
+
+This section describes how authentication works with AWS Bedrock AgentCore, which is the primary AI backend for Faiston NEXO.
+
+### AgentCore Configuration
+
+```typescript
+// client/lib/config/agentcore.ts
+export const agentCoreConfig = {
+  endpoint: 'https://bedrock-agentcore.us-east-2.amazonaws.com',
+  region: 'us-east-2',
+  accountId: '377311924364',
+  arns: {
+    sga: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_asset_management-uSuLPsFQNH',
+    academy: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_academy_agents-ODNvP6HxCD',
+    portal: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_portal_agents-PENDING',
+  },
+};
+```
+
+### Service Factory Pattern
+
+The platform uses a factory pattern to create AgentCore service clients:
+
+```typescript
+// client/services/agentcoreBase.ts
+export function createAgentCoreService(config: {
+  runtimeArn: string;
+  serviceName: string;
+}) {
+  return {
+    invoke: async (action: string, payload: Record<string, unknown>) => {
+      const token = sessionStorage.getItem('accessToken');
+
+      if (!token) {
+        throw new Error('No access token available');
+      }
+
+      const response = await fetch(AGENTCORE_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-Runtime-ARN': config.runtimeArn,
+        },
+        body: JSON.stringify({ action, ...payload }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`AgentCore request failed: ${response.status}`);
+      }
+
+      return response.json();
+    },
+  };
+}
+```
+
+### Module-Specific Services
+
+Each module creates its own service using the factory:
+
+```typescript
+// client/services/sgaAgentcore.ts
+import { createAgentCoreService } from './agentcoreBase';
+import { SGA_AGENTCORE_ARN } from '@/lib/config/agentcore';
+
+const sgaService = createAgentCoreService({
+  runtimeArn: SGA_AGENTCORE_ARN,
+  serviceName: 'sga',
+});
+
+// Export typed functions for each action
+export async function queryInventory(query: string) {
+  return sgaService.invoke('query_inventory', { query });
+}
+
+export async function processNF(xmlContent: string) {
+  return sgaService.invoke('process_nf', { xml_content: xmlContent });
+}
+```
+
+### Token Storage Strategy
+
+Faiston NEXO stores tokens in `sessionStorage` (not `localStorage`) for security:
+
+| Storage | Token | Reason |
+|---------|-------|--------|
+| `sessionStorage` | Access Token | Required for AgentCore calls |
+| `sessionStorage` | ID Token | User information claims |
+| Browser Memory | Refresh Token | Managed by Cognito SDK |
+
+**Why sessionStorage?**
+- Cleared when browser tab closes (better security)
+- Not accessible across tabs (isolation)
+- Not sent with HTTP requests automatically (unlike cookies)
+
+### Token Refresh for AgentCore
+
+Before making AgentCore calls, ensure the token is valid:
+
+```typescript
+// client/utils/tokenRefresh.ts
+export async function ensureValidTokenForAgentCore(): Promise<string | null> {
+  const token = sessionStorage.getItem('accessToken');
+  if (!token) return null;
+
+  // Decode token to check expiry
+  const payload = JSON.parse(atob(token.split('.')[1]));
+  const expiresAt = payload.exp * 1000;
+  const now = Date.now();
+
+  // Refresh if expires within 5 minutes
+  if (expiresAt - now < 5 * 60 * 1000) {
+    try {
+      const newSession = await refreshSession();
+      const newToken = newSession.getAccessToken().getJwtToken();
+      sessionStorage.setItem('accessToken', newToken);
+      return newToken;
+    } catch (error) {
+      // Refresh failed - user needs to sign in again
+      sessionStorage.clear();
+      return null;
+    }
+  }
+
+  return token;
+}
+```
+
+### JWT Authorizer Configuration
+
+The AgentCore Gateway validates tokens using a JWT Authorizer configured with Cognito:
+
+```python
+# Configured during AgentCore deployment
+authorizerConfiguration = {
+    "customJWTAuthorizer": {
+        "discoveryUrl": "https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration",
+        "allowedClients": ["7ovjm09dr94e52mpejvbu9v1cg"]
+    }
+}
+```
+
+### Common AgentCore Auth Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| HTTP 401 | Missing or expired token | Refresh token and retry |
+| HTTP 401 | Wrong Bearer format | Ensure `Bearer ${token}` format |
+| HTTP 403 | Token valid but user lacks permission | Check user groups in Cognito |
+| HTTP 424 | Agent cold start timeout | Optimize agent imports (30s limit) |
 
 ---
 

@@ -142,10 +142,12 @@ export default function EntradaPage() {
   };
 
   // Handle NEXO analysis complete
+  // NOTE: Do NOT clear nexoFile here - let SmartImportNexoPanel show success screen
+  // The panel will call onCancel when user clicks "Nova Importação"
   const handleNexoComplete = (sessionId: string) => {
-    console.log('[EntradaPage] NEXO analysis complete, session:', sessionId);
-    setNexoFile(null);
-    // After NEXO completes, the hook should update with results
+    console.log('[EntradaPage] NEXO import complete, session:', sessionId);
+    // Keep nexoFile set so SmartImportNexoPanel shows success state
+    // The panel's "Nova Importação" button calls onCancel which will clear it
   };
 
   // Handle NEXO cancel
