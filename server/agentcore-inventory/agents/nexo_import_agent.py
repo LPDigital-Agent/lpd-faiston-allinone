@@ -1351,6 +1351,66 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                         step_type="action",
                         content=f"Estratégia de agregação selecionada: {answer}",
                     ))
+                    # FIX (January 2026): Mark quantity as aggregation-computed
+                    # This ensures schema validation knows quantity will be calculated
+                    if answer == "count_rows":
+                        session.learned_mappings["__quantity_aggregated__"] = "quantity"
+                        session.reasoning_trace.append(ReasoningStep(
+                            step_type="observation",
+                            content="Quantity será calculada por agregação (contagem por PN)",
+                        ))
+            elif q.topic == "required_field_strategy":
+                # FIX (January 2026): Handle required field strategy answers
+                # These are answers to questions about auto-generated fields
+                if q.column == "entry_id":
+                    if answer == "auto_create":
+                        # Store strategy for later use in import execution
+                        if not session.file_analysis:
+                            session.file_analysis = {}
+                        session.file_analysis["entry_id_strategy"] = "auto_create"
+                        session.learned_mappings["__entry_id_auto__"] = "entry_id"
+                        session.reasoning_trace.append(ReasoningStep(
+                            step_type="action",
+                            content="entry_id será criado automaticamente (BULK_IMPORT)",
+                        ))
+                    elif answer == "cancel":
+                        session.stage = ImportStage.COMPLETE
+                        session.error = "Importação cancelada - entry_id obrigatório"
+                        return {
+                            "success": False,
+                            "session": session_to_dict(session),
+                            "error": "Importação cancelada pelo usuário",
+                        }
+                elif q.column == "line_number":
+                    if answer in ("auto_increment", "from_row"):
+                        if not session.file_analysis:
+                            session.file_analysis = {}
+                        session.file_analysis["line_number_strategy"] = answer
+                        session.learned_mappings["__line_number_auto__"] = "line_number"
+                        session.reasoning_trace.append(ReasoningStep(
+                            step_type="action",
+                            content=f"line_number será gerado: {answer}",
+                        ))
+                elif q.column == "quantity":
+                    if answer == "count_rows":
+                        if not session.file_analysis:
+                            session.file_analysis = {}
+                        session.file_analysis["needs_aggregation"] = True
+                        session.file_analysis["aggregation_answer"] = "count_rows"
+                        session.learned_mappings["__quantity_aggregated__"] = "quantity"
+                        session.reasoning_trace.append(ReasoningStep(
+                            step_type="action",
+                            content="Quantity será calculada por agregação",
+                        ))
+                    elif answer == "use_one":
+                        if not session.file_analysis:
+                            session.file_analysis = {}
+                        session.file_analysis["quantity_strategy"] = "use_one"
+                        session.learned_mappings["__quantity_one__"] = "quantity"
+                        session.reasoning_trace.append(ReasoningStep(
+                            step_type="action",
+                            content="Quantity será definida como 1 para todos os itens",
+                        ))
             elif q.topic == "ai_failure_handling":
                 # Handle HIL decision for AI failure
                 if answer == "retry":
@@ -1499,6 +1559,128 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 "confidence": session.confidence.to_dict() if session.confidence else None,
                 "re_reasoning_applied": re_reasoning_applied,
             }
+
+        # =================================================================
+        # PRE-FLIGHT VALIDATION: Validate ALL mappings BEFORE ready_for_processing
+        # FIX (January 2026): Schema validation was happening TOO LATE in
+        # prepare_for_processing(), causing errors after user completed Q&A.
+        # Now we validate BEFORE returning ready_for_processing: true.
+        # =================================================================
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="thought",
+            content="Validando mapeamentos finais contra schema PostgreSQL...",
+        ))
+
+        preflight_validation = self._validate_mappings_against_schema(
+            column_mappings=session.learned_mappings,
+            target_table="pending_entry_items",
+        )
+
+        preflight_errors = preflight_validation.get("errors", [])
+        if preflight_errors:
+            logger.info(
+                f"[NexoImportAgent] Pre-flight validation found {len(preflight_errors)} issues"
+            )
+
+            # Categorize errors for different handling strategies
+            invalid_columns = []  # Columns that don't exist in schema
+            missing_required = []  # Required columns not mapped
+
+            for error in preflight_errors:
+                issue_type = error.get("issue_type") if isinstance(error, dict) else None
+                field = error.get("field") if isinstance(error, dict) else str(error)
+
+                if issue_type == "invalid_target":
+                    # Column mapped to non-existent DB field
+                    invalid_columns.append(field)
+                elif issue_type == "missing_required":
+                    # Required column not mapped
+                    missing_required.append(field)
+
+            # Convert invalid columns to RequestedNewColumn for column_creation questions
+            for file_col in invalid_columns:
+                target_col = session.learned_mappings.get(file_col, "unknown")
+
+                # Skip special markers
+                if target_col.startswith("__") or target_col == "_ignore":
+                    continue
+
+                # Check if already in requested_new_columns
+                existing = [c for c in session.requested_new_columns
+                           if c.source_file_column == file_col]
+                if existing:
+                    continue
+
+                session.requested_new_columns.append(RequestedNewColumn(
+                    name=self._sanitize_column_name(target_col),
+                    original_name=target_col,
+                    user_intent=f"Campo sugerido pelo NEXO para '{file_col}'",
+                    inferred_type="TEXT",  # Default, could be improved with data analysis
+                    source_file_column=file_col,
+                    approved=False,
+                ))
+
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="observation",
+                    content=f"Coluna '{target_col}' não existe - perguntando ao usuário",
+                ))
+
+            # Generate questions for missing required fields with auto-generation strategies
+            required_field_questions = self._generate_required_field_questions(
+                session, missing_required
+            )
+
+            # Generate column creation questions using existing infrastructure
+            column_creation_questions = self._generate_follow_up_questions(session, {})
+
+            # Combine all questions
+            all_preflight_questions = required_field_questions + column_creation_questions
+
+            if all_preflight_questions:
+                session.questions = all_preflight_questions
+                session.stage = ImportStage.QUESTIONING
+                session.updated_at = now_iso()
+
+                logger.info(
+                    f"[NexoImportAgent] Pre-flight validation generated "
+                    f"{len(all_preflight_questions)} questions"
+                )
+
+                log_agent_action(
+                    self.name, "submit_answers",
+                    entity_type="session",
+                    entity_id=session.session_id,
+                    status="preflight_questions",
+                    details={"question_count": len(all_preflight_questions)},
+                )
+
+                return {
+                    "success": True,
+                    "session": session_to_dict(session),
+                    "remaining_questions": [
+                        {
+                            "id": q.id,
+                            "question": q.question,
+                            "context": q.context,
+                            "options": q.options,
+                            "importance": q.importance,
+                            "topic": q.topic,
+                            "column": q.column,
+                        }
+                        for q in all_preflight_questions
+                    ],
+                    "applied_mappings": session.learned_mappings,
+                    "confidence": session.confidence.to_dict() if session.confidence else None,
+                    "ready_for_processing": False,  # NOT ready - need answers first!
+                    "re_reasoning_applied": re_reasoning_applied,
+                    "preflight_validation_triggered": True,
+                }
+
+        # Pre-flight passed - log success
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="conclusion",
+            content=f"✅ Validação pré-voo OK - {preflight_validation.get('coverage_score', 0):.0f}% cobertura",
+        ))
 
         # No more questions - ready for processing
         session.stage = ImportStage.LEARNING
@@ -2093,6 +2275,178 @@ IMPORTANTE:
                 topic="column_mapping",
                 column=field_name,
             ))
+
+        return questions
+
+    def _generate_required_field_questions(
+        self,
+        session: ImportSession,
+        missing_required: List[str],
+    ) -> List[NexoQuestion]:
+        """
+        Generate questions for missing required fields with auto-generation strategies.
+
+        Required fields in pending_entry_items that are NOT in the CSV need special handling:
+        - entry_id: Create parent pending_entries record, use its UUID
+        - line_number: Auto-increment based on row order
+        - quantity: Calculate from aggregation OR ask user
+
+        FIX (January 2026): Previously these errors only appeared at prepare_for_processing,
+        too late for user to provide input. Now we ask BEFORE ready_for_processing.
+
+        Args:
+            session: Current import session
+            missing_required: List of required field names that are not mapped
+
+        Returns:
+            List of NexoQuestion objects for required field handling
+        """
+        questions = []
+
+        # Track which required fields we've already asked about
+        answered_required = set()
+        for q in session.questions:
+            if q.topic == "required_field_strategy" and q.column and q.id in session.answers:
+                answered_required.add(q.column)
+
+        for field_name in missing_required:
+            # Skip if already answered
+            if field_name in answered_required:
+                continue
+
+            # Skip auto-generated fields that are handled automatically
+            auto_handled = {"created_at", "updated_at", "entry_item_id"}
+            if field_name in auto_handled:
+                continue
+
+            # Generate question based on field type
+            if field_name == "entry_id":
+                questions.append(NexoQuestion(
+                    id=generate_id("RQ"),  # RQ = Required field Question
+                    question="Como criar o registro pai (pending_entries)?",
+                    context=(
+                        "O campo 'entry_id' é obrigatório e referencia um registro pai.\n"
+                        "Para importar itens, precisamos primeiro criar uma entrada principal "
+                        "(pending_entries) com informações do documento/lote."
+                    ),
+                    options=[
+                        {
+                            "value": "auto_create",
+                            "label": "✅ Criar automaticamente (BULK_IMPORT)",
+                        },
+                        {
+                            "value": "use_existing",
+                            "label": "🔗 Usar entrada existente (informar ID)",
+                        },
+                        {
+                            "value": "cancel",
+                            "label": "❌ Cancelar importação",
+                        },
+                    ],
+                    importance="critical",
+                    topic="required_field_strategy",
+                    column=field_name,
+                ))
+
+            elif field_name == "line_number":
+                questions.append(NexoQuestion(
+                    id=generate_id("RQ"),
+                    question="Como numerar as linhas do documento?",
+                    context=(
+                        "O campo 'line_number' é obrigatório para identificar cada item.\n"
+                        "Como o arquivo não tem uma coluna para isso, precisamos gerar."
+                    ),
+                    options=[
+                        {
+                            "value": "auto_increment",
+                            "label": "✅ Numerar automaticamente (1, 2, 3...)",
+                        },
+                        {
+                            "value": "from_row",
+                            "label": "📊 Usar número da linha do arquivo",
+                        },
+                    ],
+                    importance="high",
+                    topic="required_field_strategy",
+                    column=field_name,
+                ))
+
+            elif field_name == "quantity":
+                # Check if aggregation is already configured
+                has_aggregation = (
+                    session.file_analysis and
+                    session.file_analysis.get("needs_aggregation") and
+                    session.file_analysis.get("aggregation_answer")
+                )
+
+                if has_aggregation:
+                    # Aggregation is configured but quantity not mapped - this is a bug
+                    # Mark it for auto-handling based on aggregation answer
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="observation",
+                        content=(
+                            "Agregação configurada mas quantity não mapeada - "
+                            "será calculada automaticamente"
+                        ),
+                    ))
+                    # Add synthetic mapping marker for quantity
+                    session.learned_mappings["__quantity_aggregated__"] = "quantity"
+                    continue  # Don't generate question
+
+                # No aggregation - need to ask
+                questions.append(NexoQuestion(
+                    id=generate_id("RQ"),
+                    question="O arquivo não tem coluna de quantidade. Como definir?",
+                    context=(
+                        "O campo 'quantity' é obrigatório mas não foi mapeado.\n"
+                        "Precisamos saber como determinar a quantidade de cada item."
+                    ),
+                    options=[
+                        {
+                            "value": "count_rows",
+                            "label": "📊 Contar linhas por Part Number (agregação)",
+                        },
+                        {
+                            "value": "use_one",
+                            "label": "1️⃣ Usar quantidade 1 para todos",
+                        },
+                        {
+                            "value": "from_column",
+                            "label": "📝 Mapear de outra coluna (especificar)",
+                        },
+                    ],
+                    importance="critical",
+                    topic="required_field_strategy",
+                    column=field_name,
+                ))
+
+            else:
+                # Generic required field question
+                questions.append(NexoQuestion(
+                    id=generate_id("RQ"),
+                    question=f"O campo obrigatório '{field_name}' não está mapeado. Como proceder?",
+                    context=(
+                        f"O campo '{field_name}' é NOT NULL no banco de dados.\n"
+                        "Precisamos de um valor para cada registro."
+                    ),
+                    options=[
+                        {
+                            "value": "default_empty",
+                            "label": "📝 Usar valor padrão vazio",
+                        },
+                        {
+                            "value": "from_column",
+                            "label": "🔄 Mapear de outra coluna",
+                        },
+                        {
+                            "value": "_ignore",
+                            "label": "❌ Ignorar (pode causar erros)",
+                        },
+                    ],
+                    importance="high",
+                    topic="required_field_strategy",
+                    column=field_name,
+                ))
 
         return questions
 

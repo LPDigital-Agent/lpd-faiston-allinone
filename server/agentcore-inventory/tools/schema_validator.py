@@ -302,6 +302,48 @@ class SchemaValidator:
                 del column_mappings[file_col]
                 continue
 
+            # =================================================================
+            # FIX (January 2026): Handle auto-generation markers
+            # These special markers indicate required fields that will be
+            # computed/generated during import, not mapped from CSV.
+            # =================================================================
+
+            # Handle aggregated quantity - computed from row counts by part_number
+            if file_col == "__quantity_aggregated__" and target_col == "quantity":
+                mapped_schema_columns.add("quantity")
+                del column_mappings[file_col]  # Remove marker, keep in mapped_schema_columns
+                logger.info(
+                    "[SchemaValidator] quantity will be computed via aggregation"
+                )
+                continue
+
+            # Handle quantity = 1 for all items
+            if file_col == "__quantity_one__" and target_col == "quantity":
+                mapped_schema_columns.add("quantity")
+                del column_mappings[file_col]
+                logger.info(
+                    "[SchemaValidator] quantity will be set to 1 for all items"
+                )
+                continue
+
+            # Handle auto-created entry_id (creates parent pending_entries record)
+            if file_col == "__entry_id_auto__" and target_col == "entry_id":
+                mapped_schema_columns.add("entry_id")
+                del column_mappings[file_col]
+                logger.info(
+                    "[SchemaValidator] entry_id will be auto-created with BULK_IMPORT entry"
+                )
+                continue
+
+            # Handle auto-incremented line_number
+            if file_col == "__line_number_auto__" and target_col == "line_number":
+                mapped_schema_columns.add("line_number")
+                del column_mappings[file_col]
+                logger.info(
+                    "[SchemaValidator] line_number will be auto-incremented"
+                )
+                continue
+
         # If there are pending column creations, return error asking for HIL approval
         if pending_new_columns:
             for pending in pending_new_columns:
