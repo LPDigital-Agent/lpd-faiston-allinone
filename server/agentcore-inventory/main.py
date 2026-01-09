@@ -135,7 +135,8 @@ def invoke(payload: dict, context) -> dict:
     """
     action = payload.get("action", "health_check")
     user_id = payload.get("user_id", "anonymous")
-    session_id = getattr(context, "session_id", "default-session")
+    # Try context session_id first, then payload, then default
+    session_id = getattr(context, "session_id", None) or payload.get("session_id", "default-session")
 
     # Debug logging to trace action routing
     print(f"[SGA Invoke] action={action}, user_id={user_id}, session_id={session_id}")
