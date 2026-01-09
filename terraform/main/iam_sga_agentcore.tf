@@ -130,18 +130,41 @@ resource "aws_iam_role_policy" "sga_agentcore_memory" {
 # =============================================================================
 
 data "aws_iam_policy_document" "sga_agentcore_logs" {
+  # Statement 1: DescribeLogGroups needs broader access
   statement {
-    sid    = "AgentCoreLogging"
+    sid    = "AgentCoreDescribeLogGroups"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogGroups"
+    ]
+    resources = [
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:*"
+    ]
+  }
+
+  # Statement 2: Log group operations (CreateLogGroup, DescribeLogStreams)
+  statement {
+    sid    = "AgentCoreLogGroupOperations"
     effect = "Allow"
     actions = [
       "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
       "logs:DescribeLogStreams"
     ]
     resources = [
-      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/*",
-      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/*:*"
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/*"
+    ]
+  }
+
+  # Statement 3: Log stream operations (CreateLogStream, PutLogEvents)
+  statement {
+    sid    = "AgentCoreLogStreamOperations"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:PutLogEvents"
+    ]
+    resources = [
+      "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/bedrock-agentcore/*:log-stream:*"
     ]
   }
 }
