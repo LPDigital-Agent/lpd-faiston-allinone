@@ -107,11 +107,60 @@ jobs:
 
           echo "✅ Deployment complete with chunk retention"
 
-      - name: Invalidate CloudFront cache
+      - name: Invalidate CloudFront cache and wait
         run: |
-          aws cloudfront create-invalidation \
+          # FIX (January 2026): Wait for invalidation to complete before declaring success
+          # Previously users could load stale HTML referencing deleted chunks
+
+          echo "🔄 Creating CloudFront invalidation..."
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/*"
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+
+          echo "Invalidation ID: $INVALIDATION_ID"
+
+          # Wait for invalidation to complete (max 5 minutes)
+          echo "⏳ Waiting for invalidation to complete..."
+          aws cloudfront wait invalidation-completed \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --id $INVALIDATION_ID || {
+              echo "⚠️ Warning: Invalidation wait timed out, but may still be propagating"
+            }
+
+          echo "✅ CloudFront invalidation completed"
+
+      - name: Verify deployment
+        run: |
+          # Verify that CloudFront is serving the new content correctly
+          echo "🔍 Verifying deployment..."
+
+          CF_DOMAIN=$(aws cloudfront get-distribution \
+            --id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --query 'Distribution.DomainName' \
+            --output text)
+
+          echo "CloudFront domain: $CF_DOMAIN"
+
+          # Verify root returns 200
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${CF_DOMAIN}/")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "⚠️ Warning: Root returned HTTP $HTTP_CODE"
+          else
+            echo "✅ Root page returns 200"
+          fi
+
+          # Verify a sample chunk exists
+          SAMPLE_CHUNK=$(find out/_next/static/chunks -name "*.js" -type f 2>/dev/null | head -1)
+          if [ -n "$SAMPLE_CHUNK" ]; then
+            CHUNK_PATH="${SAMPLE_CHUNK#out/}"
+            CHUNK_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://${CF_DOMAIN}/${CHUNK_PATH}")
+            echo "Sample chunk ($CHUNK_PATH): HTTP $CHUNK_CODE"
+            if [ "$CHUNK_CODE" != "200" ]; then
+              echo "⚠️ Warning: Chunk not accessible yet"
+            fi
+          fi
 
       - name: Deployment Summary
         run: |

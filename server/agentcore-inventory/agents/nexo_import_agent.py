@@ -865,6 +865,128 @@ Com base em toda a análise acima, qual é o tipo de movimento?
                     historical_match=1.0 if prior_knowledge else 0.5,
                 )
 
+                # =============================================================
+                # Check if aggregation is needed (no quantity column detected)
+                # January 2026: Feature to count identical equipment by PN
+                # =============================================================
+                try:
+                    from tools.sheet_analyzer import detect_aggregation_need
+
+                    # Build parsed rows from file analysis sample data
+                    sample_rows = []
+                    for sheet in session.file_analysis.get("sheets", []):
+                        cols = [c.get("name", f"col_{i}") for i, c in enumerate(sheet.get("columns", []))]
+                        samples_by_col = [c.get("sample_values", []) for c in sheet.get("columns", [])]
+                        # Transpose: column samples → row dicts
+                        max_samples = max((len(s) for s in samples_by_col), default=0)
+                        for row_idx in range(max_samples):
+                            row_dict = {}
+                            for col_idx, col_name in enumerate(cols):
+                                samples = samples_by_col[col_idx] if col_idx < len(samples_by_col) else []
+                                row_dict[col_name] = samples[row_idx] if row_idx < len(samples) else ""
+                            sample_rows.append(row_dict)
+
+                    # Build analysis object for detect_aggregation_need
+                    from tools.sheet_analyzer import WorkbookAnalysis, SheetAnalysis, ColumnAnalysis
+                    from dataclasses import dataclass
+
+                    # Create minimal analysis structure for detection
+                    temp_sheets = []
+                    for sheet_data in session.file_analysis.get("sheets", []):
+                        temp_cols = []
+                        for col_data in sheet_data.get("columns", []):
+                            temp_cols.append(ColumnAnalysis(
+                                name=col_data.get("name", ""),
+                                suggested_mapping=col_data.get("suggested_mapping"),
+                                mapping_confidence=col_data.get("mapping_confidence", 0.0),
+                                data_type=col_data.get("data_type", "text"),
+                                sample_values=col_data.get("sample_values", []),
+                            ))
+                        temp_sheets.append(SheetAnalysis(
+                            name=sheet_data.get("name", ""),
+                            row_count=sheet_data.get("row_count", 0),
+                            column_count=len(temp_cols),
+                            columns=temp_cols,
+                            detected_purpose=sheet_data.get("purpose", "data"),
+                            purpose_confidence=0.8,
+                            has_headers=sheet_data.get("has_headers", True),
+                            suggested_action="process",
+                        ))
+
+                    temp_analysis = WorkbookAnalysis(
+                        filename=session.filename,
+                        sheet_count=len(temp_sheets),
+                        total_rows=sum(s.row_count for s in temp_sheets),
+                        sheets=temp_sheets,
+                        relationships=[],
+                        recommended_strategy="direct",
+                        questions_for_user=[],
+                        reasoning_trace=[],
+                    )
+
+                    aggregation_check = detect_aggregation_need(temp_analysis, sample_rows)
+
+                    if aggregation_check.get("needs_aggregation"):
+                        session.reasoning_trace.append(ReasoningStep(
+                            step_type="observation",
+                            content=(
+                                f"Arquivo sem coluna de quantidade. "
+                                f"Detectei {len(aggregation_check.get('duplicates_sample', []))}+ "
+                                f"Part Numbers repetidos em {aggregation_check['total_rows']} linhas."
+                            ),
+                        ))
+
+                        # Store aggregation config in session
+                        session.file_analysis["needs_aggregation"] = True
+                        session.file_analysis["aggregation_config"] = {
+                            "part_number_column": aggregation_check.get("part_number_column"),
+                            "unique_parts": aggregation_check.get("unique_parts", 0),
+                            "total_rows": aggregation_check.get("total_rows", 0),
+                            "duplicates_sample": aggregation_check.get("duplicates_sample", []),
+                        }
+
+                        # Add question about aggregation strategy
+                        session.questions.append(NexoQuestion(
+                            id=generate_id("AGG"),
+                            question="Como contar equipamentos com mesmo Part Number?",
+                            context=(
+                                f"O arquivo não tem coluna de quantidade. "
+                                f"Encontrei {aggregation_check['total_rows']} linhas com "
+                                f"{aggregation_check['unique_parts']} Part Numbers únicos. "
+                                f"Alguns PNs aparecem mais de uma vez: "
+                                f"{', '.join(aggregation_check.get('duplicates_sample', [])[:3])}..."
+                            ),
+                            options=[
+                                {
+                                    "value": "count_rows",
+                                    "label": "Contar linhas (cada linha = 1 unidade)",
+                                },
+                                {
+                                    "value": "use_one",
+                                    "label": "Usar quantidade 1 para todos",
+                                },
+                            ],
+                            importance="critical",
+                            topic="aggregation_strategy",
+                        ))
+
+                        logger.info(
+                            f"[NexoImportAgent] Aggregation needed: "
+                            f"{aggregation_check['total_rows']} rows → "
+                            f"{aggregation_check['unique_parts']} unique PNs"
+                        )
+                    else:
+                        session.file_analysis["needs_aggregation"] = False
+                        logger.debug(
+                            f"[NexoImportAgent] No aggregation needed: "
+                            f"{aggregation_check.get('reason', 'quantity exists')}"
+                        )
+
+                except Exception as agg_error:
+                    # Non-critical: log but continue without aggregation
+                    logger.warning(f"[NexoImportAgent] Aggregation check failed: {agg_error}")
+                    session.file_analysis["needs_aggregation"] = False
+
                 # Check if needs clarification
                 if result.get("needs_clarification", False):
                     session.stage = ImportStage.QUESTIONING
@@ -1221,6 +1343,46 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             elif q.topic == "movement_type":
                 if session.file_analysis:
                     session.file_analysis["movement_type"] = answer
+            elif q.topic == "aggregation_strategy":
+                # Handle aggregation strategy answer
+                if session.file_analysis:
+                    session.file_analysis["aggregation_answer"] = answer
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="action",
+                        content=f"Estratégia de agregação selecionada: {answer}",
+                    ))
+            elif q.topic == "ai_failure_handling":
+                # Handle HIL decision for AI failure
+                if answer == "retry":
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="action",
+                        content="Usuário solicitou nova tentativa de análise",
+                    ))
+                    # Will trigger re-reasoning below
+                elif answer == "cancel":
+                    session.stage = ImportStage.COMPLETE
+                    session.error = "Importação cancelada pelo usuário"
+                    return {
+                        "success": False,
+                        "session": session_to_dict(session),
+                        "error": "Importação cancelada pelo usuário",
+                    }
+                elif answer == "continue_manual":
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="action",
+                        content="Usuário optou por continuar com mapeamentos atuais",
+                    ))
+                    # Skip re-reasoning, go directly to ready_for_processing
+                    session.stage = ImportStage.LEARNING
+                    session.updated_at = now_iso()
+                    return {
+                        "success": True,
+                        "session": session_to_dict(session),
+                        "applied_mappings": session.learned_mappings,
+                        "ready_for_processing": True,
+                        "re_reasoning_applied": False,
+                        "manual_override": True,
+                    }
 
         # Step 3: RE-REASON with Gemini using user answers as context
         session.reasoning_trace.append(ReasoningStep(
@@ -1231,7 +1393,73 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         re_reasoning_result = await self._re_reason_with_answers(session, answers)
 
         # Track that re-reasoning was applied (for frontend visibility)
-        re_reasoning_applied = "error" not in re_reasoning_result
+        re_reasoning_failed = "error" in re_reasoning_result
+        re_reasoning_applied = not re_reasoning_failed
+
+        # FIX (January 2026): Properly handle re-reasoning failures
+        # Previously the system silently continued with success: true even when AI failed
+        if re_reasoning_failed:
+            logger.error(
+                f"[NexoImportAgent] Re-reasoning failed for session {session.session_id}: "
+                f"{re_reasoning_result.get('error')}"
+            )
+
+            # Check if HIL is required due to failure
+            if re_reasoning_result.get("requires_hil"):
+                # Force HIL review - do NOT proceed to ready_for_processing
+                session.stage = ImportStage.QUESTIONING
+                session.updated_at = now_iso()
+
+                # Generate HIL question for user decision
+                hil_question = NexoQuestion(
+                    id=generate_id("HIL"),
+                    question="A reanálise automática falhou. Como deseja prosseguir?",
+                    context=(
+                        f"O sistema tentou {re_reasoning_result.get('retries_attempted', 1)} "
+                        f"vezes mas não conseguiu processar suas respostas.\n"
+                        f"Erro: {re_reasoning_result.get('error', 'Desconhecido')}\n\n"
+                        "Os mapeamentos atuais podem estar incompletos."
+                    ),
+                    options=[
+                        {"value": "continue_manual", "label": "Continuar com mapeamentos atuais (revisarei manualmente)"},
+                        {"value": "retry", "label": "Tentar novamente"},
+                        {"value": "cancel", "label": "Cancelar importação"},
+                    ],
+                    importance="critical",
+                    topic="ai_failure_handling",
+                    column=None,
+                )
+                session.questions = [hil_question]
+
+                log_agent_action(
+                    self.name, "submit_answers",
+                    entity_type="session",
+                    entity_id=session.session_id,
+                    status="re_reasoning_failed",
+                    details={"error": str(re_reasoning_result.get("error"))[:100]},
+                )
+
+                return {
+                    "success": False,
+                    "error": "re_reasoning_failed",
+                    "message": "A análise com IA falhou. Revisão manual necessária.",
+                    "session": session_to_dict(session),
+                    "remaining_questions": [
+                        {
+                            "id": hil_question.id,
+                            "question": hil_question.question,
+                            "context": hil_question.context,
+                            "options": hil_question.options,
+                            "importance": hil_question.importance,
+                            "topic": hil_question.topic,
+                            "column": hil_question.column,
+                        }
+                    ],
+                    "applied_mappings": session.learned_mappings,
+                    "re_reasoning_applied": False,
+                    "re_reasoning_error": re_reasoning_result.get("error"),
+                    "confidence": session.confidence.to_dict() if session.confidence else None,
+                }
 
         # Step 4: Check if more questions needed (multi-round Q&A)
         follow_up_questions = []
@@ -1283,6 +1511,35 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             status="completed",
         )
 
+        # Build aggregation config if applicable
+        aggregation_config = None
+        if session.file_analysis and session.file_analysis.get("needs_aggregation"):
+            agg_answer = session.file_analysis.get("aggregation_answer", "count_rows")
+            agg_cfg = session.file_analysis.get("aggregation_config", {})
+
+            if agg_answer == "count_rows":
+                aggregation_config = {
+                    "enabled": True,
+                    "strategy": "count_rows",
+                    "part_number_column": agg_cfg.get("part_number_column"),
+                    "merge_strategy": "first",
+                    "unique_parts": agg_cfg.get("unique_parts", 0),
+                    "total_rows": agg_cfg.get("total_rows", 0),
+                }
+
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="action",
+                    content=(
+                        f"Agregação ativada: {agg_cfg.get('total_rows', 0)} linhas → "
+                        f"{agg_cfg.get('unique_parts', 0)} Part Numbers únicos"
+                    ),
+                ))
+            else:
+                aggregation_config = {
+                    "enabled": False,
+                    "strategy": agg_answer,
+                }
+
         return {
             "success": True,
             "session": session_to_dict(session),
@@ -1290,6 +1547,7 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
             "confidence": session.confidence.to_dict() if session.confidence else None,
             "ready_for_processing": True,
             "re_reasoning_applied": re_reasoning_applied,
+            "aggregation": aggregation_config,
         }
 
     async def _handle_column_creation_answer(
@@ -1373,38 +1631,59 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         self,
         session: ImportSession,
         user_answers: Dict[str, str],
+        max_retries: int = 3,
+        initial_delay: float = 1.0,
     ) -> Dict[str, Any]:
         """
         Re-analyze mappings WITH user answer context using Gemini.
 
-        This is the critical RE-THINK phase that was missing.
-        Invokes Gemini to refine mappings based on user clarifications.
+        This is the critical RE-THINK phase. Includes retry logic with
+        exponential backoff for transient failures.
+
+        FIX (January 2026): Added retry logic and proper error handling.
+        System no longer silently fails - requires HIL when retries exhausted.
 
         Args:
             session: Current import session
             user_answers: User's answers to questions
+            max_retries: Maximum retry attempts (default: 3)
+            initial_delay: Initial delay in seconds (doubles each retry)
 
         Returns:
-            Re-reasoning result with updated confidence
+            Re-reasoning result with updated confidence.
+            On failure after retries: {"error": str, "retries_attempted": int, "requires_hil": True}
         """
+        import asyncio
+
         session.reasoning_trace.append(ReasoningStep(
             step_type="action",
             content="Invocando IA para reavaliar com respostas do usuário",
             tool="gemini",
         ))
 
-        try:
-            # Build re-reasoning prompt
-            prompt = self._build_re_reasoning_prompt(session, user_answers)
+        last_error = None
+        delay = initial_delay
 
-            # Invoke Gemini
-            response = await self.invoke(prompt)
+        for attempt in range(max_retries):
+            try:
+                # Build re-reasoning prompt
+                prompt = self._build_re_reasoning_prompt(session, user_answers)
 
-            # Parse response
-            result = parse_json_safe(response)
+                # Invoke Gemini
+                response = await self.invoke(prompt)
 
-            if "error" not in result:
-                # Update confidence based on re-analysis
+                # Parse response
+                result = parse_json_safe(response)
+
+                # Validate JSON response - if parse failed, retry
+                if "error" in result:
+                    raise ValueError(f"Gemini returned invalid JSON: {result.get('error')}")
+
+                # Validate required fields
+                if not isinstance(result.get("confidence"), (int, float)):
+                    raise ValueError("Invalid response: missing confidence score")
+
+                # SUCCESS - process the result
                 new_confidence = result.get("confidence", 0.7)
                 session.confidence = self.calculate_confidence(
                     extraction_quality=new_confidence,
@@ -1473,15 +1752,52 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                     content=f"Reanálise completa. Confiança: {new_confidence:.0%}",
                 ))
 
-            return result
+                return result
 
-        except Exception as e:
-            logger.warning(f"[NexoImportAgent] Re-reasoning failed: {e}")
-            session.reasoning_trace.append(ReasoningStep(
-                step_type="observation",
-                content=f"Reanálise falhou: {str(e)}",
-            ))
-            return {"error": str(e)}
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    f"[NexoImportAgent] Re-reasoning attempt {attempt + 1}/{max_retries} failed: {e}"
+                )
+
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="observation",
+                    content=f"Tentativa {attempt + 1}/{max_retries} falhou: {str(e)}",
+                ))
+
+                if attempt < max_retries - 1:
+                    # Exponential backoff before retry
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="action",
+                        content=f"Aguardando {delay:.1f}s antes de tentar novamente...",
+                    ))
+                    await asyncio.sleep(delay)
+                    delay *= 2  # Exponential backoff
+
+        # All retries failed - degrade confidence and require HIL
+        logger.error(
+            f"[NexoImportAgent] Re-reasoning failed after {max_retries} attempts: {last_error}"
+        )
+
+        session.reasoning_trace.append(ReasoningStep(
+            step_type="conclusion",
+            content=f"Reanálise falhou após {max_retries} tentativas. Revisão manual obrigatória.",
+        ))
+
+        # Degrade confidence significantly when AI fails
+        session.confidence = self.calculate_confidence(
+            extraction_quality=0.3,  # Very low due to AI failure
+            evidence_strength=0.5,
+            historical_match=0.5,
+        )
+        session.confidence.requires_hil = True  # Force HIL review
+
+        return {
+            "error": str(last_error),
+            "retries_attempted": max_retries,
+            "requires_hil": True,
+            "confidence_degraded": True,
+        }
 
     def _build_re_reasoning_prompt(
         self,

@@ -1198,11 +1198,25 @@ export interface NexoSubmitAnswersRequest {
 }
 
 /**
+ * Aggregation configuration for files without quantity column.
+ * When enabled, rows with the same part_number are counted as quantity.
+ */
+export interface NexoAggregationConfig {
+  enabled: boolean;
+  strategy: 'count_rows' | 'use_one';
+  part_number_column?: string;
+  merge_strategy?: 'first' | 'last' | 'most_common';
+  unique_parts?: number;
+  total_rows?: number;
+}
+
+/**
  * Response after submitting answers.
  */
 export interface NexoSubmitAnswersResponse {
   success: boolean;
-  error?: string;  // Error message when success is false
+  error?: string;  // Error type when success is false (e.g., "re_reasoning_failed")
+  message?: string;  // Human-readable error message
   session: NexoSessionState;  // Updated session state
   applied_mappings: Record<string, string>;
   ready_for_processing: boolean;
@@ -1210,6 +1224,7 @@ export interface NexoSubmitAnswersResponse {
   // New fields from re-reasoning flow (January 2026)
   validation_errors?: string[];  // Schema pre-validation errors
   re_reasoning_applied?: boolean;  // Whether Gemini re-analyzed with user answers
+  re_reasoning_error?: string;  // Detailed error message when re_reasoning_applied is false
   confidence?: {
     overall: number;
     extraction_quality: number;
@@ -1219,6 +1234,9 @@ export interface NexoSubmitAnswersResponse {
     factors: string[];
     requires_hil: boolean;
   };
+  // Aggregation config (January 2026) - for files without quantity column
+  aggregation?: NexoAggregationConfig | null;
+  manual_override?: boolean;  // True if user chose to continue with manual mappings
 }
 
 /**

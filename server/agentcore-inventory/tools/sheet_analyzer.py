@@ -888,6 +888,220 @@ def analysis_to_dict(analysis: WorkbookAnalysis) -> Dict[str, Any]:
 
 
 # =============================================================================
+# Row Aggregation by Part Number (January 2026 Feature)
+# =============================================================================
+# When a CSV/XLSX file doesn't have a quantity column, we can aggregate rows
+# by part_number and use the count as quantity. This is common for equipment
+# lists where each row represents a single unit.
+
+
+@dataclass
+class AggregationResult:
+    """Result of row aggregation by part number."""
+
+    original_row_count: int
+    aggregated_row_count: int
+    aggregated_rows: List[Dict[str, Any]]
+    part_number_column: str
+    aggregation_applied: bool
+    duplicate_part_numbers: List[str]
+
+
+def detect_aggregation_need(
+    analysis: WorkbookAnalysis,
+    parsed_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Detect if aggregation by part_number is needed.
+
+    Criteria for aggregation:
+    1. No 'quantity' column detected in the analysis
+    2. 'part_number' column exists
+    3. There are duplicate part numbers in the data
+
+    Args:
+        analysis: WorkbookAnalysis from sheet analysis
+        parsed_rows: Parsed row data (list of dicts)
+
+    Returns:
+        Detection result with recommendation:
+        {
+            "needs_aggregation": bool,
+            "reason": str,
+            "part_number_column": str | None,
+            "unique_parts": int,
+            "total_rows": int,
+            "duplicates_sample": list[str],
+        }
+    """
+    # Find quantity and part_number mappings from analysis
+    has_quantity = False
+    pn_column = None
+
+    for sheet in analysis.sheets:
+        for col in sheet.columns:
+            if col.suggested_mapping == "quantity":
+                has_quantity = True
+            elif col.suggested_mapping == "part_number":
+                pn_column = col.name
+
+    # If quantity exists or no part_number column, no aggregation needed
+    if has_quantity:
+        return {
+            "needs_aggregation": False,
+            "reason": "quantity column exists",
+            "part_number_column": pn_column,
+        }
+
+    if not pn_column:
+        return {
+            "needs_aggregation": False,
+            "reason": "no part_number column detected",
+            "part_number_column": None,
+        }
+
+    # Count part numbers to detect duplicates
+    pn_counts: Dict[str, int] = {}
+    for row in parsed_rows:
+        # Try both the original column name and normalized "part_number"
+        pn = row.get(pn_column) or row.get("part_number")
+        if pn:
+            pn_str = str(pn).strip()
+            if pn_str:
+                pn_counts[pn_str] = pn_counts.get(pn_str, 0) + 1
+
+    # Find duplicates (count > 1)
+    duplicates = [pn for pn, count in pn_counts.items() if count > 1]
+
+    return {
+        "needs_aggregation": len(duplicates) > 0,
+        "reason": (
+            f"found {len(duplicates)} duplicate part numbers without quantity column"
+            if duplicates
+            else "no duplicate part numbers"
+        ),
+        "part_number_column": pn_column,
+        "unique_parts": len(pn_counts),
+        "total_rows": len(parsed_rows),
+        "duplicates_sample": duplicates[:5],  # First 5 duplicates as sample
+    }
+
+
+def aggregate_rows_by_part_number(
+    rows: List[Dict[str, Any]],
+    pn_column: str,
+    merge_strategy: str = "first",
+) -> AggregationResult:
+    """
+    Aggregate rows by part number, counting occurrences as quantity.
+
+    Each unique part_number becomes one row with quantity = count of occurrences.
+    Other columns are merged according to the merge_strategy.
+
+    Args:
+        rows: List of parsed row dictionaries
+        pn_column: Column name containing part number
+        merge_strategy: How to merge other columns:
+            - "first": Use first occurrence's values (default)
+            - "last": Use last occurrence's values
+            - "most_common": Use most common value for each column
+
+    Returns:
+        AggregationResult with aggregated rows
+    """
+    from collections import defaultdict, Counter
+
+    # Group rows by part number
+    grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        # Try both the original column name and normalized "part_number"
+        pn = str(row.get(pn_column) or row.get("part_number") or "").strip()
+        if pn:
+            grouped[pn].append(row)
+
+    aggregated: List[Dict[str, Any]] = []
+    duplicates: List[str] = []
+
+    for pn, group_rows in grouped.items():
+        if len(group_rows) > 1:
+            duplicates.append(pn)
+
+        # Merge row data based on strategy
+        merged: Dict[str, Any] = {}
+
+        if merge_strategy == "first":
+            merged = dict(group_rows[0])
+        elif merge_strategy == "last":
+            merged = dict(group_rows[-1])
+        elif merge_strategy == "most_common":
+            # For each column, use the most common non-empty value
+            all_keys: set = set()
+            for r in group_rows:
+                all_keys.update(r.keys())
+
+            for key in all_keys:
+                values = [r.get(key) for r in group_rows if r.get(key)]
+                if values:
+                    counter = Counter(values)
+                    merged[key] = counter.most_common(1)[0][0]
+        else:
+            # Default to first
+            merged = dict(group_rows[0])
+
+        # Set quantity as count of rows (the key feature)
+        merged["quantity"] = len(group_rows)
+        merged["_aggregated_from_rows"] = len(group_rows)  # Metadata for debugging
+        merged["part_number"] = pn  # Ensure part_number is always set
+
+        aggregated.append(merged)
+
+    return AggregationResult(
+        original_row_count=len(rows),
+        aggregated_row_count=len(aggregated),
+        aggregated_rows=aggregated,
+        part_number_column=pn_column,
+        aggregation_applied=True,
+        duplicate_part_numbers=duplicates,
+    )
+
+
+def validate_unique_part_numbers(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Validate that all part numbers are unique after aggregation.
+
+    Args:
+        rows: Aggregated rows to validate
+
+    Returns:
+        Validation result:
+        {
+            "is_valid": bool,
+            "unique_count": int,
+            "duplicate_errors": list of {part_number, first_row, duplicate_row}
+        }
+    """
+    pn_seen: Dict[str, int] = {}
+    duplicates: List[Dict[str, Any]] = []
+
+    for i, row in enumerate(rows):
+        pn = str(row.get("part_number", "")).strip()
+        if pn in pn_seen:
+            duplicates.append({
+                "part_number": pn,
+                "first_row": pn_seen[pn],
+                "duplicate_row": i,
+            })
+        else:
+            pn_seen[pn] = i
+
+    return {
+        "is_valid": len(duplicates) == 0,
+        "unique_count": len(pn_seen),
+        "duplicate_errors": duplicates,
+    }
+
+
+# =============================================================================
 # Smart File Analysis (FIX January 2026)
 # =============================================================================
 # Routes to the correct parser based on file type detection.

@@ -127,6 +127,14 @@ export interface NexoReviewSummary {
   recommendation: string;
   readyToImport: boolean;
   userFeedback: string | null;
+  // Aggregation config (January 2026) - when CSV has no quantity column
+  aggregation?: {
+    enabled: boolean;
+    strategy: string;
+    uniqueParts: number;
+    totalRows: number;
+    partNumberColumn?: string;
+  } | null;
 }
 
 /**
@@ -534,6 +542,32 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       });
 
       if (!result.data?.success) {
+        // FIX (January 2026): Handle re-reasoning failure with HIL recovery
+        // Previously this threw an error and broke the flow
+        if (result.data?.error === 're_reasoning_failed') {
+          console.warn('[NEXO] Re-reasoning failed, HIL required:', result.data.re_reasoning_error);
+
+          // Show the HIL question about continuing - this is a recovery path, not an error
+          if (result.data.remaining_questions && result.data.remaining_questions.length > 0) {
+            setState(prev => ({
+              ...prev,
+              stage: 'questioning',
+              sessionState: result.data!.session || prev.sessionState,
+              questions: result.data!.remaining_questions!,
+              progress: {
+                stage: 'questioning',
+                percent: 70,
+                message: 'Análise automática falhou. Revisão necessária.',
+                currentStep: 'hil'
+              },
+              error: null, // Clear error since we have a recovery path via HIL
+            }));
+            // Clear interval and return - let user answer HIL question
+            clearInterval(progressInterval);
+            return;
+          }
+        }
+
         // Check for schema validation errors (pre-validation against PostgreSQL)
         if (result.data?.validation_errors && result.data.validation_errors.length > 0) {
           console.warn('[NEXO] Schema validation failed:', result.data.validation_errors);
@@ -568,23 +602,51 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         const highConfMappings = state.analysis!.columnMappings.filter(m => m.confidence >= 0.8);
         const lowConfMappings = state.analysis!.columnMappings.filter(m => m.confidence < 0.5);
 
+        // Build validations list
+        const validations: string[] = [
+          `${highConfMappings.length} colunas mapeadas com alta confiança`,
+          'Estrutura do arquivo validada',
+          mainSheet ? `Aba principal identificada: ${mainSheet.name}` : '',
+        ].filter(Boolean);
+
+        // Build warnings list
+        const warnings: string[] = lowConfMappings.length > 0
+          ? [`${lowConfMappings.length} colunas com baixa confiança (usando valores padrão)`]
+          : [];
+
+        // Handle aggregation config from backend response
+        let aggregationInfo: NexoReviewSummary['aggregation'] = null;
+        const aggConfig = result.data?.aggregation;
+
+        if (aggConfig?.enabled) {
+          aggregationInfo = {
+            enabled: true,
+            strategy: aggConfig.strategy,
+            uniqueParts: aggConfig.unique_parts || 0,
+            totalRows: aggConfig.total_rows || 0,
+            partNumberColumn: aggConfig.part_number_column,
+          };
+
+          // Add aggregation to validations
+          validations.push(
+            `Agregação ativa: ${aggConfig.total_rows} linhas → ${aggConfig.unique_parts} Part Numbers únicos`
+          );
+
+          console.log('[NEXO] Aggregation enabled:', aggregationInfo);
+        }
+
         const reviewSummary: NexoReviewSummary = {
           filename: state.analysis!.filename,
           mainSheet: mainSheet?.name || 'Desconhecida',
-          totalItems: mainSheet?.row_count || 0,
+          totalItems: aggregationInfo?.enabled ? aggregationInfo.uniqueParts : (mainSheet?.row_count || 0),
           projectName: projectAnswer,
           newPartNumbers: 0, // Will be calculated by backend
-          validations: [
-            `${highConfMappings.length} colunas mapeadas com alta confiança`,
-            'Estrutura do arquivo validada',
-            mainSheet ? `Aba principal identificada: ${mainSheet.name}` : '',
-          ].filter(Boolean),
-          warnings: lowConfMappings.length > 0
-            ? [`${lowConfMappings.length} colunas com baixa confiança (usando valores padrão)`]
-            : [],
+          validations,
+          warnings,
           recommendation: 'Acho que está tudo certo! Podemos prosseguir com a importação.',
           readyToImport: true,
           userFeedback: userFeedback || null,
+          aggregation: aggregationInfo,
         };
 
         // Go to reviewing stage for HIL approval
