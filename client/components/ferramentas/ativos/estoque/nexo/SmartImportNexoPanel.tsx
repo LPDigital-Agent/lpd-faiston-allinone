@@ -917,7 +917,7 @@ export function SmartImportNexoPanel({
     skipQuestions,
     approveAndImport,
     backToQuestions,
-    prepareProcessing,
+    // Note: prepareProcessing removed - approveAndImport calls it internally
     reasoningTrace,
     currentThought,
     priorKnowledge,
@@ -1011,13 +1011,15 @@ export function SmartImportNexoPanel({
   };
 
   // Handle continue to processing
+  // FIX (January 2026): Must call approveAndImport() to execute actual import,
+  // not just prepareProcessing() which only validates configuration
   const handleContinue = async () => {
     setIsSubmitting(true);
     try {
-      const config = await prepareProcessing();
-      if (config.ready) {
-        onComplete(state.analysis!.sessionId);
-      }
+      await approveAndImport();
+      onComplete(state.analysis!.sessionId);
+    } catch (err) {
+      console.error('[NEXO] Import failed:', err);
     } finally {
       setIsSubmitting(false);
     }
