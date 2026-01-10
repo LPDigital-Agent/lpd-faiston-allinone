@@ -78,6 +78,7 @@
 | [Faiston_Investory_Mamagement.md](Faiston_Investory_Mamagement.md) | SGA Inventory management overview |
 | [prd_modulo_gestao_estoque_faiston_sga2.md](prd_modulo_gestao_estoque_faiston_sga2.md) | SGA 2.0 detailed PRD |
 | [Modulo_Gestao_Estoque_ModuloExpedicao.pdf](Modulo_Gestao_Estoque_ModuloExpedicao.pdf) | Expedition module specification |
+| [Agent Room Plan](../.claude/plans/golden-bouncing-hearth.md) | Agent Room transparency window design |
 
 ### Authentication Documentation
 
@@ -176,11 +177,27 @@ Asset/inventory management system with AI-First architecture:
 - Reverse logistics
 - SAP reconciliation
 - Analytics dashboard
+- **Agent Room**: Transparency window for AI visibility (see below)
 
 **Backend**: 14 agents, 20 tools (PostgreSQL, schema validation, S3, HIL)
 **Frontend**: 6 contexts, 29 hooks, 25+ pages
 
 **Location**: `/ferramentas/ativos/estoque/`
+
+### Agent Room (Sala de Transparência)
+
+AI transparency dashboard for non-technical users to see what agents do "behind the scenes":
+- **Live Feed**: Real-time humanized messages in Portuguese (first-person)
+- **Agent Team**: Visual cards showing all AI agents with friendly names and status
+- **Learning Stories**: What agents have learned from interactions
+- **Workflow Timeline**: Visual progress of current operations
+- **Pending Decisions**: HIL tasks requiring human input
+
+**Design**: Apple TV frosted dark glass (NEXO Copilot pattern)
+**Architecture**: TanStack Query polling with backend aggregation
+**Backend Action**: `get_agent_room_data` (single endpoint returns all data)
+
+**Location**: `/ferramentas/ativos/agent-room/`
 
 ---
 

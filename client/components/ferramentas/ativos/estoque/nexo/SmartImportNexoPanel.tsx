@@ -984,6 +984,16 @@ export function SmartImportNexoPanel({
 
   // Handle approve and import (HIL approval)
   const handleApproveAndImport = async () => {
+    // DEBUG (January 2026): Track who is calling this function
+    console.log('[NEXO] handleApproveAndImport called - user clicked Aprovar e Importar button');
+    console.log('[NEXO] Current state at approval:', {
+      stage: state.stage,
+      isReviewing,
+      hasQuestions,
+      isReadyToProcess,
+      reviewSummaryExists: !!reviewSummary,
+    });
+
     setIsSubmitting(true);
     try {
       await approveAndImport();
@@ -1015,6 +1025,16 @@ export function SmartImportNexoPanel({
   // not just prepareProcessing() which only validates configuration
   // FIX (January 2026): Handle case where reviewSummary is null - generate it first
   const handleContinue = async () => {
+    // DEBUG (January 2026): Track who is calling this function
+    console.log('[NEXO] handleContinue called - user clicked Continuar para importação button');
+    console.log('[NEXO] Current state at continue:', {
+      stage: state.stage,
+      isReviewing,
+      hasQuestions,
+      isReadyToProcess,
+      reviewSummaryExists: !!reviewSummary,
+    });
+
     setIsSubmitting(true);
     try {
       // If we don't have a reviewSummary, we need to go through the review stage first
@@ -1332,6 +1352,19 @@ export function SmartImportNexoPanel({
 
   // Analysis complete - show results
   if (state.analysis) {
+    // DEBUG (January 2026): Log state on every render to understand UI decision
+    console.log('[NEXO] Rendering analysis section with state:', {
+      stage: state.stage,
+      isReviewing,
+      hasQuestions,
+      isReadyToProcess,
+      reviewSummaryExists: !!reviewSummary,
+      questionsCount: state.questions.length,
+      willShowQuestionPanel: hasQuestions,
+      willShowReviewPanel: isReviewing && !!reviewSummary,
+      willShowContinueButton: isReadyToProcess && !hasQuestions && !isReviewing && !!reviewSummary,
+    });
+
     return (
       <GlassCard>
         <GlassCardHeader>
