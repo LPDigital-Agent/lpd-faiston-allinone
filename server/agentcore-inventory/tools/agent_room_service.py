@@ -460,4 +460,6 @@ def get_agent_room_data(user_id: str, session_id: Optional[str] = None) -> Dict:
 
 def _get_audit_table() -> str:
     """Get audit table name from environment."""
-    return os.environ.get("SGA_AUDIT_TABLE", "faiston-sga-audit-prod")
+    # MUST match dynamodb_client.py:_get_audit_table() to read from same table
+    # where SGAAuditLogger writes events
+    return os.environ.get("AUDIT_LOG_TABLE", "faiston-one-sga-audit-log-prod")
