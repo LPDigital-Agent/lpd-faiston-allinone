@@ -202,65 +202,30 @@ def get_recent_events(
 # Learning Stories Service
 # =============================================================================
 
-# Static learning stories (will be replaced with KB integration)
-LEARNING_STORIES_STATIC = [
-    {
-        "id": "learn-1",
-        "learnedAt": "2026-01-09T14:30:00Z",
-        "agentName": "NEXO",
-        "story": "Aprendi que suas planilhas geralmente tem o codigo na coluna B",
-        "confidence": "alta",
-    },
-    {
-        "id": "learn-2",
-        "learnedAt": "2026-01-08T10:15:00Z",
-        "agentName": "Leitor de Notas",
-        "story": "Reconheco o formato dos seus arquivos SAP automaticamente",
-        "confidence": "alta",
-    },
-    {
-        "id": "learn-3",
-        "learnedAt": "2026-01-07T16:45:00Z",
-        "agentName": "Importador",
-        "story": "Sei que 'SN' significa 'Serial Number' nos seus documentos",
-        "confidence": "media",
-    },
-    {
-        "id": "learn-4",
-        "learnedAt": "2026-01-06T09:20:00Z",
-        "agentName": "Memoria",
-        "story": "Guardei os padroes de nomenclatura do projeto MXRF",
-        "confidence": "alta",
-    },
-    {
-        "id": "learn-5",
-        "learnedAt": "2026-01-05T11:00:00Z",
-        "agentName": "Arquiteto",
-        "story": "Criei a coluna 'observacao_tecnica' para seus dados especiais",
-        "confidence": "alta",
-    },
-]
-
 
 def get_learning_stories(limit: int = 10) -> List[Dict]:
     """
-    Get learning stories for the Agent Room.
+    Get learning stories from AgentCore Memory.
 
-    Currently returns static stories. Will be enhanced to query
-    from Knowledge Base when learning agent is fully integrated.
+    Returns real learning data when available, or empty list if none exists.
+    This is PRODUCTION code - no fake/mock data.
 
     Args:
         limit: Maximum stories to return
 
     Returns:
-        List of learning story dicts
+        List of learning story dicts (empty if no real data)
     """
-    # TODO: Replace with KB query when learning agent stores patterns
-    # from tools.knowledge_base_retrieval_tool import KBRetrievalTool
-    # kb = KBRetrievalTool()
-    # patterns = kb.query("learned patterns", limit=limit)
+    # TODO: Integrate with AgentCore Episodic Memory when LearningAgent
+    # starts storing ImportEpisode/ImportReflection data accessible via API.
+    # For now, return empty list (honest empty state).
+    #
+    # Future integration:
+    # from tools.agentcore_memory import get_episodes
+    # episodes = get_episodes(memory_id="nexo_agent_mem-*", limit=limit)
+    # return [transform_episode_to_story(ep) for ep in episodes]
 
-    return LEARNING_STORIES_STATIC[:limit]
+    return []
 
 
 # =============================================================================
@@ -271,27 +236,27 @@ def get_active_workflow(session_id: Optional[str] = None) -> Optional[Dict]:
     """
     Get the currently active workflow for display in the timeline.
 
+    Returns real workflow data when a session is active, or None if no workflow.
+    This is PRODUCTION code - no fake/mock data.
+
     Args:
         session_id: Optional session ID to get specific workflow
 
     Returns:
         Active workflow dict or None if no workflow is active
     """
-    # TODO: Query active import sessions or processing jobs
-    # For now, return a sample workflow when there's activity
+    # No session = no active workflow (honest empty state)
+    if not session_id:
+        return None
 
-    return {
-        "id": "workflow-sample",
-        "name": "Importacao de Planilha",
-        "startedAt": datetime.utcnow().isoformat() + "Z",
-        "steps": [
-            {"id": "step-1", "label": "Recebido", "icon": "FileText", "status": "concluido"},
-            {"id": "step-2", "label": "Analisando", "icon": "Search", "status": "concluido"},
-            {"id": "step-3", "label": "Validando", "icon": "Shield", "status": "atual"},
-            {"id": "step-4", "label": "Importando", "icon": "Upload", "status": "pendente"},
-            {"id": "step-5", "label": "Concluido", "icon": "CheckCircle", "status": "pendente"},
-        ],
-    }
+    # TODO: Integrate with SGASessionManager to get real session data
+    # Future integration:
+    # from tools.session_manager import SGASessionManager
+    # session = SGASessionManager().get_session(session_id)
+    # if session and session.status == "active":
+    #     return transform_session_to_workflow(session)
+
+    return None
 
 
 # =============================================================================

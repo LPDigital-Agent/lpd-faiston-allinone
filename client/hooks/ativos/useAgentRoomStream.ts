@@ -22,13 +22,7 @@ import {
   type AgentRoomWorkflow,
   type AgentRoomDecision,
 } from '@/services/sgaAgentcore';
-import {
-  MOCK_LIVE_MESSAGES,
-  MOCK_LEARNING_STORIES,
-  MOCK_PENDING_DECISIONS,
-  MOCK_ACTIVE_WORKFLOW,
-  AGENT_PROFILES,
-} from '@/lib/ativos/agentRoomConstants';
+import { AGENT_PROFILES } from '@/lib/ativos/agentRoomConstants';
 import type {
   LiveMessage,
   AgentProfile,
@@ -67,8 +61,6 @@ export interface UseAgentRoomStreamOptions {
   enabled?: boolean;
   /** Polling interval in ms (default: 5000) */
   refetchInterval?: number;
-  /** Use mock data instead of real API (default: false) */
-  useMockData?: boolean;
 }
 
 export interface UseAgentRoomStreamReturn extends AgentRoomStreamState {
@@ -187,7 +179,6 @@ export function useAgentRoomStream(
   const {
     enabled = true,
     refetchInterval = 5000,
-    useMockData = false, // Set to false to use real backend
   } = options;
 
   const [isPaused, setPaused] = useState(false);
@@ -206,19 +197,7 @@ export function useAgentRoomStream(
   } = useQuery({
     queryKey: ['agent-room-data'],
     queryFn: async (): Promise<AgentRoomDataResponse | null> => {
-      if (useMockData) {
-        // Return mock data structure
-        return {
-          success: true,
-          timestamp: new Date().toISOString(),
-          agents: [],
-          liveFeed: [],
-          learningStories: [],
-          activeWorkflow: null,
-          pendingDecisions: [],
-        };
-      }
-
+      // PRODUCTION: Always fetch real data from backend
       try {
         const response = await getAgentRoomData();
         return response.data;
@@ -240,36 +219,35 @@ export function useAgentRoomStream(
   // =============================================================================
 
   const state = useMemo((): AgentRoomStreamState => {
-    // Use mock data if enabled or if no backend data
-    if (useMockData || !data) {
+    // No data yet - return loading/empty state (NO MOCK DATA - PRODUCTION)
+    if (!data) {
       return {
         isLoading,
         isConnected: !isLoading && !error,
-        messages: MOCK_LIVE_MESSAGES.filter((m) => !clearedMessages.includes(m.id)),
-        agents: getMockAgentProfiles(),
-        learningStories: MOCK_LEARNING_STORIES,
-        activeWorkflow: MOCK_ACTIVE_WORKFLOW,
-        pendingDecisions: MOCK_PENDING_DECISIONS,
+        messages: [],
+        agents: getMockAgentProfiles(), // Static agent list from AGENT_PROFILES
+        learningStories: [],
+        activeWorkflow: null,
+        pendingDecisions: [],
         error: error ? String(error) : null,
-        lastEventAt: useMockData ? new Date().toISOString() : null,
+        lastEventAt: null,
       };
     }
 
-    // Transform backend data (with defensive null checks for all arrays)
+    // Transform backend data - NO FAKE FALLBACKS (PRODUCTION)
+    // Empty arrays and null are valid states, not errors
     return {
       isLoading,
       isConnected: data.success,
       messages: transformMessages(data.liveFeed || []).filter((m) => !clearedMessages.includes(m.id)),
       agents: (data.agents?.length ?? 0) > 0 ? transformAgents(data.agents) : getMockAgentProfiles(),
-      learningStories: (data.learningStories?.length ?? 0) > 0
-        ? transformLearningStories(data.learningStories)
-        : MOCK_LEARNING_STORIES,
-      activeWorkflow: transformWorkflow(data.activeWorkflow) ?? MOCK_ACTIVE_WORKFLOW,
+      learningStories: transformLearningStories(data.learningStories || []),
+      activeWorkflow: transformWorkflow(data.activeWorkflow),
       pendingDecisions: transformDecisions(data.pendingDecisions || []),
       error: data.success ? null : 'Erro ao carregar dados',
       lastEventAt: data.timestamp,
     };
-  }, [data, isLoading, error, useMockData, clearedMessages]);
+  }, [data, isLoading, error, clearedMessages]);
 
   // =============================================================================
   // Actions
