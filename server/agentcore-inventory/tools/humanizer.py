@@ -62,6 +62,19 @@ AGENT_FRIENDLY_NAMES = {
     "ComunicacaoAgent": "Comunicador",
     "comunicacao": "Comunicador",
 
+    # Observation & Research
+    "ObservationAgent": "Observador",
+    "observation": "Observador",
+    "observation_agent": "Observador",
+    "EquipmentResearchAgent": "Pesquisador",
+    "equipment_research": "Pesquisador",
+    "equipment_research_agent": "Pesquisador",
+
+    # Reverse Logistics
+    "ReverseAgent": "Reversa",
+    "reverse": "Reversa",
+    "reverse_agent": "Reversa",
+
     # NEXO Chat
     "NexoEstoqueAgent": "NEXO Estoque",
     "nexo_estoque": "NEXO Estoque",
@@ -84,6 +97,9 @@ AGENT_DESCRIPTIONS = {
     "Logistica": "Gerencia transportadoras",
     "Comunicador": "Envia notificacoes",
     "NEXO Estoque": "Responde suas perguntas sobre estoque",
+    "Observador": "Monitora mudancas no estoque",
+    "Pesquisador": "Busca informacoes de equipamentos",
+    "Reversa": "Processa devolucoes e retornos",
     "Sistema": "Operacoes automaticas",
     "Assistente": "Ajuda geral",
 }

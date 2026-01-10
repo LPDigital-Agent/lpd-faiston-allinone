@@ -37,14 +37,27 @@ from tools.humanizer import (
 # Maximum number of recent events to return
 MAX_RECENT_EVENTS = 50
 
-# Primary agents to show in Agent Room (in display order)
+# Primary agents to show in Agent Room (in display order, grouped by function)
 PRIMARY_AGENTS = [
+    # Importação & Entrada
     "nexo_import",
     "intake",
     "import",
+    # Controle & Validação
+    "estoque_control",
     "compliance",
+    "reconciliacao",
+    # Logística & Movimento
+    "expedition",
+    "carrier",
+    "reverse",
+    # Evolução & Aprendizado
     "schema_evolution",
     "learning",
+    # Suporte & Pesquisa
+    "observation",
+    "equipment_research",
+    "comunicacao",
 ]
 
 # Agent icons (Lucide icon names)
@@ -61,6 +74,9 @@ AGENT_ICONS = {
     "Logistica": "Truck",
     "Comunicador": "Bell",
     "NEXO Estoque": "MessageSquare",
+    "Observador": "Eye",
+    "Pesquisador": "Search",
+    "Reversa": "RotateCcw",
 }
 
 # Agent colors
@@ -77,6 +93,9 @@ AGENT_COLORS = {
     "Logistica": "indigo",
     "Comunicador": "pink",
     "NEXO Estoque": "violet",
+    "Observador": "emerald",
+    "Pesquisador": "amber",
+    "Reversa": "rose",
 }
 
 

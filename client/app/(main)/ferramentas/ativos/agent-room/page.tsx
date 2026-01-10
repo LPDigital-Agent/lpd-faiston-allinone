@@ -207,7 +207,7 @@ function ErrorFallback({ error, onRetry }: ErrorFallbackProps) {
 
 export default function AgentRoomPage() {
   const { isConnected, isLoading, error, refetch } = useAgentRoomStream({
-    useMockData: true, // Use mock data until backend is deployed
+    useMockData: false, // Real data from backend via AgentCore Gateway
   });
 
   // Show error state if critical error
