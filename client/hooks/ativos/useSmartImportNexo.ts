@@ -849,7 +849,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       console.log('[NEXO] executeNexoImport: Backend response:', {
         success: result.data?.success,
         error: result.data?.error,
-        inserted_count: result.data?.inserted_count,
+        created_count: result.data?.created_count,
         failed_rows_count: result.data?.failed_rows?.length,
       });
 
