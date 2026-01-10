@@ -13,6 +13,7 @@ import {
   MapPin,
   MessageSquare,
   FileText,
+  Eye,
   BookOpen,
 } from "lucide-react";
 import type { AssetNavModule, AssetStatus, AssetCategory } from "./types";
@@ -73,6 +74,13 @@ export const ASSET_NAV_MODULES: AssetNavModule[] = [
     labelShort: "Fiscal",
     href: "/ferramentas/ativos/fiscal",
     icon: FileText,
+  },
+  {
+    id: "agent-room",
+    label: "Agent Room",
+    labelShort: "Agents",
+    href: "/ferramentas/ativos/agent-room",
+    icon: Eye,
   },
   {
     id: "wiki",

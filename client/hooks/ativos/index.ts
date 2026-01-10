@@ -94,6 +94,21 @@ export type {
   SmartImportUploadResponse,
 } from './useSmartImporter';
 
+// Agent Room hooks (real-time transparency)
+export {
+  useAgentRoomStream,
+  useLiveFeed,
+  useAgentProfiles,
+  useLearningStories,
+  useWorkflowTimeline,
+  usePendingDecisions,
+} from './useAgentRoomStream';
+export type {
+  AgentRoomStreamState,
+  UseAgentRoomStreamOptions,
+  UseAgentRoomStreamReturn,
+} from './useAgentRoomStream';
+
 // Context-based hooks (re-exported from contexts for convenience)
 export {
   useAssetManagement,
