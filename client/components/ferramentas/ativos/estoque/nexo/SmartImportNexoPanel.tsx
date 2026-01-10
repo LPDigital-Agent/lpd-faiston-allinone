@@ -975,6 +975,8 @@ export function SmartImportNexoPanel({
   };
 
   // Handle approve and import (HIL approval)
+  // FIX (January 2026): Previously this silently swallowed errors, causing UI loop
+  // Now shows error message to user so they understand why import didn't proceed
   const handleApproveAndImport = async () => {
     setIsSubmitting(true);
     try {
@@ -982,6 +984,9 @@ export function SmartImportNexoPanel({
       onComplete(state.analysis!.sessionId);
     } catch (err) {
       console.error('[NEXO] Import failed:', err);
+      // FIX: Show error to user instead of silently failing
+      const message = err instanceof Error ? err.message : 'Erro ao executar importação';
+      alert(`Falha na importação: ${message}`);
     } finally {
       setIsSubmitting(false);
     }

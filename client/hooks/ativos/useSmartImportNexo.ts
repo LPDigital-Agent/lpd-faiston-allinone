@@ -763,11 +763,26 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       throw new Error('Nenhuma sessão de importação ativa');
     }
 
+    console.log('[NEXO] prepareProcessing: Starting with session:', {
+      session_id: state.sessionState.session_id,
+      filename: state.sessionState.filename,
+      learned_mappings_count: Object.keys(state.sessionState.learned_mappings || {}).length,
+      requested_new_columns_count: (state.sessionState.requested_new_columns || []).length,
+    });
+
     updateProgress('processing', 85, 'Preparando configuração final...', 'act');
 
     try {
       const result = await nexoPrepareProcessing({
         session_state: state.sessionState,  // STATELESS: Pass full state
+      });
+
+      console.log('[NEXO] prepareProcessing: Backend response:', {
+        success: result.data?.success,
+        ready: result.data?.ready,
+        error: result.data?.error,
+        validation_errors: result.data?.validation_errors,
+        column_mappings_count: result.data?.column_mappings?.length,
       });
 
       if (!result.data?.success || !result.data?.ready) {
@@ -810,6 +825,15 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       throw new Error('Preparação não concluída');
     }
 
+    console.log('[NEXO] executeNexoImport: Starting with params:', {
+      import_id: state.sessionState.session_id,
+      s3_key: state.sessionState.s3_key,
+      filename: state.sessionState.filename,
+      column_mappings_count: config.column_mappings?.length,
+      projectId,
+      locationId,
+    });
+
     updateProgress('importing', 92, 'Executando importação...', 'act');
 
     try {
@@ -820,6 +844,13 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         column_mappings: config.column_mappings,
         project_id: projectId,
         destination_location_id: locationId,
+      });
+
+      console.log('[NEXO] executeNexoImport: Backend response:', {
+        success: result.data?.success,
+        error: result.data?.error,
+        inserted_count: result.data?.inserted_count,
+        failed_rows_count: result.data?.failed_rows?.length,
       });
 
       if (!result.data?.success) {
@@ -884,6 +915,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       throw new Error('Nenhuma sessão de revisão ativa');
     }
 
+    console.log('[NEXO] approveAndImport: Starting import process...');
+
     // User approved - proceed to processing
     updateProgress('processing', 85, 'Preparando importação...', 'act');
     setState(prev => ({
@@ -892,20 +925,30 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     }));
 
     // Prepare processing configuration - capture returned config to avoid stale closure
+    console.log('[NEXO] approveAndImport: Calling prepareProcessing...');
     const config = await prepareProcessing();
+    console.log('[NEXO] approveAndImport: prepareProcessing returned:', {
+      success: config?.success,
+      ready: config?.ready,
+      mappingsCount: config?.column_mappings?.length,
+    });
 
     // Execute the import - pass config directly to avoid React state timing issue
+    console.log('[NEXO] approveAndImport: Calling executeNexoImport...');
     await executeNexoImport(
       state.answers['project'] || state.answers['projeto'] || undefined,
       state.answers['location'] || state.answers['local'] || undefined,
       config // Pass config directly to avoid stale closure
     );
+    console.log('[NEXO] approveAndImport: executeNexoImport completed successfully');
 
     // Learn from this import for future improvements
+    console.log('[NEXO] approveAndImport: Calling learnFromResult...');
     await learnFromResult(
       { success: true, items_imported: state.reviewSummary.totalItems },
       state.userFeedback ? { user_feedback: state.userFeedback } : undefined
     );
+    console.log('[NEXO] approveAndImport: Import process completed!');
   }, [
     state.sessionState,
     state.reviewSummary,
