@@ -832,8 +832,8 @@ Com base em toda a análise acima, qual é o tipo de movimento?
             thinking_trace, response = await self.invoke_with_thinking(
                 prompt=prompt,
                 thinking_budget=10000,  # Good budget for initial analysis
-                user_id=session.user_id,
-                session_id=session.session_id,
+                user_id=session.user_id or "system",  # Default if None
+                session_id=session.session_id or "default",  # Default if None
             )
 
             # Log thinking trace
@@ -1986,8 +1986,8 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 thinking_trace, response = await self.invoke_with_thinking(
                     prompt=prompt,
                     thinking_budget=15000,  # Higher budget for complex reasoning
-                    user_id=session.user_id,
-                    session_id=session.session_id,
+                    user_id=session.user_id or "system",  # Default if None
+                    session_id=session.session_id or "default",  # Default if None
                 )
 
                 # Log thinking trace for debugging (truncated)
