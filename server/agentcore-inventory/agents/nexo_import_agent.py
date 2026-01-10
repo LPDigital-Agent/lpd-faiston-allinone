@@ -824,8 +824,27 @@ Com base em toda a análise acima, qual é o tipo de movimento?
             # Build prompt for Gemini
             prompt = self._build_reasoning_prompt(session, prior_knowledge)
 
-            # Invoke Gemini via base agent
-            response = await self.invoke(prompt)
+            # =============================================================
+            # FIX (January 2026): Use Thinking Mode for better column mapping
+            # The invoke_with_thinking() enables Gemini 3.0's deep reasoning,
+            # which improves the accuracy of initial column mappings.
+            # =============================================================
+            thinking_trace, response = await self.invoke_with_thinking(
+                prompt=prompt,
+                thinking_budget=10000,  # Good budget for initial analysis
+                user_id=session.user_id,
+                session_id=session.session_id,
+            )
+
+            # Log thinking trace
+            if thinking_trace:
+                logger.info(
+                    f"[NexoImportAgent] Initial reasoning thinking trace ({len(thinking_trace)} chars)"
+                )
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="thought",
+                    content=f"Análise profunda do NEXO: {thinking_trace[:400]}..." if len(thinking_trace) > 400 else f"Análise profunda do NEXO: {thinking_trace}",
+                ))
 
             # Parse response
             result = parse_json_safe(response)
@@ -1957,8 +1976,30 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 # Build re-reasoning prompt
                 prompt = self._build_re_reasoning_prompt(session, user_answers)
 
-                # Invoke Gemini
-                response = await self.invoke(prompt)
+                # =============================================================
+                # FIX (January 2026): Use Thinking Mode for better user input respect
+                # The invoke_with_thinking() enables Gemini 3.0's deep reasoning,
+                # which is critical for properly interpreting user instructions
+                # in the feedback textarea. Without thinking mode, Gemini often
+                # ignores or misinterprets complex user instructions.
+                # =============================================================
+                thinking_trace, response = await self.invoke_with_thinking(
+                    prompt=prompt,
+                    thinking_budget=15000,  # Higher budget for complex reasoning
+                    user_id=session.user_id,
+                    session_id=session.session_id,
+                )
+
+                # Log thinking trace for debugging (truncated)
+                if thinking_trace:
+                    logger.info(
+                        f"[NexoImportAgent] Re-reasoning thinking trace ({len(thinking_trace)} chars): "
+                        f"{thinking_trace[:300]}..."
+                    )
+                    session.reasoning_trace.append(ReasoningStep(
+                        step_type="thought",
+                        content=f"Raciocínio profundo do NEXO: {thinking_trace[:500]}..." if len(thinking_trace) > 500 else f"Raciocínio profundo do NEXO: {thinking_trace}",
+                    ))
 
                 # Parse response
                 result = parse_json_safe(response)
@@ -2298,18 +2339,34 @@ IMPORTANTE:
             return ""
 
         return f"""
-## INSTRUÇÕES GLOBAIS DO USUÁRIO (CRÍTICO - LEIA COM ATENÇÃO)
+## 🚨 INSTRUÇÕES DO USUÁRIO - MÁXIMA PRIORIDADE 🚨
 
-O usuário forneceu as seguintes instruções gerais para esta importação:
+O USUÁRIO FORNECEU AS SEGUINTES INSTRUÇÕES CRÍTICAS:
 
-\"\"\"{global_feedback}\"\"\"
+┌─────────────────────────────────────────────────────────────────┐
+│ {global_feedback}
+└─────────────────────────────────────────────────────────────────┘
 
-VOCÊ DEVE:
-1. Interpretar essas instruções e aplicá-las à análise
-2. Se o usuário menciona estratégias de quantidade (contar duplicatas, usar 1, etc), reflita isso nos mapeamentos
-3. Se o usuário menciona filtros ou exclusões, anote em "notes" para o executor
-4. Se o usuário menciona campos específicos, use essa informação para refinar mapeamentos
-5. Se o usuário menciona Nota Fiscal, identifique qual coluna é o número da NF
+⚠️ REGRAS ABSOLUTAS - VOCÊ DEVE OBEDECER:
+
+1. **AS INSTRUÇÕES DO USUÁRIO TÊM PRIORIDADE SOBRE QUALQUER INFERÊNCIA AUTOMÁTICA**
+   - Se o usuário diz que coluna X é Y, USE essa informação
+   - NÃO ignore o que o usuário escreveu
+
+2. **INTERPRETAÇÃO DE INSTRUÇÕES COMUNS:**
+   - "Part Number" / "PN" / "Número da peça" → mapear para `part_number`
+   - "Quantidade" / "Qty" / "contar" → estratégia de agregação
+   - "Nota Fiscal" / "NF" → mapear para `nf_number` ou `nf_key`
+   - "Cliente" / "Localidade" → mapear para campos relacionados
+   - "Ticket" / "Chamado" / "ServiceNow" → pode ser novo campo
+
+3. **SE O USUÁRIO MENCIONA UM CAMPO ESPECÍFICO:**
+   - Procure no schema PostgreSQL por esse campo ou similar
+   - Se não existir, adicione em `requested_new_columns`
+
+4. **PENSAMENTO EXPLÍCITO:**
+   - No campo "thoughts", EXPLICITE como você interpretou as instruções do usuário
+   - JUSTIFIQUE cada mapeamento com base no que o usuário disse
 
 """
 
