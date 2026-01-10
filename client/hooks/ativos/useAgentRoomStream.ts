@@ -254,17 +254,17 @@ export function useAgentRoomStream(
       };
     }
 
-    // Transform backend data
+    // Transform backend data (with defensive null checks for all arrays)
     return {
       isLoading,
       isConnected: data.success,
-      messages: transformMessages(data.liveFeed).filter((m) => !clearedMessages.includes(m.id)),
-      agents: data.agents.length > 0 ? transformAgents(data.agents) : getMockAgentProfiles(),
-      learningStories: data.learningStories.length > 0
+      messages: transformMessages(data.liveFeed || []).filter((m) => !clearedMessages.includes(m.id)),
+      agents: (data.agents?.length ?? 0) > 0 ? transformAgents(data.agents) : getMockAgentProfiles(),
+      learningStories: (data.learningStories?.length ?? 0) > 0
         ? transformLearningStories(data.learningStories)
         : MOCK_LEARNING_STORIES,
       activeWorkflow: transformWorkflow(data.activeWorkflow) ?? MOCK_ACTIVE_WORKFLOW,
-      pendingDecisions: transformDecisions(data.pendingDecisions),
+      pendingDecisions: transformDecisions(data.pendingDecisions || []),
       error: data.success ? null : 'Erro ao carregar dados',
       lastEventAt: data.timestamp,
     };
