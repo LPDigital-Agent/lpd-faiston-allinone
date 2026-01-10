@@ -188,14 +188,21 @@ Asset/inventory management system with AI-First architecture:
 
 AI transparency dashboard for non-technical users to see what agents do "behind the scenes":
 - **Live Feed**: Real-time humanized messages in Portuguese (first-person)
-- **Agent Team**: Visual cards showing all AI agents with friendly names and status
+- **Agent Team**: Visual cards showing all 14 AI agents with friendly names and status
 - **Learning Stories**: What agents have learned from interactions
 - **Workflow Timeline**: Visual progress of current operations
 - **Pending Decisions**: HIL tasks requiring human input
 
 **Design**: Apple TV frosted dark glass (NEXO Copilot pattern)
-**Architecture**: TanStack Query polling with backend aggregation
+**Architecture**: TanStack Query polling (5s) with backend aggregation
 **Backend Action**: `get_agent_room_data` (single endpoint returns all data)
+**Event System**: `emit_agent_event()` writes AGENT_ACTIVITY events to DynamoDB audit log
+
+**Key Files**:
+- Backend: `server/agentcore-inventory/tools/agent_room_service.py` (emit, aggregate)
+- Backend: `server/agentcore-inventory/tools/humanizer.py` (Portuguese messages)
+- Frontend: `client/hooks/ativos/useAgentRoomStream.ts` (polling hook)
+- Frontend: `client/components/ferramentas/ativos/agent-room/` (UI components)
 
 **Location**: `/ferramentas/ativos/agent-room/`
 
