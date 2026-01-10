@@ -24,14 +24,26 @@ import type { AgentFriendlyStatus } from '@/lib/ativos/agentRoomTypes';
 // Constants
 // =============================================================================
 
-// Primary agents to show (subset of all agents)
+// Primary agents to show (all agents from backend, grouped by function)
 const PRIMARY_AGENTS = [
+  // Importação & Entrada
   'nexo_import',
   'intake',
   'import',
+  // Controle & Validação
+  'estoque_control',
   'compliance',
+  'reconciliacao',
+  // Logística & Movimento
+  'expedition',
+  'carrier',
+  'reverse',
+  // Evolução & Aprendizado
+  'schema_evolution',
   'learning',
-  'stock_control',
+  // Suporte & Pesquisa
+  'observation',
+  'equipment_research',
 ];
 
 // Default statuses when no real-time data is available
@@ -39,9 +51,16 @@ const DEFAULT_STATUSES: Record<string, { status: AgentFriendlyStatus; lastActivi
   nexo_import: { status: 'disponivel', lastActivity: 'Pronto para ajudar' },
   intake: { status: 'disponivel', lastActivity: 'Aguardando notas fiscais' },
   import: { status: 'disponivel', lastActivity: 'Pronto para importar' },
+  estoque_control: { status: 'disponivel', lastActivity: 'Monitorando estoque' },
   compliance: { status: 'disponivel', lastActivity: 'Verificando conformidade' },
+  reconciliacao: { status: 'disponivel', lastActivity: 'Detectando divergências' },
+  expedition: { status: 'disponivel', lastActivity: 'Preparando expedições' },
+  carrier: { status: 'disponivel', lastActivity: 'Gerenciando transportadoras' },
+  reverse: { status: 'disponivel', lastActivity: 'Processando devoluções' },
+  schema_evolution: { status: 'disponivel', lastActivity: 'Adaptando estrutura' },
   learning: { status: 'disponivel', lastActivity: 'Aprendendo continuamente' },
-  stock_control: { status: 'disponivel', lastActivity: 'Monitorando estoque' },
+  observation: { status: 'disponivel', lastActivity: 'Monitorando mudanças' },
+  equipment_research: { status: 'disponivel', lastActivity: 'Pesquisando equipamentos' },
 };
 
 // =============================================================================
@@ -96,7 +115,7 @@ export function AgentTeam() {
       </GlassCardHeader>
 
       <GlassCardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {agentCards.map((agent) => agent && (
             <AgentCard
               key={agent.key}
