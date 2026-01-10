@@ -2861,6 +2861,36 @@ IMPORTANTE:
         ))
 
         # =================================================================
+        # AUTO-MAPPINGS: Add system-generated column mappings
+        # These columns are NOT required from the file - they're auto-generated
+        # =================================================================
+        # FIX (January 2026): Required columns were failing validation because
+        # they weren't mapped, but they should be auto-generated during import
+        auto_mappings_added = []
+
+        # line_number - Auto-incremented during import (1, 2, 3, ...)
+        if "line_number" not in session.learned_mappings.values():
+            session.learned_mappings["__line_number_auto__"] = "line_number"
+            auto_mappings_added.append("line_number (auto-increment)")
+
+        # entry_id - Auto-created with parent BULK_IMPORT entry record
+        if "entry_id" not in session.learned_mappings.values():
+            session.learned_mappings["__entry_id_auto__"] = "entry_id"
+            auto_mappings_added.append("entry_id (auto-create)")
+
+        # quantity - Default to 1 if not mapped from file
+        if "quantity" not in session.learned_mappings.values():
+            session.learned_mappings["__quantity_one__"] = "quantity"
+            auto_mappings_added.append("quantity (default: 1)")
+
+        if auto_mappings_added:
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Auto-mapeamentos adicionados: {', '.join(auto_mappings_added)}",
+            ))
+            logger.debug(f"[NexoImportAgent] Added auto-mappings: {auto_mappings_added}")
+
+        # =================================================================
         # CRITICAL: VALIDATE mappings against schema BEFORE processing
         # =================================================================
         session.reasoning_trace.append(ReasoningStep(
