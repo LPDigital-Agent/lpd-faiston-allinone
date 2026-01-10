@@ -11,7 +11,6 @@ import {
   Truck,
   RotateCcw,
   MapPin,
-  MessageSquare,
   FileText,
   Eye,
   BookOpen,
@@ -60,13 +59,6 @@ export const ASSET_NAV_MODULES: AssetNavModule[] = [
     labelShort: "Tracking",
     href: "/ferramentas/ativos/tracking",
     icon: MapPin,
-  },
-  {
-    id: "comunicacao",
-    label: "Comunicação",
-    labelShort: "Comunic.",
-    href: "/ferramentas/ativos/comunicacao",
-    icon: MessageSquare,
   },
   {
     id: "fiscal",
@@ -235,28 +227,6 @@ export const FISCAL_STATUS_COLORS = {
   pendente: "bg-yellow-500/20 text-yellow-400",
   cancelado: "bg-zinc-500/20 text-zinc-400",
   denegado: "bg-red-500/20 text-red-400",
-};
-
-// =============================================================================
-// Message Configuration
-// =============================================================================
-
-/**
- * Message priority labels
- */
-export const MESSAGE_PRIORITY_LABELS = {
-  alta: "Alta Prioridade",
-  normal: "Normal",
-  baixa: "Baixa Prioridade",
-};
-
-/**
- * Message priority colors
- */
-export const MESSAGE_PRIORITY_COLORS = {
-  alta: "bg-red-500/20 text-red-400",
-  normal: "bg-zinc-500/20 text-zinc-400",
-  baixa: "bg-blue-500/20 text-blue-400",
 };
 
 // =============================================================================

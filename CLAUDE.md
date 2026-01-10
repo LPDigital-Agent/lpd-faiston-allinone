@@ -152,6 +152,10 @@ To be used on web research we are in year 2026.
   Inventory data MUST live in **AWS Aurora PostgreSQL (RDS)**.  
   **DO NOT USE DynamoDB**.  
   Any assumption otherwise is **WRONG** and MUST be fixed.
+  
+  
+  
+- SUBAGENTS / SKILLS / MCP USAGE (MEGA MANDATORY): For EVERY task, you MUST use **Claude Code SubAgents**, relevant **Skills**, and required **MCP tools**. SubAgents are NOT optional — use them by default for parallel execution and specialization. If you are about to proceed without SubAgents/Skills/MCPs, you MUST STOP and explain why, then ask for explicit approval before continuing.
 
 ---
 - CONTEXT FIRST (MANDATORY): First think through the problem and read the codebase (relevant files) before proposing or implementing a solution.
