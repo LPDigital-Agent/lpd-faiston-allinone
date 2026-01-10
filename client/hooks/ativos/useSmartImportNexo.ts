@@ -687,6 +687,14 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         };
 
         // Go to reviewing stage for HIL approval
+        // FIX (January 2026): Added logging to debug stage transition issues
+        console.log('[NEXO] Transitioning to reviewing stage with reviewSummary:', {
+          filename: reviewSummary.filename,
+          totalItems: reviewSummary.totalItems,
+          validations: reviewSummary.validations.length,
+          readyToImport: reviewSummary.readyToImport,
+        });
+
         updateProgress('reviewing', 80, 'Aguardando aprovação', 'review');
         setState(prev => ({
           ...prev,

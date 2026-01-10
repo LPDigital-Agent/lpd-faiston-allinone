@@ -1013,13 +1013,26 @@ export function SmartImportNexoPanel({
   // Handle continue to processing
   // FIX (January 2026): Must call approveAndImport() to execute actual import,
   // not just prepareProcessing() which only validates configuration
+  // FIX (January 2026): Handle case where reviewSummary is null - generate it first
   const handleContinue = async () => {
     setIsSubmitting(true);
     try {
+      // If we don't have a reviewSummary, we need to go through the review stage first
+      // This happens when the flow skipped the 'reviewing' stage unexpectedly
+      if (!reviewSummary) {
+        console.warn('[NEXO] No reviewSummary - cannot proceed with import. User should go through review stage first.');
+        // Instead of silently failing, show user-friendly error
+        throw new Error('Sessão de revisão não encontrada. Por favor, responda às perguntas novamente.');
+      }
+
       await approveAndImport();
       onComplete(state.analysis!.sessionId);
     } catch (err) {
       console.error('[NEXO] Import failed:', err);
+      // Re-throw to let user know something went wrong
+      // The error will be caught by React error boundary or shown in UI
+      const message = err instanceof Error ? err.message : 'Erro ao executar importação';
+      alert(message); // Temporary - should use proper toast/notification
     } finally {
       setIsSubmitting(false);
     }
@@ -1470,8 +1483,10 @@ export function SmartImportNexoPanel({
               />
             )}
 
-            {/* Ready to process */}
-            {isReadyToProcess && !hasQuestions && !isReviewing && (
+            {/* Ready to process - only show if reviewSummary exists
+                FIX (January 2026): Added reviewSummary check to prevent showing
+                button when the reviewing stage was skipped */}
+            {isReadyToProcess && !hasQuestions && !isReviewing && reviewSummary && (
               <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
                 <Button variant="outline" onClick={onCancel}>
                   Cancelar
