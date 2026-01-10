@@ -83,6 +83,13 @@ export const AGENT_PROFILES: Record<string, AgentProfileConfig> = {
     icon: Package,
     color: "cyan",
   },
+  // Alias for backend compatibility
+  estoque_control: {
+    friendlyName: "Controlador",
+    description: "Cuida do estoque",
+    icon: Package,
+    color: "cyan",
+  },
 
   // Supporting Agents
   search: {
@@ -100,6 +107,13 @@ export const AGENT_PROFILES: Record<string, AgentProfileConfig> = {
   reverse_logistics: {
     friendlyName: "Reversa",
     description: "Processa devoluções",
+    icon: RotateCcw,
+    color: "orange",
+  },
+  // Alias for backend compatibility
+  reverse: {
+    friendlyName: "Reversa",
+    description: "Processa devoluções e retornos",
     icon: RotateCcw,
     color: "orange",
   },
@@ -132,6 +146,32 @@ export const AGENT_PROFILES: Record<string, AgentProfileConfig> = {
     description: "Coordena os outros agentes",
     icon: Eye,
     color: "zinc",
+  },
+
+  // Backend agents (additional)
+  observation: {
+    friendlyName: "Observador",
+    description: "Monitora mudanças no estoque",
+    icon: Eye,
+    color: "green",
+  },
+  equipment_research: {
+    friendlyName: "Pesquisador de Equipamentos",
+    description: "Busca informações de equipamentos",
+    icon: Search,
+    color: "orange",
+  },
+  comunicacao: {
+    friendlyName: "Comunicador",
+    description: "Envia notificações e alertas",
+    icon: Bell,
+    color: "magenta",
+  },
+  reconciliacao: {
+    friendlyName: "Reconciliador",
+    description: "Detecta divergências no estoque",
+    icon: Scale,
+    color: "yellow",
   },
 };
 

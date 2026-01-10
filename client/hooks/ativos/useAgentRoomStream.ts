@@ -162,9 +162,10 @@ function transformDecisions(decisions: AgentRoomDecision[]): PendingDecision[] {
 
 /**
  * Get mock agent profiles from constants.
+ * Returns ALL agents defined in AGENT_PROFILES (no artificial limit).
  */
 function getMockAgentProfiles(): AgentProfile[] {
-  return Object.entries(AGENT_PROFILES).slice(0, 6).map(([id, config]) => ({
+  return Object.entries(AGENT_PROFILES).map(([id, config]) => ({
     id,
     technicalName: id,
     friendlyName: config.friendlyName,
