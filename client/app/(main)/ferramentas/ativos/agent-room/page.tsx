@@ -9,38 +9,194 @@
 // Design: Apple TV frosted dark glass (NEXO Copilot pattern)
 // =============================================================================
 
+import { Suspense } from 'react';
 import { motion } from 'framer-motion';
-import { Eye, Radio } from 'lucide-react';
+import {
+  Eye,
+  Radio,
+  WifiOff,
+  RefreshCw,
+  AlertCircle,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 // Agent Room Components
-import { LiveFeed } from '@/components/ferramentas/ativos/agent-room/LiveFeed';
-import { AgentTeam } from '@/components/ferramentas/ativos/agent-room/AgentTeam';
-import { LearningStories } from '@/components/ferramentas/ativos/agent-room/LearningStories';
-import { WorkflowTimeline } from '@/components/ferramentas/ativos/agent-room/WorkflowTimeline';
-import { PendingDecisions } from '@/components/ferramentas/ativos/agent-room/PendingDecisions';
+import {
+  LiveFeed,
+  AgentTeam,
+  LearningStories,
+  WorkflowTimeline,
+  PendingDecisions,
+  LiveFeedSkeleton,
+  AgentTeamSkeleton,
+  LearningStoriesSkeleton,
+  WorkflowTimelineSkeleton,
+  PendingDecisionsSkeleton,
+} from '@/components/ferramentas/ativos/agent-room';
+
+// Hook for connection status
+import { useAgentRoomStream } from '@/hooks/ativos';
+
+// =============================================================================
+// Connection Status Badge
+// =============================================================================
+
+interface ConnectionStatusProps {
+  isConnected: boolean;
+  isLoading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}
+
+function ConnectionStatus({
+  isConnected,
+  isLoading,
+  error,
+  onRetry,
+}: ConnectionStatusProps) {
+  if (isLoading) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/30"
+              role="status"
+              aria-label="Conectando aos agentes"
+            >
+              <RefreshCw className="w-3 h-3 text-yellow-400 animate-spin" aria-hidden="true" />
+              <span className="text-xs text-yellow-400 font-medium">Conectando</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Estabelecendo conexão com os agentes...</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  if (error || !isConnected) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRetry}
+              className="flex items-center gap-1.5 px-2 py-0.5 h-auto rounded-full bg-red-500/20 border border-red-500/30 hover:bg-red-500/30"
+              aria-label="Reconectar aos agentes"
+            >
+              <WifiOff className="w-3 h-3 text-red-400" aria-hidden="true" />
+              <span className="text-xs text-red-400 font-medium">Desconectado</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{error || 'Conexão perdida. Clique para reconectar.'}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/30"
+            role="status"
+            aria-live="polite"
+            aria-label="Conectado e recebendo dados ao vivo"
+          >
+            <Radio className="w-3 h-3 text-green-400 animate-pulse" aria-hidden="true" />
+            <span className="text-xs text-green-400 font-medium">Ao Vivo</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Recebendo atualizações em tempo real</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 // =============================================================================
 // Page Header Component
 // =============================================================================
 
-function PageHeader() {
+interface PageHeaderProps {
+  isConnected: boolean;
+  isLoading: boolean;
+  error: string | null;
+  onRetry: () => void;
+}
+
+function PageHeader({ isConnected, isLoading, error, onRetry }: PageHeaderProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
       <div>
-        <div className="flex items-center gap-2">
-          <Eye className="w-5 h-5 text-magenta-mid" />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Eye className="w-5 h-5 text-magenta-mid" aria-hidden="true" />
           <h1 className="text-xl font-semibold text-text-primary">
             Agent Room
           </h1>
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/20 border border-green-500/30">
-            <Radio className="w-3 h-3 text-green-400 animate-pulse" />
-            <span className="text-xs text-green-400 font-medium">Ao Vivo</span>
-          </div>
+          <ConnectionStatus
+            isConnected={isConnected}
+            isLoading={isLoading}
+            error={error}
+            onRetry={onRetry}
+          />
         </div>
         <p className="text-sm text-text-muted mt-1">
           Veja o que nossos agentes de IA estão fazendo por você
         </p>
       </div>
+
+      {/* Keyboard Navigation Help (visible on focus) */}
+      <div className="hidden sm:block">
+        <p className="text-xs text-text-muted sr-only focus:not-sr-only">
+          Use Tab para navegar entre os painéis
+        </p>
+      </div>
+    </header>
+  );
+}
+
+// =============================================================================
+// Error Fallback
+// =============================================================================
+
+interface ErrorFallbackProps {
+  error: string;
+  onRetry: () => void;
+}
+
+function ErrorFallback({ error, onRetry }: ErrorFallbackProps) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center py-12 text-center"
+      role="alert"
+      aria-live="assertive"
+    >
+      <AlertCircle className="w-12 h-12 text-red-400 mb-4" aria-hidden="true" />
+      <h2 className="text-lg font-medium text-text-primary mb-2">
+        Não foi possível carregar o Agent Room
+      </h2>
+      <p className="text-sm text-text-muted mb-4 max-w-md">
+        {error || 'Ocorreu um erro ao conectar com os agentes. Verifique sua conexão e tente novamente.'}
+      </p>
+      <Button onClick={onRetry} className="gap-2">
+        <RefreshCw className="w-4 h-4" aria-hidden="true" />
+        Tentar novamente
+      </Button>
     </div>
   );
 }
@@ -50,64 +206,121 @@ function PageHeader() {
 // =============================================================================
 
 export default function AgentRoomPage() {
+  const { isConnected, isLoading, error, refetch } = useAgentRoomStream({
+    useMockData: true, // Use mock data until backend is deployed
+  });
+
+  // Show error state if critical error
+  const hasCriticalError = error && !isConnected && !isLoading;
+
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <PageHeader />
+    <main
+      className="space-y-6"
+      role="main"
+      aria-label="Painel de transparência dos agentes de IA"
+    >
+      {/* Page Header with Connection Status */}
+      <PageHeader
+        isConnected={isConnected}
+        isLoading={isLoading}
+        error={error}
+        onRetry={refetch}
+      />
 
-      {/* Live Feed - Full Width Top Panel */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
-        <LiveFeed />
-      </motion.div>
-
-      {/* Main Grid - 2 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column */}
-        <div className="space-y-6">
-          {/* Agent Team Panel */}
-          <motion.div
+      {hasCriticalError ? (
+        <ErrorFallback error={error} onRetry={refetch} />
+      ) : (
+        <>
+          {/* Live Feed - Full Width Top Panel */}
+          <motion.section
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.1 }}
+            aria-labelledby="live-feed-title"
           >
-            <AgentTeam />
-          </motion.div>
+            <h2 id="live-feed-title" className="sr-only">
+              Feed de atividades ao vivo
+            </h2>
+            <Suspense fallback={<LiveFeedSkeleton />}>
+              <LiveFeed />
+            </Suspense>
+          </motion.section>
 
-          {/* Workflow Timeline Panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <WorkflowTimeline />
-          </motion.div>
-        </div>
+          {/* Main Grid - 2 columns on desktop, 1 on mobile */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+            {/* Left Column */}
+            <div className="space-y-4 sm:space-y-6">
+              {/* Agent Team Panel */}
+              <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                aria-labelledby="agent-team-title"
+              >
+                <h2 id="agent-team-title" className="sr-only">
+                  Nossa equipe de agentes de IA
+                </h2>
+                <Suspense fallback={<AgentTeamSkeleton />}>
+                  <AgentTeam />
+                </Suspense>
+              </motion.section>
 
-        {/* Right Column */}
-        <div className="space-y-6">
-          {/* Learning Stories Panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <LearningStories />
-          </motion.div>
+              {/* Workflow Timeline Panel */}
+              <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                aria-labelledby="workflow-title"
+              >
+                <h2 id="workflow-title" className="sr-only">
+                  Fluxo de trabalho atual
+                </h2>
+                <Suspense fallback={<WorkflowTimelineSkeleton />}>
+                  <WorkflowTimeline />
+                </Suspense>
+              </motion.section>
+            </div>
 
-          {/* Pending Decisions Panel */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-          >
-            <PendingDecisions />
-          </motion.div>
-        </div>
+            {/* Right Column */}
+            <div className="space-y-4 sm:space-y-6">
+              {/* Learning Stories Panel */}
+              <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                aria-labelledby="learning-title"
+              >
+                <h2 id="learning-title" className="sr-only">
+                  O que os agentes aprenderam
+                </h2>
+                <Suspense fallback={<LearningStoriesSkeleton />}>
+                  <LearningStories />
+                </Suspense>
+              </motion.section>
+
+              {/* Pending Decisions Panel */}
+              <motion.section
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                aria-labelledby="decisions-title"
+              >
+                <h2 id="decisions-title" className="sr-only">
+                  Decisões que precisam de você
+                </h2>
+                <Suspense fallback={<PendingDecisionsSkeleton />}>
+                  <PendingDecisions />
+                </Suspense>
+              </motion.section>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Skip Link Target (for keyboard navigation) */}
+      <div id="main-content" tabIndex={-1} className="sr-only">
+        Conteúdo principal do Agent Room
       </div>
-    </div>
+    </main>
   );
 }
