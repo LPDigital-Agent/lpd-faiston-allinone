@@ -126,6 +126,18 @@ export interface NexoNewColumn {
 }
 
 /**
+ * Missing column that blocks import.
+ * FIX (January 2026): Instead of trying to create columns automatically,
+ * we block the import and inform user to contact IT.
+ */
+export interface NexoMissingColumn {
+  name: string;
+  type: string;
+  source: string;
+  user_intent?: string;
+}
+
+/**
  * Review summary shown before final import approval.
  */
 export interface NexoReviewSummary {
@@ -150,6 +162,11 @@ export interface NexoReviewSummary {
   // New columns for dynamic schema evolution (January 2026)
   // These are columns that will be created in the database
   newColumns?: NexoNewColumn[];
+  // FIX (January 2026): Import blocking when columns are missing
+  // Instead of trying to create columns automatically, we block and inform user
+  isBlocked?: boolean;
+  missingColumns?: NexoMissingColumn[];
+  blockMessage?: string;
 }
 
 /**
@@ -783,9 +800,46 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         success: result.data?.success,
         ready: result.data?.ready,
         error: result.data?.error,
+        import_blocked: result.data?.import_blocked,
+        missing_columns: result.data?.missing_columns,
         validation_errors: result.data?.validation_errors,
         column_mappings_count: result.data?.column_mappings?.length,
       });
+
+      // FIX (January 2026): Handle import blocked due to missing columns
+      // Instead of failing, we show a blocking UI to inform user to contact IT
+      if (result.data?.import_blocked && result.data?.missing_columns) {
+        console.warn('[NEXO] Import blocked - missing columns:', result.data.missing_columns);
+
+        // Create a blocked review summary instead of throwing error
+        const blockedReviewSummary: NexoReviewSummary = {
+          filename: state.sessionState?.filename || 'unknown',
+          mainSheet: state.analysis?.sheets[0]?.name || 'unknown',
+          totalItems: 0,
+          projectName: null,
+          newPartNumbers: 0,
+          validations: [],
+          warnings: [],
+          recommendation: '',
+          readyToImport: false,
+          userFeedback: null,
+          isBlocked: true,
+          missingColumns: result.data.missing_columns as NexoMissingColumn[],
+          blockMessage: result.data.message || 'Campos faltantes no banco de dados.',
+        };
+
+        // Transition to reviewing stage with blocked state
+        updateProgress('reviewing', 80, 'Importação bloqueada', 'blocked');
+        setState(prev => ({
+          ...prev,
+          stage: 'reviewing',
+          reviewSummary: blockedReviewSummary,
+          error: null, // Clear any previous error - this is a controlled block, not an error
+        }));
+
+        // Return empty config - import is blocked
+        return result.data as NexoProcessingConfig;
+      }
 
       if (!result.data?.success || !result.data?.ready) {
         // Show specific validation errors if available (Phase 2 fix)

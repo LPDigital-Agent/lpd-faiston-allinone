@@ -29,6 +29,7 @@ import {
   History,
   Sparkles,
   TrendingUp,
+  XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -48,6 +49,7 @@ import {
   type NexoQuestion,
   type NexoSheetAnalysis,
   type NexoColumnMapping,
+  type NexoMissingColumn,
 } from '@/hooks/ativos/useSmartImportNexo';
 import { NexoExplanation } from '@/components/shared/nexo-explanation';
 import {
@@ -690,6 +692,76 @@ function QuestionItem({
 }
 
 /**
+ * Missing Columns Alert - Blocking UI when columns don't exist in PostgreSQL.
+ * FIX (January 2026): Instead of trying to create columns automatically,
+ * we block the import and inform user to contact IT.
+ */
+function MissingColumnsAlert({
+  columns,
+  message,
+  onCancel,
+}: {
+  columns: NexoMissingColumn[];
+  message: string;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <XCircle className="w-6 h-6 text-red-400" />
+        <h3 className="text-lg font-semibold text-red-300">
+          Importação Bloqueada - Campos Faltantes
+        </h3>
+      </div>
+
+      {/* Blocking alert card */}
+      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 space-y-4">
+        <p className="text-white/70">
+          Os seguintes campos não existem no banco de dados:
+        </p>
+
+        {/* Missing columns list */}
+        <ul className="space-y-2 font-mono text-sm">
+          {columns.map((col) => (
+            <li key={col.name} className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">
+                {col.type}
+              </span>
+              <span className="text-white">{col.name}</span>
+              <span className="text-white/40">← &ldquo;{col.source}&rdquo;</span>
+            </li>
+          ))}
+        </ul>
+
+        {/* Instructions for user */}
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 space-y-2">
+          <p className="text-blue-200 text-sm">
+            <strong>Ação necessária:</strong> Contacte a equipe de tecnologia para
+            criar estes campos na tabela <code className="bg-blue-500/20 px-1 rounded">sga.pending_entry_items</code>.
+          </p>
+          <p className="text-blue-200/70 text-sm">
+            Após a criação dos campos, faça upload do arquivo novamente para uma nova análise.
+          </p>
+        </div>
+      </div>
+
+      {/* Cancel button - only option when blocked */}
+      <div className="flex justify-end pt-4 border-t border-white/10">
+        <Button
+          variant="outline"
+          onClick={onCancel}
+          className="border-red-500/30 text-red-300 hover:bg-red-500/10"
+        >
+          <XCircle className="w-4 h-4 mr-2" />
+          Cancelar Importação
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Import Review Panel - HIL approval step before final import.
  * Shows summary of what NEXO understood and asks for user confirmation.
  */
@@ -708,6 +780,17 @@ function ImportReviewPanel({
   onCancel: () => void;
   isSubmitting: boolean;
 }) {
+  // FIX (January 2026): Show blocking alert when import is blocked due to missing columns
+  if (reviewSummary.isBlocked && reviewSummary.missingColumns && reviewSummary.missingColumns.length > 0) {
+    return (
+      <MissingColumnsAlert
+        columns={reviewSummary.missingColumns}
+        message={reviewSummary.blockMessage || 'Campos faltantes no banco de dados.'}
+        onCancel={onCancel}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">

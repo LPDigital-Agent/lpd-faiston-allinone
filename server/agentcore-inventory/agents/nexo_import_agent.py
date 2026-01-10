@@ -2297,90 +2297,19 @@ VOCÊ DEVE:
         questions = []
 
         # =====================================================================
-        # PRIORITY 1: Column Creation Questions (Dynamic Schema Evolution)
-        # These are CRITICAL - user explicitly requested non-existent fields
+        # FIX (January 2026): REMOVED Column Creation Questions
         # =====================================================================
-        if session.requested_new_columns:
-            provider = self._get_schema_provider()
-            schema = provider.get_table_schema("pending_entry_items") if provider else None
-            existing_options = self._build_schema_aware_options(schema) if schema else []
-
-            # FIX (January 2026): Build set of columns already answered to avoid re-asking
-            answered_columns = set()
-            for q in session.questions:
-                if q.topic == "column_creation" and q.column and q.id in session.answers:
-                    answered_columns.add(q.column)
-                    logger.debug(f"[NexoImportAgent] Column already answered: {q.column}")
-
-            for new_col in session.requested_new_columns:
-                if new_col.approved:
-                    logger.debug(f"[NexoImportAgent] Skipping approved column: {new_col.source_file_column}")
-                    continue  # Already approved in previous round
-
-                # FIX: Defense-in-depth - also check if this column was answered
-                if new_col.source_file_column in answered_columns:
-                    logger.debug(
-                        f"[NexoImportAgent] Skipping already-answered column: {new_col.source_file_column}"
-                    )
-                    continue
-
-                if new_col.source_file_column in session.learned_mappings:
-                    # FIX (January 2026): Check if it's a FINAL decision or just a pending marker
-                    mapping_value = session.learned_mappings[new_col.source_file_column]
-                    # FIX: Guard against None values in learned_mappings
-                    # __new_column__: markers are PENDING, not final - still need approval!
-                    # Only skip if it's a real column, _ignore, __metadata__, or __create_column__
-                    if mapping_value and not mapping_value.startswith("__new_column__:"):
-                        logger.debug(
-                            f"[NexoImportAgent] Skipping column with final mapping: "
-                            f"{new_col.source_file_column} → {mapping_value}"
-                        )
-                        continue  # Already decided (ignored, metadata, or mapped)
-
-                # Build options for column creation question
-                options = [
-                    {
-                        "value": f"create:{new_col.name}:{new_col.inferred_type}",
-                        "label": f"✅ Criar campo '{new_col.name}' ({new_col.inferred_type})",
-                    },
-                    {
-                        "value": "metadata",
-                        "label": "📦 Armazenar em metadata (JSONB)",
-                    },
-                    {
-                        "value": "_ignore",
-                        "label": "❌ Ignorar esta coluna",
-                    },
-                ]
-
-                # Add "map to existing" option with schema-aware options
-                if existing_options:
-                    options.insert(2, {
-                        "value": "map_existing",
-                        "label": "🔄 Mapear para campo existente",
-                    })
-
-                questions.append(NexoQuestion(
-                    id=generate_id("CC"),  # CC = Column Creation
-                    question=f"O campo '{new_col.original_name}' não existe no banco de dados. O que deseja fazer?",
-                    context=(
-                        f"Sua intenção: {new_col.user_intent}\n"
-                        f"Nome sugerido: {new_col.name}\n"
-                        f"Tipo de dado: {new_col.inferred_type}\n\n"
-                        "⚠️ NOTA: Criar novos campos requer permissão de administrador."
-                    ),
-                    options=options,
-                    importance="critical",
-                    topic="column_creation",
-                    column=new_col.source_file_column,
-                ))
-
-            # If we have column creation questions, return them first
-            if questions:
-                return questions
+        # Previously, we asked users "Create or ignore field X?" but this led to
+        # silent failures when column creation failed. New strategy:
+        # - If requested_new_columns exist, the import is BLOCKED at
+        #   prepare_for_processing() with a clear message to contact IT.
+        # - No more "column_creation" questions - cleaner UX.
+        # =====================================================================
+        # NOTE: requested_new_columns are now handled as blocking errors,
+        # not as follow-up questions. See prepare_for_processing() for details.
 
         # =====================================================================
-        # PRIORITY 2: Uncertain Fields (only if no column creation pending)
+        # PRIORITY 1: Uncertain Fields (low confidence mappings)
         # =====================================================================
 
         # Check if Gemini explicitly said more questions needed
@@ -2906,6 +2835,48 @@ VOCÊ DEVE:
             step_type="thought",
             content="Preparando configuração final para processamento",
         ))
+
+        # =================================================================
+        # BLOCKING CHECK: Detect columns that don't exist in PostgreSQL
+        # =================================================================
+        # FIX (January 2026): Instead of trying to create columns automatically
+        # (which was failing silently), we now BLOCK the import and inform
+        # the user to contact IT to create the missing fields.
+        if session.requested_new_columns:
+            missing_columns = []
+            for col in session.requested_new_columns:
+                if not col.approved:  # Not approved = still missing
+                    missing_columns.append({
+                        "name": col.name,
+                        "type": col.inferred_type,
+                        "source": col.source_file_column or col.original_name,
+                        "user_intent": col.user_intent,
+                    })
+
+            if missing_columns:
+                session.reasoning_trace.append(ReasoningStep(
+                    step_type="observation",
+                    content=f"⛔ BLOQUEADO: {len(missing_columns)} campo(s) não existem no PostgreSQL",
+                ))
+
+                logger.warning(
+                    f"[NexoImportAgent] Import blocked - missing columns: "
+                    f"{[c['name'] for c in missing_columns]}"
+                )
+
+                return {
+                    "success": False,
+                    "ready": False,
+                    "import_blocked": True,
+                    "missing_columns": missing_columns,
+                    "error": "missing_columns",
+                    "message": (
+                        "Campos faltantes no banco de dados. "
+                        "Contacte a equipe de tecnologia para criar estes campos. "
+                        "Após a criação, faça upload do arquivo novamente para uma nova análise."
+                    ),
+                    "session": session_to_dict(session),
+                }
 
         # =================================================================
         # AUTO-MAPPINGS: Add system-generated column mappings

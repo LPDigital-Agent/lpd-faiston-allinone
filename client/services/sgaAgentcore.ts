@@ -1280,6 +1280,15 @@ export interface NexoProcessingConfig {
   validation_errors?: string[];
   validation_warnings?: string[];
   suggestions?: string[];
+  // FIX (January 2026): Import blocking when columns are missing
+  import_blocked?: boolean;
+  missing_columns?: Array<{
+    name: string;
+    type: string;
+    source: string;
+    user_intent?: string;
+  }>;
+  message?: string;
 }
 
 /**
