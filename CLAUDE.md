@@ -438,6 +438,7 @@ To be used on web research we are in year 2026.
 
 - **ARCHITECTURE DOCS (Reference as needed):**
   - SGA Module: `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
+  - **NEXO Memory**: `docs/architecture/NEXO_MEMORY_ARCHITECTURE.md` *(MANDATORY for memory features)*
   - AgentCore Implementation: `docs/AgentCore/IMPLEMENTATION_GUIDE.md`
   - Frontend Auth: `docs/FRONTEND_AUTH.md`
   - Agent Design: `docs/agents/ADK_AGENTCORE_ARCHITECT.md`
@@ -452,6 +453,7 @@ To be used on web research we are in year 2026.
 - **USAGE PATTERN:**
   - Before implementing a feature → `@docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
   - Before AgentCore work → `@docs/AgentCore/IMPLEMENTATION_GUIDE.md`
+  - Before memory/learning features → `@docs/architecture/NEXO_MEMORY_ARCHITECTURE.md`
   - When unsure about patterns → Read the relevant doc **FIRST**
 
 ---

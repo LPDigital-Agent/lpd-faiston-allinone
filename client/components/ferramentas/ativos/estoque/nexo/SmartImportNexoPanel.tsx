@@ -954,7 +954,6 @@ export function SmartImportNexoPanel({
   // Start analysis when file changes (CRITICAL: useEffect for side effects, NOT useMemo)
   useEffect(() => {
     if (file && state.stage === 'idle') {
-      console.log('[NEXO] AI-First: Starting intelligent analysis for:', file.name);
       startAnalysis(file).catch(err => {
         console.error('[NEXO] Analysis failed:', err);
       });
@@ -969,13 +968,6 @@ export function SmartImportNexoPanel({
   ) => {
     setIsSubmitting(true);
     try {
-      // Pass freeText and corrected answers to submitAllAnswers
-      if (freeText) {
-        console.log('[NEXO] User feedback received:', freeText);
-      }
-      if (correctedAnswers) {
-        console.log('[NEXO] Corrected answers received:', Object.keys(correctedAnswers).length, 'answers');
-      }
       await submitAllAnswers(freeText || undefined, correctedAnswers);
     } finally {
       setIsSubmitting(false);
@@ -984,16 +976,6 @@ export function SmartImportNexoPanel({
 
   // Handle approve and import (HIL approval)
   const handleApproveAndImport = async () => {
-    // DEBUG (January 2026): Track who is calling this function
-    console.log('[NEXO] handleApproveAndImport called - user clicked Aprovar e Importar button');
-    console.log('[NEXO] Current state at approval:', {
-      stage: state.stage,
-      isReviewing,
-      hasQuestions,
-      isReadyToProcess,
-      reviewSummaryExists: !!reviewSummary,
-    });
-
     setIsSubmitting(true);
     try {
       await approveAndImport();
@@ -1025,23 +1007,11 @@ export function SmartImportNexoPanel({
   // not just prepareProcessing() which only validates configuration
   // FIX (January 2026): Handle case where reviewSummary is null - generate it first
   const handleContinue = async () => {
-    // DEBUG (January 2026): Track who is calling this function
-    console.log('[NEXO] handleContinue called - user clicked Continuar para importação button');
-    console.log('[NEXO] Current state at continue:', {
-      stage: state.stage,
-      isReviewing,
-      hasQuestions,
-      isReadyToProcess,
-      reviewSummaryExists: !!reviewSummary,
-    });
-
     setIsSubmitting(true);
     try {
       // If we don't have a reviewSummary, we need to go through the review stage first
       // This happens when the flow skipped the 'reviewing' stage unexpectedly
       if (!reviewSummary) {
-        console.warn('[NEXO] No reviewSummary - cannot proceed with import. User should go through review stage first.');
-        // Instead of silently failing, show user-friendly error
         throw new Error('Sessão de revisão não encontrada. Por favor, responda às perguntas novamente.');
       }
 
@@ -1049,8 +1019,6 @@ export function SmartImportNexoPanel({
       onComplete(state.analysis!.sessionId);
     } catch (err) {
       console.error('[NEXO] Import failed:', err);
-      // Re-throw to let user know something went wrong
-      // The error will be caught by React error boundary or shown in UI
       const message = err instanceof Error ? err.message : 'Erro ao executar importação';
       alert(message); // Temporary - should use proper toast/notification
     } finally {
@@ -1352,19 +1320,6 @@ export function SmartImportNexoPanel({
 
   // Analysis complete - show results
   if (state.analysis) {
-    // DEBUG (January 2026): Log state on every render to understand UI decision
-    console.log('[NEXO] Rendering analysis section with state:', {
-      stage: state.stage,
-      isReviewing,
-      hasQuestions,
-      isReadyToProcess,
-      reviewSummaryExists: !!reviewSummary,
-      questionsCount: state.questions.length,
-      willShowQuestionPanel: hasQuestions,
-      willShowReviewPanel: isReviewing && !!reviewSummary,
-      willShowContinueButton: isReadyToProcess && !hasQuestions && !isReviewing && !!reviewSummary,
-    });
-
     return (
       <GlassCard>
         <GlassCardHeader>

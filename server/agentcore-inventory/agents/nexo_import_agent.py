@@ -1834,6 +1834,10 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                     f"[NexoImportAgent] Column creation failed for '{column_name}': "
                     f"{result.error} - {result.reason}"
                 )
+                # FIX: Mark as approved even on failure to prevent question from repeating
+                # (User already decided, just the implementation failed)
+                if target_new_col:
+                    target_new_col.approved = True
 
         elif answer == "metadata":
             # Store in JSONB metadata column
@@ -1842,6 +1846,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 content=f"Coluna '{file_column}' será armazenada em metadata (JSONB)",
             ))
             session.learned_mappings[file_column] = "__metadata__"
+            # FIX: Mark as approved to prevent question from repeating
+            if target_new_col:
+                target_new_col.approved = True
 
         elif answer == "_ignore":
             # Ignore this column
@@ -1850,6 +1857,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 content=f"Coluna '{file_column}' será ignorada",
             ))
             session.learned_mappings[file_column] = "_ignore"
+            # FIX: Mark as approved to prevent question from repeating
+            if target_new_col:
+                target_new_col.approved = True
 
         elif answer == "map_existing":
             # User wants to select from existing columns - needs follow-up question
@@ -1867,6 +1877,9 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 content=f"Mapeando '{file_column}' → '{answer}'",
             ))
             session.learned_mappings[file_column] = answer
+            # FIX: Mark as approved to prevent question from repeating
+            if target_new_col:
+                target_new_col.approved = True
 
     async def _re_reason_with_answers(
         self,

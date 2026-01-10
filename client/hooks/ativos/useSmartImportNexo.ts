@@ -880,16 +880,6 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
   // ==========================================================================
 
   const approveAndImport = useCallback(async (): Promise<void> => {
-    // DEBUG (January 2026): Track who is calling this function
-    console.log('[NEXO] approveAndImport() called!');
-    console.log('[NEXO] Call stack:', new Error().stack);
-    console.log('[NEXO] Current state at approveAndImport entry:', {
-      stage: state.stage,
-      hasSessionState: !!state.sessionState,
-      hasReviewSummary: !!state.reviewSummary,
-      questionsCount: state.questions.length,
-    });
-
     if (!state.sessionState || !state.reviewSummary) {
       throw new Error('Nenhuma sessão de revisão ativa');
     }
