@@ -54,6 +54,8 @@ export interface AgentProfile {
   description: string;
   /** Lucide icon name for the avatar */
   avatar: string;
+  /** Theme color for the agent's visual identity */
+  color: "magenta" | "blue" | "cyan" | "green" | "purple" | "orange" | "yellow" | "red" | "zinc" | "slate" | "teal" | "indigo" | "pink" | "violet";
   /** Current status */
   status: AgentFriendlyStatus;
   /** Last activity in human-readable format (e.g., "Importei 47 itens há 5 min") */

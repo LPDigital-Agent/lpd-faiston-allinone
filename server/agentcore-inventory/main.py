@@ -442,6 +442,12 @@ def invoke(payload: dict, context) -> dict:
         elif action == "query_equipment_docs":
             return asyncio.run(_query_equipment_docs(payload, user_id))
 
+        # =================================================================
+        # Agent Room (Sala de Transparencia)
+        # =================================================================
+        elif action == "get_agent_room_data":
+            return asyncio.run(_get_agent_room_data(payload, user_id))
+
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -3556,6 +3562,40 @@ async def _trigger_equipment_research_async(
     except Exception as e:
         # Log but don't fail - research is non-blocking
         print(f"[EquipmentResearch] Error: {e}")
+
+
+# =============================================================================
+# Agent Room (Sala de Transparencia)
+# =============================================================================
+
+
+async def _get_agent_room_data(payload: dict, user_id: str) -> dict:
+    """
+    Get all Agent Room data for the transparency window.
+
+    Returns humanized agent statuses, live feed events, learning stories,
+    active workflows, and pending decisions in a single efficient call.
+
+    Args:
+        payload: Request payload (session_id optional)
+        user_id: Current user ID
+
+    Returns:
+        Complete Agent Room data dict
+    """
+    try:
+        from tools.agent_room_service import get_agent_room_data
+
+        session_id = payload.get("session_id")
+
+        return get_agent_room_data(user_id=user_id, session_id=session_id)
+
+    except Exception as e:
+        print(f"[AgentRoom] Error getting data: {e}")
+        return {
+            "success": False,
+            "error": f"Erro ao carregar dados do Agent Room: {str(e)}",
+        }
 
 
 # =============================================================================

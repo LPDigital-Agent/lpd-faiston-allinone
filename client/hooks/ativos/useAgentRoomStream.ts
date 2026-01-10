@@ -1,35 +1,50 @@
 /**
- * useAgentRoomStream - SSE Connection for Agent Room
+ * useAgentRoomStream - Polling-Based Data Fetching for Agent Room
  *
- * Provides real-time streaming of agent events via Server-Sent Events.
- * Handles connection management, reconnection, and event parsing.
+ * Provides real-time-like data fetching for the Agent Room transparency window.
+ * Uses TanStack Query for efficient polling with automatic background refetching.
+ *
+ * Architecture:
+ * - Polling-first approach (more reliable with AgentCore Gateway)
+ * - Single endpoint returns all Agent Room data
+ * - Fallback to mock data when backend is unavailable
+ * - Ready for SSE upgrade when needed
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { getAccessToken } from '@/services/authService';
-import { AGENTCORE_ENDPOINT, SGA_AGENTCORE_ARN } from '@/lib/config/agentcore';
+import { useState, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import {
+  getAgentRoomData,
+  type AgentRoomDataResponse,
+  type AgentRoomAgent,
+  type AgentRoomLiveMessage,
+  type AgentRoomLearningStory,
+  type AgentRoomWorkflow,
+  type AgentRoomDecision,
+} from '@/services/sgaAgentcore';
+import {
+  MOCK_LIVE_MESSAGES,
+  MOCK_LEARNING_STORIES,
+  MOCK_PENDING_DECISIONS,
+  MOCK_ACTIVE_WORKFLOW,
+  AGENT_PROFILES,
+} from '@/lib/ativos/agentRoomConstants';
 import type {
   LiveMessage,
   AgentProfile,
   LearningStory,
   ActiveWorkflow,
   PendingDecision,
-  AgentRoomEvent,
-  AgentRoomEventType,
 } from '@/lib/ativos/agentRoomTypes';
-import {
-  MOCK_LIVE_MESSAGES,
-  MOCK_LEARNING_STORIES,
-  MOCK_PENDING_DECISIONS,
-  MOCK_ACTIVE_WORKFLOW,
-} from '@/lib/ativos/agentRoomConstants';
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface AgentRoomStreamState {
-  /** Whether SSE connection is active */
+  /** Whether data is being fetched */
+  isLoading: boolean;
+  /** Whether connection/polling is active */
   isConnected: boolean;
   /** Live feed messages */
   messages: LiveMessage[];
@@ -43,47 +58,123 @@ export interface AgentRoomStreamState {
   pendingDecisions: PendingDecision[];
   /** Last error message */
   error: string | null;
-  /** Timestamp of last received event */
+  /** Timestamp of last received data */
   lastEventAt: string | null;
 }
 
 export interface UseAgentRoomStreamOptions {
-  /** Auto-connect on mount (default: true) */
-  autoConnect?: boolean;
-  /** Max messages to keep in memory (default: 100) */
-  maxMessages?: number;
-  /** Reconnection delay in ms (default: 5000) */
-  reconnectDelay?: number;
-  /** Use mock data instead of real SSE (default: false) */
+  /** Enable polling (default: true) */
+  enabled?: boolean;
+  /** Polling interval in ms (default: 5000) */
+  refetchInterval?: number;
+  /** Use mock data instead of real API (default: false) */
   useMockData?: boolean;
 }
 
 export interface UseAgentRoomStreamReturn extends AgentRoomStreamState {
-  /** Manually connect to SSE stream */
-  connect: () => void;
-  /** Disconnect from SSE stream */
-  disconnect: () => void;
+  /** Manually refetch data */
+  refetch: () => void;
   /** Clear all messages */
   clearMessages: () => void;
-  /** Pause/resume stream processing */
+  /** Pause/resume polling */
   isPaused: boolean;
   setPaused: (paused: boolean) => void;
 }
 
 // =============================================================================
-// Initial State
+// Data Transformation
 // =============================================================================
 
-const initialState: AgentRoomStreamState = {
-  isConnected: false,
-  messages: [],
-  agents: [],
-  learningStories: [],
-  activeWorkflow: null,
-  pendingDecisions: [],
-  error: null,
-  lastEventAt: null,
-};
+/**
+ * Transform backend agent data to frontend AgentProfile format.
+ */
+function transformAgents(agents: AgentRoomAgent[]): AgentProfile[] {
+  return agents.map((agent) => ({
+    id: agent.id,
+    technicalName: agent.technicalName,
+    friendlyName: agent.friendlyName,
+    description: agent.description,
+    avatar: agent.avatar,
+    color: agent.color as AgentProfile['color'],
+    status: agent.status as AgentProfile['status'],
+    lastActivity: agent.lastActivity ?? undefined,
+  }));
+}
+
+/**
+ * Transform backend live messages to frontend LiveMessage format.
+ */
+function transformMessages(messages: AgentRoomLiveMessage[]): LiveMessage[] {
+  return messages.map((msg) => ({
+    id: msg.id,
+    timestamp: msg.timestamp,
+    agentName: msg.agentName,
+    message: msg.message,
+    type: msg.type,
+  }));
+}
+
+/**
+ * Transform backend learning stories to frontend LearningStory format.
+ */
+function transformLearningStories(stories: AgentRoomLearningStory[]): LearningStory[] {
+  return stories.map((story) => ({
+    id: story.id,
+    learnedAt: story.learnedAt,
+    agentName: story.agentName,
+    story: story.story,
+    confidence: story.confidence,
+  }));
+}
+
+/**
+ * Transform backend workflow to frontend ActiveWorkflow format.
+ */
+function transformWorkflow(workflow: AgentRoomWorkflow | null): ActiveWorkflow | null {
+  if (!workflow) return null;
+
+  return {
+    id: workflow.id,
+    name: workflow.name,
+    startedAt: workflow.startedAt,
+    steps: workflow.steps.map((step) => ({
+      id: step.id,
+      label: step.label,
+      icon: step.icon,
+      status: step.status,
+    })),
+  };
+}
+
+/**
+ * Transform backend decisions to frontend PendingDecision format.
+ */
+function transformDecisions(decisions: AgentRoomDecision[]): PendingDecision[] {
+  return decisions.map((decision) => ({
+    id: decision.id,
+    question: decision.question,
+    options: decision.options,
+    priority: decision.priority,
+    createdAt: decision.createdAt,
+    agentName: 'Sistema', // Default agent name for backend decisions
+  }));
+}
+
+/**
+ * Get mock agent profiles from constants.
+ */
+function getMockAgentProfiles(): AgentProfile[] {
+  return Object.entries(AGENT_PROFILES).slice(0, 6).map(([id, config]) => ({
+    id,
+    technicalName: id,
+    friendlyName: config.friendlyName,
+    description: config.description,
+    avatar: config.icon.displayName || 'Bot',
+    color: config.color as AgentProfile['color'],
+    status: 'disponivel' as const,
+    lastActivity: undefined,
+  }));
+}
 
 // =============================================================================
 // Hook Implementation
@@ -93,194 +184,106 @@ export function useAgentRoomStream(
   options: UseAgentRoomStreamOptions = {}
 ): UseAgentRoomStreamReturn {
   const {
-    autoConnect = true,
-    maxMessages = 100,
-    reconnectDelay = 5000,
-    useMockData = true, // Default to mock while backend is being developed
+    enabled = true,
+    refetchInterval = 5000,
+    useMockData = false, // Set to false to use real backend
   } = options;
 
-  const [state, setState] = useState<AgentRoomStreamState>(initialState);
   const [isPaused, setPaused] = useState(false);
-
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isMountedRef = useRef(true);
+  const [clearedMessages, setClearedMessages] = useState<string[]>([]);
 
   // =============================================================================
-  // Event Handlers
+  // TanStack Query for Polling
   // =============================================================================
 
-  const handleEvent = useCallback((event: AgentRoomEvent) => {
-    if (isPaused) return;
-
-    setState((prev) => {
-      switch (event.type) {
-        case 'live_message': {
-          const message = event.data as LiveMessage;
-          const messages = [message, ...prev.messages].slice(0, maxMessages);
-          return { ...prev, messages, lastEventAt: event.timestamp };
-        }
-
-        case 'agent_status': {
-          const update = event.data as { agentId: string; status: string; lastActivity?: string };
-          const agents = prev.agents.map((agent) =>
-            agent.id === update.agentId
-              ? { ...agent, status: update.status as AgentProfile['status'], lastActivity: update.lastActivity }
-              : agent
-          );
-          return { ...prev, agents, lastEventAt: event.timestamp };
-        }
-
-        case 'learning': {
-          const story = event.data as LearningStory;
-          const learningStories = [story, ...prev.learningStories].slice(0, 20);
-          return { ...prev, learningStories, lastEventAt: event.timestamp };
-        }
-
-        case 'workflow_update': {
-          const workflow = event.data as ActiveWorkflow;
-          return { ...prev, activeWorkflow: workflow, lastEventAt: event.timestamp };
-        }
-
-        case 'decision_created': {
-          const decision = event.data as PendingDecision;
-          const pendingDecisions = [decision, ...prev.pendingDecisions];
-          return { ...prev, pendingDecisions, lastEventAt: event.timestamp };
-        }
-
-        case 'decision_resolved': {
-          const { decisionId } = event.data as { decisionId: string };
-          const pendingDecisions = prev.pendingDecisions.filter((d) => d.id !== decisionId);
-          return { ...prev, pendingDecisions, lastEventAt: event.timestamp };
-        }
-
-        case 'heartbeat':
-          return { ...prev, lastEventAt: event.timestamp };
-
-        default:
-          return prev;
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useQuery({
+    queryKey: ['agent-room-data'],
+    queryFn: async (): Promise<AgentRoomDataResponse | null> => {
+      if (useMockData) {
+        // Return mock data structure
+        return {
+          success: true,
+          timestamp: new Date().toISOString(),
+          agents: [],
+          liveFeed: [],
+          learningStories: [],
+          activeWorkflow: null,
+          pendingDecisions: [],
+        };
       }
-    });
-  }, [isPaused, maxMessages]);
+
+      try {
+        const response = await getAgentRoomData();
+        return response.data;
+      } catch (err) {
+        console.error('[Agent Room] Failed to fetch data:', err);
+        throw err;
+      }
+    },
+    enabled: enabled && !isPaused,
+    refetchInterval: isPaused ? false : refetchInterval,
+    refetchIntervalInBackground: false,
+    staleTime: refetchInterval / 2,
+    retry: 2,
+    retryDelay: 1000,
+  });
 
   // =============================================================================
-  // SSE Connection Management
+  // Transform Data
   // =============================================================================
 
-  const connect = useCallback(async () => {
-    // If using mock data, load mock data instead of connecting
-    if (useMockData) {
-      setState((prev) => ({
-        ...prev,
-        isConnected: true,
-        messages: MOCK_LIVE_MESSAGES,
+  const state = useMemo((): AgentRoomStreamState => {
+    // Use mock data if enabled or if no backend data
+    if (useMockData || !data) {
+      return {
+        isLoading,
+        isConnected: !isLoading && !error,
+        messages: MOCK_LIVE_MESSAGES.filter((m) => !clearedMessages.includes(m.id)),
+        agents: getMockAgentProfiles(),
         learningStories: MOCK_LEARNING_STORIES,
-        pendingDecisions: MOCK_PENDING_DECISIONS,
         activeWorkflow: MOCK_ACTIVE_WORKFLOW,
-        error: null,
-      }));
-      return;
-    }
-
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    try {
-      const token = await getAccessToken();
-      if (!token) {
-        setState((prev) => ({ ...prev, error: 'Não autenticado' }));
-        return;
-      }
-
-      // Build SSE URL with auth
-      const encodedArn = encodeURIComponent(SGA_AGENTCORE_ARN);
-      const url = `${AGENTCORE_ENDPOINT}/runtimes/${encodedArn}/stream?action=agent_room_stream`;
-
-      // Note: EventSource doesn't support custom headers directly
-      // We'll need to use fetch with ReadableStream for SSE with auth
-      // For now, this is a placeholder that will be updated when backend is ready
-
-      const eventSource = new EventSource(url);
-      eventSourceRef.current = eventSource;
-
-      eventSource.onopen = () => {
-        if (isMountedRef.current) {
-          setState((prev) => ({ ...prev, isConnected: true, error: null }));
-        }
+        pendingDecisions: MOCK_PENDING_DECISIONS,
+        error: error ? String(error) : null,
+        lastEventAt: useMockData ? new Date().toISOString() : null,
       };
-
-      eventSource.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data) as AgentRoomEvent;
-          handleEvent(parsed);
-        } catch {
-          console.warn('[Agent Room] Failed to parse SSE event:', event.data);
-        }
-      };
-
-      eventSource.onerror = () => {
-        if (isMountedRef.current) {
-          setState((prev) => ({
-            ...prev,
-            isConnected: false,
-            error: 'Conexão perdida. Reconectando...',
-          }));
-
-          // Schedule reconnection
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-          }
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isMountedRef.current) {
-              connect();
-            }
-          }, reconnectDelay);
-        }
-      };
-    } catch (error) {
-      console.error('[Agent Room] Connection error:', error);
-      setState((prev) => ({
-        ...prev,
-        isConnected: false,
-        error: 'Erro ao conectar',
-      }));
     }
-  }, [useMockData, handleEvent, reconnectDelay]);
 
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    setState((prev) => ({ ...prev, isConnected: false }));
-  }, []);
+    // Transform backend data
+    return {
+      isLoading,
+      isConnected: data.success,
+      messages: transformMessages(data.liveFeed).filter((m) => !clearedMessages.includes(m.id)),
+      agents: data.agents.length > 0 ? transformAgents(data.agents) : getMockAgentProfiles(),
+      learningStories: data.learningStories.length > 0
+        ? transformLearningStories(data.learningStories)
+        : MOCK_LEARNING_STORIES,
+      activeWorkflow: transformWorkflow(data.activeWorkflow) ?? MOCK_ACTIVE_WORKFLOW,
+      pendingDecisions: transformDecisions(data.pendingDecisions),
+      error: data.success ? null : 'Erro ao carregar dados',
+      lastEventAt: data.timestamp,
+    };
+  }, [data, isLoading, error, useMockData, clearedMessages]);
+
+  // =============================================================================
+  // Actions
+  // =============================================================================
 
   const clearMessages = useCallback(() => {
-    setState((prev) => ({ ...prev, messages: [] }));
-  }, []);
+    setClearedMessages((prev) => [
+      ...prev,
+      ...state.messages.map((m) => m.id),
+    ]);
+  }, [state.messages]);
 
-  // =============================================================================
-  // Lifecycle
-  // =============================================================================
-
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    if (autoConnect) {
-      connect();
-    }
-
-    return () => {
-      isMountedRef.current = false;
-      disconnect();
-    };
-  }, [autoConnect, connect, disconnect]);
+  const handleRefetch = useCallback(() => {
+    refetch();
+  }, [refetch]);
 
   // =============================================================================
   // Return
@@ -288,8 +291,7 @@ export function useAgentRoomStream(
 
   return {
     ...state,
-    connect,
-    disconnect,
+    refetch: handleRefetch,
     clearMessages,
     isPaused,
     setPaused,
@@ -304,39 +306,39 @@ export function useAgentRoomStream(
  * Hook for just the live feed messages.
  */
 export function useLiveFeed(options?: UseAgentRoomStreamOptions) {
-  const { messages, isConnected, error, isPaused, setPaused, clearMessages } =
+  const { messages, isConnected, isLoading, error, isPaused, setPaused, clearMessages } =
     useAgentRoomStream(options);
-  return { messages, isConnected, error, isPaused, setPaused, clearMessages };
+  return { messages, isConnected, isLoading, error, isPaused, setPaused, clearMessages };
 }
 
 /**
  * Hook for agent profiles with status.
  */
 export function useAgentProfiles(options?: UseAgentRoomStreamOptions) {
-  const { agents, isConnected, error } = useAgentRoomStream(options);
-  return { agents, isConnected, error };
+  const { agents, isConnected, isLoading, error } = useAgentRoomStream(options);
+  return { agents, isConnected, isLoading, error };
 }
 
 /**
  * Hook for learning stories.
  */
 export function useLearningStories(options?: UseAgentRoomStreamOptions) {
-  const { learningStories, isConnected, error } = useAgentRoomStream(options);
-  return { stories: learningStories, isConnected, error };
+  const { learningStories, isConnected, isLoading, error } = useAgentRoomStream(options);
+  return { stories: learningStories, isConnected, isLoading, error };
 }
 
 /**
  * Hook for active workflow timeline.
  */
 export function useWorkflowTimeline(options?: UseAgentRoomStreamOptions) {
-  const { activeWorkflow, isConnected, error } = useAgentRoomStream(options);
-  return { workflow: activeWorkflow, isConnected, error };
+  const { activeWorkflow, isConnected, isLoading, error } = useAgentRoomStream(options);
+  return { workflow: activeWorkflow, isConnected, isLoading, error };
 }
 
 /**
  * Hook for pending decisions.
  */
 export function usePendingDecisions(options?: UseAgentRoomStreamOptions) {
-  const { pendingDecisions, isConnected, error } = useAgentRoomStream(options);
-  return { decisions: pendingDecisions, isConnected, error };
+  const { pendingDecisions, isConnected, isLoading, error } = useAgentRoomStream(options);
+  return { decisions: pendingDecisions, isConnected, isLoading, error };
 }

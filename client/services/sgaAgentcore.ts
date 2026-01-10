@@ -1629,6 +1629,88 @@ export async function queryEquipmentDocs(
   });
 }
 
+// =============================================================================
+// Agent Room (Sala de Transparencia)
+// =============================================================================
+
+/**
+ * Get all Agent Room data for the transparency window.
+ *
+ * Returns humanized agent statuses, live feed events, learning stories,
+ * active workflows, and pending decisions in a single call.
+ *
+ * @returns Agent Room data with all panels
+ */
+export async function getAgentRoomData(): Promise<AgentCoreResponse<AgentRoomDataResponse>> {
+  return invokeSGAAgentCore<AgentRoomDataResponse>({
+    action: 'get_agent_room_data',
+  });
+}
+
+// Agent Room response type
+export interface AgentRoomDataResponse {
+  success: boolean;
+  timestamp: string;
+  agents: AgentRoomAgent[];
+  liveFeed: AgentRoomLiveMessage[];
+  learningStories: AgentRoomLearningStory[];
+  activeWorkflow: AgentRoomWorkflow | null;
+  pendingDecisions: AgentRoomDecision[];
+}
+
+export interface AgentRoomAgent {
+  id: string;
+  technicalName: string;
+  friendlyName: string;
+  description: string;
+  avatar: string;
+  color: string;
+  status: string;
+  statusLabel: string;
+  lastActivity: string | null;
+}
+
+export interface AgentRoomLiveMessage {
+  id: string;
+  timestamp: string;
+  agentName: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'action_needed';
+  eventType: string;
+}
+
+export interface AgentRoomLearningStory {
+  id: string;
+  learnedAt: string;
+  agentName: string;
+  story: string;
+  confidence: 'alta' | 'media' | 'baixa';
+}
+
+export interface AgentRoomWorkflow {
+  id: string;
+  name: string;
+  startedAt: string;
+  steps: AgentRoomWorkflowStep[];
+}
+
+export interface AgentRoomWorkflowStep {
+  id: string;
+  label: string;
+  icon: string;
+  status: 'concluido' | 'atual' | 'pendente';
+}
+
+export interface AgentRoomDecision {
+  id: string;
+  question: string;
+  options: { label: string; action: string }[];
+  priority: 'alta' | 'normal';
+  createdAt: string;
+  taskType: string;
+  entityId?: string;
+}
+
 // Re-export types for consumer convenience
 export type {
   KBCitation,
