@@ -31,6 +31,65 @@ from tools.humanizer import (
 
 
 # =============================================================================
+# Event Emission (for Agent Room visibility)
+# =============================================================================
+
+
+def emit_agent_event(
+    agent_id: str,
+    status: str,
+    message: str,
+    session_id: Optional[str] = None,
+    details: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """
+    Emit an agent activity event to the audit log for Agent Room visibility.
+
+    This is the KEY FUNCTION that connects agent activity to the Agent Room.
+    Call this whenever an agent starts, progresses, or completes work.
+
+    Args:
+        agent_id: Agent identifier (e.g., "nexo_import", "intake", "import")
+        status: Current status (e.g., "trabalhando", "esperando_voce", "disponivel")
+        message: Human-readable message describing what agent is doing
+        session_id: Optional session ID for tracking
+        details: Optional additional details
+
+    Returns:
+        True if event was logged successfully
+
+    Example:
+        emit_agent_event(
+            agent_id="nexo_import",
+            status="trabalhando",
+            message="Analisando arquivo CSV com 1,658 linhas..."
+        )
+    """
+    from tools.dynamodb_client import SGAAuditLogger
+
+    audit = SGAAuditLogger()
+
+    event_details = {
+        "agent_id": agent_id,
+        "status": status,
+        "message": message,
+    }
+    if details:
+        event_details.update(details)
+
+    return audit.log_event(
+        event_type="AGENT_ACTIVITY",
+        actor_type="AGENT",
+        actor_id=agent_id,
+        entity_type="agent_status",
+        entity_id=agent_id,
+        action=status,
+        details=event_details,
+        session_id=session_id,
+    )
+
+
+# =============================================================================
 # Configuration
 # =============================================================================
 

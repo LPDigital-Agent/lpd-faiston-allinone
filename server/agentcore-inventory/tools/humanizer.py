@@ -327,12 +327,41 @@ def humanize_audit_entry(audit_entry: dict) -> dict:
     Returns:
         Humanized message dict for Agent Room
     """
+    event_type_raw = audit_entry.get("event_type", "")
     action = audit_entry.get("action", "unknown")
     entity_type = audit_entry.get("entity_type", "")
     details = audit_entry.get("details", {})
-    actor = audit_entry.get("actor", "system")
+    actor_id = audit_entry.get("actor_id", "system")
     timestamp = audit_entry.get("timestamp", datetime.utcnow().isoformat())
 
+    # Special handling for AGENT_ACTIVITY events (from emit_agent_event)
+    # These already have humanized messages in the details
+    if event_type_raw == "AGENT_ACTIVITY":
+        agent_id = details.get("agent_id", actor_id)
+        friendly_name = get_friendly_agent_name(agent_id)
+        status = details.get("status", "trabalhando")
+        message = details.get("message", "Trabalhando...")
+
+        # Determine message type from status
+        if status in ("esperando_voce", "pending_hil"):
+            msg_type = "action_needed"
+        elif status in ("disponivel", "completed", "idle"):
+            msg_type = "success"
+        elif status in ("problema", "error"):
+            msg_type = "warning"
+        else:
+            msg_type = "info"
+
+        return {
+            "agent": friendly_name,
+            "message": message,
+            "type": msg_type,
+            "timestamp": timestamp,
+            "event_type": "agent_activity",
+            "audit_id": audit_entry.get("event_id", ""),
+        }
+
+    # Standard humanization for other event types
     # Map audit actions to event types
     event_type = _map_audit_action_to_event(action, entity_type)
 
@@ -344,7 +373,7 @@ def humanize_audit_entry(audit_entry: dict) -> dict:
 
     humanized = humanize_event(event_type, agent_name, data)
     humanized["timestamp"] = timestamp
-    humanized["audit_id"] = audit_entry.get("id", "")
+    humanized["audit_id"] = audit_entry.get("id", audit_entry.get("event_id", ""))
 
     return humanized
 

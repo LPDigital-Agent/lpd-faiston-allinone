@@ -119,6 +119,79 @@ def get_adapter_info() -> dict:
 app = BedrockAgentCoreApp()
 
 
+# =============================================================================
+# Agent Room Event Emission Helpers
+# =============================================================================
+# These functions emit events to the DynamoDB Audit Log so the Agent Room
+# can display real-time agent activity. Uses emit_agent_event() from
+# agent_room_service.py which writes AGENT_ACTIVITY events.
+
+# Actions that should trigger Agent Room visibility (major agent work)
+TRACKED_ACTIONS = {
+    # NEXO Intelligent Import (most visible in UI)
+    "nexo_analyze_file": ("nexo_import", "Analisando arquivo..."),
+    "nexo_get_questions": ("nexo_import", "Preparando perguntas..."),
+    "nexo_submit_answers": ("nexo_import", "Processando respostas..."),
+    "nexo_prepare_processing": ("nexo_import", "Preparando importação..."),
+    "nexo_learn_from_import": ("learning", "Aprendendo com a importação..."),
+    # NF Processing (IntakeAgent)
+    "process_nf_upload": ("intake", "Processando nota fiscal..."),
+    "validate_nf_extraction": ("intake", "Validando extração da NF..."),
+    "confirm_nf_entry": ("intake", "Confirmando entrada da NF..."),
+    "process_scanned_nf_upload": ("intake", "Lendo NF escaneada..."),
+    # Smart Import
+    "smart_import_upload": ("import", "Processando arquivo..."),
+    "preview_import": ("import", "Analisando dados..."),
+    "execute_import": ("import", "Importando dados..."),
+    # Movements (EstoqueControlAgent)
+    "create_movement": ("estoque_control", "Registrando movimentação..."),
+    "create_transfer": ("estoque_control", "Processando transferência..."),
+    "create_reservation": ("estoque_control", "Criando reserva..."),
+    # Reconciliation
+    "start_inventory_count": ("reconciliacao", "Iniciando contagem..."),
+    "analyze_divergences": ("reconciliacao", "Analisando divergências..."),
+    # HIL Tasks
+    "approve_task": ("compliance", "Processando aprovação..."),
+    "reject_task": ("compliance", "Processando rejeição..."),
+    # Equipment Research
+    "research_equipment": ("equipment_research", "Pesquisando equipamento..."),
+    "research_equipment_batch": ("equipment_research", "Pesquisando lote..."),
+    # Expedition
+    "process_expedition_request": ("expedition", "Processando expedição..."),
+    # Returns
+    "process_return": ("reverse", "Processando devolução..."),
+}
+
+
+def _emit_action_started(action: str, session_id: str) -> None:
+    """
+    Emit agent activity event when a tracked action starts.
+
+    Non-blocking - failures are logged but don't affect action execution.
+    Only emits for actions in TRACKED_ACTIONS to avoid noise.
+
+    Args:
+        action: The action being executed
+        session_id: Current session ID
+    """
+    if action not in TRACKED_ACTIONS:
+        return
+
+    agent_id, message = TRACKED_ACTIONS[action]
+
+    try:
+        from tools.agent_room_service import emit_agent_event
+        emit_agent_event(
+            agent_id=agent_id,
+            status="trabalhando",
+            message=message,
+            session_id=session_id,
+        )
+    except Exception as e:
+        # Non-blocking - log but don't fail the action
+        print(f"[AgentRoom] Warning: Failed to emit start event: {e}")
+
+
 @app.entrypoint
 def invoke(payload: dict, context) -> dict:
     """
@@ -140,6 +213,13 @@ def invoke(payload: dict, context) -> dict:
 
     # Debug logging to trace action routing
     print(f"[SGA Invoke] action={action}, user_id={user_id}, session_id={session_id}")
+
+    # =================================================================
+    # Agent Room Event Emission (Sala de Transparência)
+    # =================================================================
+    # Emit agent activity events for major actions so they appear in
+    # the Agent Room live feed. This provides transparency to users.
+    _emit_action_started(action, session_id)
 
     # Track session in DynamoDB (non-blocking)
     try:
@@ -1641,6 +1721,15 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
     logger.info(f"[execute_import] Starting import {import_id} for file {filename}")
     logger.info(f"[execute_import] s3_key={s3_key}, column_mappings count={len(column_mappings)}")
 
+    # Agent Room: emit start event
+    from tools.agent_room_service import emit_agent_event
+    emit_agent_event(
+        agent_id="import",
+        status="trabalhando",
+        message=f"Iniciando importação de {filename}...",
+        details={"import_id": import_id, "filename": filename},
+    )
+
     if not import_id:
         return {"success": False, "error": "import_id is required"}
 
@@ -1807,6 +1896,26 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
         )
     except Exception:
         pass  # Don't fail the request if audit logging fails
+
+    # Agent Room: emit completion event
+    if len(failed_rows) > 0:
+        emit_agent_event(
+            agent_id="import",
+            status="disponivel",
+            message=f"Importação concluída: {len(created_movements)} itens ok, {len(failed_rows)} com erro.",
+            details={
+                "success_count": len(created_movements),
+                "failed_count": len(failed_rows),
+                "filename": filename,
+            },
+        )
+    else:
+        emit_agent_event(
+            agent_id="import",
+            status="disponivel",
+            message=f"Importação concluída com sucesso! {len(created_movements)} itens importados.",
+            details={"count": len(created_movements), "filename": filename},
+        )
 
     return {
         "success": True,
@@ -2827,10 +2936,21 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
 
     # Lazy import to respect AgentCore cold start limit
     from agents.nexo_import_agent import NexoImportAgent
+    from tools.agent_room_service import emit_agent_event
 
     agent = NexoImportAgent()
     print(f"[nexo_analyze_file] Starting analysis for: {filename}, s3_key: {s3_key}")
     print(f"[nexo_analyze_file] File data size: {len(file_data) if file_data else 0} bytes")
+
+    # Emit detailed Agent Room event with file info
+    file_size_kb = len(file_data) // 1024 if file_data else 0
+    emit_agent_event(
+        agent_id="nexo_import",
+        status="trabalhando",
+        message=f"Recebi o arquivo {filename} ({file_size_kb} KB). Analisando estrutura...",
+        session_id=session_id,
+        details={"filename": filename, "size_kb": file_size_kb},
+    )
 
     # Pass user_id for Memory-First architecture (retrieve prior knowledge)
     result = await agent.analyze_file_intelligently(
@@ -2849,11 +2969,41 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
     #                   overall_confidence, questions, reasoning_trace
 
     if not result.get("success"):
+        # Emit error event
+        emit_agent_event(
+            agent_id="nexo_import",
+            status="problema",
+            message=f"Erro ao analisar {filename}: {result.get('error', 'erro desconhecido')}",
+            session_id=session_id,
+        )
         return result
 
     # Extract analysis data
     analysis = result.get("analysis", {})
     sheets = analysis.get("sheets", [])
+
+    # Emit analysis complete event with summary
+    total_rows = sum(sheet.get("row_count", 0) for sheet in sheets)
+    total_columns = sum(len(sheet.get("columns", [])) for sheet in sheets)
+    questions = result.get("questions", [])
+    has_questions = len(questions) > 0
+
+    if has_questions:
+        emit_agent_event(
+            agent_id="nexo_import",
+            status="esperando_voce",
+            message=f"Encontrei {total_rows} linhas em {len(sheets)} planilha(s). Tenho {len(questions)} pergunta(s) para você.",
+            session_id=session_id,
+            details={"rows": total_rows, "sheets": len(sheets), "questions": len(questions)},
+        )
+    else:
+        emit_agent_event(
+            agent_id="nexo_import",
+            status="disponivel",
+            message=f"Análise completa! {total_rows} linhas, {total_columns} colunas mapeadas automaticamente.",
+            session_id=session_id,
+            details={"rows": total_rows, "columns": total_columns},
+        )
     suggested_mappings = result.get("suggested_mappings", {})
     confidence = result.get("confidence", {})
     reasoning = result.get("reasoning", [])
@@ -3164,11 +3314,38 @@ async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
         return {"success": False, "error": "session_state is required (stateless architecture)"}
 
     from agents.nexo_import_agent import NexoImportAgent
+    from tools.agent_room_service import emit_agent_event
+
+    # Emit event: starting to prepare import
+    emit_agent_event(
+        agent_id="nexo_import",
+        status="trabalhando",
+        message="Preparando dados para importação...",
+        session_id=session_id,
+    )
 
     agent = NexoImportAgent()
     # Restore session from frontend state
     session = agent._restore_session(session_state)
     result = await agent.prepare_for_processing(session=session)
+
+    # Emit completion event
+    if result.get("success"):
+        item_count = result.get("item_count", 0)
+        emit_agent_event(
+            agent_id="nexo_import",
+            status="disponivel",
+            message=f"Pronto! {item_count} itens preparados para importação.",
+            session_id=session_id,
+            details={"item_count": item_count},
+        )
+    else:
+        emit_agent_event(
+            agent_id="nexo_import",
+            status="problema",
+            message=f"Erro ao preparar importação: {result.get('error', 'erro desconhecido')}",
+            session_id=session_id,
+        )
 
     return result
 
