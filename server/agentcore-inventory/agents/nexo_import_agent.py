@@ -865,6 +865,26 @@ Com base em toda a análise acima, qual é o tipo de movimento?
                     except (json.JSONDecodeError, TypeError):
                         print(f"[NEXO] WARNING: suggested_mappings is string, failed to parse: {suggested[:100]}")
 
+                # =============================================================
+                # FIX (January 2026): Update column suggested_mappings from Gemini
+                # The Gemini analysis may have identified columns like "PART NUMBER"
+                # and mapped them to "part_number". We need to update the column
+                # metadata so that detect_aggregation_need() can find them.
+                # =============================================================
+                if session.file_analysis and session.learned_mappings:
+                    for sheet in session.file_analysis.get("sheets", []):
+                        for col in sheet.get("columns", []):
+                            col_name = col.get("name", "")
+                            # Check if this column was mapped by Gemini
+                            if col_name in session.learned_mappings:
+                                target_field = session.learned_mappings[col_name]
+                                col["suggested_mapping"] = target_field
+                                col["mapping_confidence"] = 0.9  # High confidence from Gemini
+                                logger.debug(
+                                    f"[NexoImportAgent] Updated column mapping: "
+                                    f"'{col_name}' → '{target_field}'"
+                                )
+
                 # Calculate confidence
                 raw_confidence = result.get("confidence", 0.5)
                 session.confidence = self.calculate_confidence(
@@ -1971,6 +1991,24 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
                 suggested = result.get("refined_mappings", {})
                 if isinstance(suggested, dict):
                     session.learned_mappings.update(suggested)
+
+                    # =============================================================
+                    # FIX (January 2026): Update column suggested_mappings from Gemini
+                    # Same fix as in initial analysis - sync column metadata with
+                    # learned_mappings so aggregation detection works correctly.
+                    # =============================================================
+                    if session.file_analysis:
+                        for sheet in session.file_analysis.get("sheets", []):
+                            for col in sheet.get("columns", []):
+                                col_name = col.get("name", "")
+                                if col_name in suggested:
+                                    target_field = suggested[col_name]
+                                    col["suggested_mapping"] = target_field
+                                    col["mapping_confidence"] = 0.9
+                                    logger.debug(
+                                        f"[NexoImportAgent] Re-reasoning updated column mapping: "
+                                        f"'{col_name}' → '{target_field}'"
+                                    )
 
                 # =============================================================
                 # FIX (January 2026): PRIORITY INVERSION BUG
