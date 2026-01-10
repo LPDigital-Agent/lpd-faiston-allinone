@@ -540,6 +540,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       const result = await nexoSubmitAnswers({
         session_state: updatedSessionState,  // STATELESS: Pass full state
         answers: answersToUse,  // Use corrected answers (no "__other__")
+        // FIX (January 2026): Pass global user feedback for AI interpretation
+        user_feedback: userFeedback,
       });
 
       // Clear progress interval

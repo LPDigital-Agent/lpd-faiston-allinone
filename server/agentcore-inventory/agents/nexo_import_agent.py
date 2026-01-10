@@ -108,6 +108,8 @@ class ImportSession:
     error: Optional[str] = None
     # FIX (January 2026): Track user for audit trail in schema evolution
     user_id: Optional[str] = None
+    # FIX (January 2026): Global user feedback for AI interpretation
+    global_user_feedback: Optional[str] = None
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
 
@@ -460,6 +462,8 @@ class NexoImportAgent(BaseInventoryAgent):
             error=state.get("error"),
             # FIX (January 2026): Restore user_id for audit trail in schema evolution
             user_id=state.get("user_id"),
+            # FIX (January 2026): Restore global user feedback for AI interpretation
+            global_user_feedback=state.get("global_user_feedback"),
             created_at=state.get("created_at", now_iso()),
             updated_at=now_iso(),
         )
@@ -1232,6 +1236,7 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         self,
         session: ImportSession,
         answers: Dict[str, Any],
+        user_feedback: Optional[str] = None,  # FIX (January 2026): Global user instructions
     ) -> Dict[str, Any]:
         """
         Process user answers to questions - STATELESS with RE-REASONING.
@@ -1242,6 +1247,7 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         Args:
             session: Import session (in-memory, from frontend state)
             answers: Dict mapping question_id to answer
+            user_feedback: Global user instructions for AI interpretation
 
         Returns:
             Updated session state with optional remaining_questions
@@ -1254,6 +1260,14 @@ IMPORTANTE: Responda APENAS em JSON válido, sem markdown code blocks.
         )
 
         session.answers = answers
+
+        # FIX (January 2026): Store global user feedback for AI interpretation
+        if user_feedback:
+            session.global_user_feedback = user_feedback
+            session.reasoning_trace.append(ReasoningStep(
+                step_type="observation",
+                content=f"Feedback global do usuário: {user_feedback[:200]}..." if len(user_feedback) > 200 else f"Feedback global do usuário: {user_feedback}",
+            ))
 
         # Track current question round (max 3 rounds)
         current_round = len([r for r in session.reasoning_trace if "Ronda" in r.content])
@@ -2187,6 +2201,7 @@ Exemplos de interpretação:
 ## RESPOSTAS DO USUÁRIO (NOVAS INFORMAÇÕES)
 {answers_context if answers_context else "(nenhuma resposta)"}
 {ai_instructions_context}
+{self._format_global_feedback(session)}
 ## SUA TAREFA
 
 Com base nas respostas do usuário:
@@ -2227,6 +2242,38 @@ IMPORTANTE:
 - Se não tiver certeza sobre um campo existente, inclua em "uncertain_fields"
 """
         return prompt
+
+    def _format_global_feedback(self, session: ImportSession) -> str:
+        """
+        Format global user feedback for inclusion in Gemini prompt.
+
+        FIX (January 2026): Users can provide global instructions in the feedback
+        textarea. These instructions apply to the ENTIRE import, not just a single column.
+
+        Examples of global feedback:
+        - "Este arquivo não existe coluna de quantidade, conte quantos equipamentos identicos"
+        - "Ignore as linhas com status 'Cancelado'"
+        - "Este é um arquivo de entrada de equipamentos novos"
+        """
+        global_feedback = getattr(session, "global_user_feedback", None)
+        if not global_feedback:
+            return ""
+
+        return f"""
+## INSTRUÇÕES GLOBAIS DO USUÁRIO (CRÍTICO - LEIA COM ATENÇÃO)
+
+O usuário forneceu as seguintes instruções gerais para esta importação:
+
+\"\"\"{global_feedback}\"\"\"
+
+VOCÊ DEVE:
+1. Interpretar essas instruções e aplicá-las à análise
+2. Se o usuário menciona estratégias de quantidade (contar duplicatas, usar 1, etc), reflita isso nos mapeamentos
+3. Se o usuário menciona filtros ou exclusões, anote em "notes" para o executor
+4. Se o usuário menciona campos específicos, use essa informação para refinar mapeamentos
+5. Se o usuário menciona Nota Fiscal, identifique qual coluna é o número da NF
+
+"""
 
     def _generate_follow_up_questions(
         self,
@@ -3560,6 +3607,8 @@ def session_to_dict(session: ImportSession) -> Dict[str, Any]:
         ],
         "confidence": session.confidence.to_dict() if session.confidence else None,
         "error": session.error,
+        # FIX (January 2026): Include global user feedback for AI interpretation
+        "global_user_feedback": session.global_user_feedback,
         "created_at": session.created_at,
         "updated_at": session.updated_at,
     }

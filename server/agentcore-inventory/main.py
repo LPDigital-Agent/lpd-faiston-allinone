@@ -3148,12 +3148,15 @@ async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
     Payload:
         session_state: Full session state from frontend
         answers: Dict mapping question IDs to selected answers
+        user_feedback: Optional global user instructions for AI interpretation
 
     Returns:
         Updated session state with refined mappings based on answers
     """
     session_state = payload.get("session_state")
     answers = payload.get("answers", {})
+    # FIX (January 2026): Accept global user feedback for AI interpretation
+    user_feedback = payload.get("user_feedback")
 
     if not session_state:
         return {"success": False, "error": "session_state is required (stateless architecture)"}
@@ -3169,6 +3172,7 @@ async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
     result = await agent.submit_answers(
         session=session,
         answers=answers,
+        user_feedback=user_feedback,  # FIX: Pass global feedback to agent
     )
 
     return result

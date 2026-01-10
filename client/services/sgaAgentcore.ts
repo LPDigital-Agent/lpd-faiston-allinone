@@ -1197,6 +1197,7 @@ export interface NexoSessionState {
 export interface NexoSubmitAnswersRequest {
   session_state: NexoSessionState;  // Full session state from frontend
   answers: Record<string, string>;
+  user_feedback?: string;  // FIX (January 2026): Global user instructions for AI interpretation
 }
 
 /**
@@ -1343,6 +1344,8 @@ export async function nexoSubmitAnswers(
     action: 'nexo_submit_answers',
     session_state: params.session_state,  // STATELESS: Pass full state
     answers: params.answers,
+    // FIX (January 2026): Pass global user feedback for AI interpretation
+    ...(params.user_feedback ? { user_feedback: params.user_feedback } : {}),
   });
 }
 
