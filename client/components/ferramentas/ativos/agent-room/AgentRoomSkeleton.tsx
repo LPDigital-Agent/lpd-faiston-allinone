@@ -236,6 +236,72 @@ export function PendingDecisionsSkeleton() {
 }
 
 // =============================================================================
+// X-Ray Skeleton
+// =============================================================================
+
+export function AgentXRaySkeleton() {
+  return (
+    <div
+      className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-md p-4"
+      role="status"
+      aria-label="Carregando X-Ray..."
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Skeleton className="w-4 h-4 rounded-full" />
+          <Skeleton className="w-16 h-4" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="w-16 h-6 rounded-full" />
+          <Skeleton className="w-20 h-6 rounded-full" />
+        </div>
+      </div>
+
+      {/* Session Groups */}
+      <div className="space-y-3">
+        {[...Array(2)].map((_, i) => (
+          <div
+            key={i}
+            className="rounded-lg bg-white/5 border border-white/10 overflow-hidden"
+          >
+            {/* Session Header */}
+            <div className="p-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Skeleton className="w-4 h-4" />
+                <Skeleton className="w-32 h-4" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Skeleton className="w-12 h-4" />
+                <Skeleton className="w-16 h-5 rounded-full" />
+              </div>
+            </div>
+
+            {/* Events */}
+            <div className="border-t border-white/10 p-3 space-y-2">
+              {[...Array(3)].map((_, j) => (
+                <div key={j} className="flex items-center gap-2 p-2 rounded-lg bg-white/3">
+                  <Skeleton className="w-6 h-6 rounded-full shrink-0" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="w-16 h-3" />
+                      <Skeleton className="w-8 h-3" />
+                    </div>
+                    <Skeleton className="w-3/4 h-3" />
+                  </div>
+                  <Skeleton className="w-12 h-4 shrink-0" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <span className="sr-only">Carregando traces X-Ray</span>
+    </div>
+  );
+}
+
+// =============================================================================
 // Full Page Skeleton
 // =============================================================================
 

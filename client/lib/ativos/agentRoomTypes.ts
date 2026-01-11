@@ -274,3 +274,131 @@ export interface PendingDecisionsResponse {
   decisions: PendingDecision[];
   total: number;
 }
+
+// =============================================================================
+// X-Ray Types (Real-time Agent Activity Traces)
+// =============================================================================
+
+/**
+ * Event types for X-Ray classification.
+ */
+export type XRayEventType =
+  | "agent_activity"   // Normal agent activity
+  | "hil_decision"     // Human-in-the-loop decision point
+  | "a2a_delegation"   // Agent-to-agent delegation
+  | "error"            // Error occurred
+  | "session_start"    // Session started
+  | "session_end";     // Session ended
+
+/**
+ * Action types for X-Ray events.
+ */
+export type XRayEventAction =
+  | "trabalhando"      // Agent is working
+  | "delegando"        // Agent is delegating to another
+  | "concluido"        // Task completed
+  | "erro"             // Error occurred
+  | "esperando"        // Waiting for something
+  | "hil_pending"      // HIL decision pending
+  | "hil_approved"     // HIL decision approved
+  | "hil_rejected";    // HIL decision rejected
+
+/**
+ * A single event in the X-Ray trace timeline.
+ * Represents one step in an agent's execution.
+ */
+export interface XRayEvent {
+  /** Unique event identifier */
+  id: string;
+  /** ISO timestamp when this event occurred */
+  timestamp: string;
+  /** Event classification */
+  type: XRayEventType;
+  /** Agent that generated this event */
+  agentId: string;
+  /** Human-friendly agent name */
+  agentName: string;
+  /** What action is being taken */
+  action: XRayEventAction;
+  /** Human-readable message describing what's happening */
+  message: string;
+
+  // Session tracking
+  /** Session ID for grouping related events */
+  sessionId?: string;
+  /** Human-readable session name (e.g., "Importação NF #12345") */
+  sessionName?: string;
+
+  // A2A delegation
+  /** Target agent ID when delegating */
+  targetAgent?: string;
+  /** Target agent friendly name */
+  targetAgentName?: string;
+
+  // Performance metrics
+  /** Duration since previous event in this session (milliseconds) */
+  duration?: number;
+  /** API latency if available (milliseconds) */
+  latency?: number;
+
+  // Expandable details
+  /** Full event payload for inspection */
+  details?: Record<string, unknown>;
+
+  // HIL specific fields
+  /** HIL task ID for actions */
+  hilTaskId?: string;
+  /** Current HIL status */
+  hilStatus?: "pending" | "approved" | "rejected";
+  /** HIL question text */
+  hilQuestion?: string;
+  /** Available HIL options */
+  hilOptions?: Array<{ label: string; value: string }>;
+}
+
+/**
+ * A session groups related X-Ray events together.
+ * Represents one complete workflow execution.
+ */
+export interface XRaySession {
+  /** Session identifier */
+  sessionId: string;
+  /** Human-readable session name */
+  sessionName: string;
+  /** When this session started */
+  startTime: string;
+  /** When this session ended (null if still active) */
+  endTime?: string;
+  /** Current session status */
+  status: "active" | "completed" | "error";
+  /** Events in this session (chronologically sorted) */
+  events: XRayEvent[];
+  /** Total duration of all events (milliseconds) */
+  totalDuration?: number;
+  /** Number of events in this session */
+  eventCount: number;
+}
+
+/**
+ * Filter options for X-Ray events.
+ */
+export interface XRayFilter {
+  /** Filter by specific agent */
+  agentId?: string;
+  /** Filter by specific session */
+  sessionId?: string;
+  /** Filter by event type */
+  type?: XRayEventType;
+  /** Show only HIL decisions */
+  showHILOnly?: boolean;
+}
+
+/**
+ * Connection status for SSE stream.
+ */
+export type XRayConnectionStatus =
+  | "connected"
+  | "connecting"
+  | "reconnecting"
+  | "disconnected"
+  | "error";

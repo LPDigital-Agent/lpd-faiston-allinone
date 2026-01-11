@@ -640,6 +640,9 @@ def invoke(payload: dict, context) -> dict:
         elif action == "get_agent_room_data":
             return asyncio.run(_get_agent_room_data(payload, user_id))
 
+        elif action == "get_xray_events":
+            return asyncio.run(_get_xray_events(payload, user_id, session_id))
+
         else:
             return {"success": False, "error": f"Unknown action: {action}"}
 
@@ -4209,6 +4212,162 @@ async def _get_agent_room_data(payload: dict, user_id: str) -> dict:
         return {
             "success": False,
             "error": f"Erro ao carregar dados do Agent Room: {str(e)}",
+        }
+
+
+async def _get_xray_events(payload: dict, user_id: str, session_id: str) -> dict:
+    """
+    Get X-Ray events for Agent Room traces panel.
+
+    Returns enriched agent activity events with:
+    - Event type classification (agent_activity, hil_decision, a2a_delegation, error)
+    - Duration calculations between events
+    - Session grouping for timeline display
+    - HIL task integration inline
+
+    Args:
+        payload: Request payload with optional filters:
+            - since_timestamp: ISO timestamp to fetch events after (for incremental updates)
+            - filter_session_id: Optional session ID filter
+            - filter_agent_id: Optional agent ID filter
+            - show_hil_only: If true, only return HIL decision events
+            - limit: Max events to return (default 50)
+        user_id: Current user ID for HIL task filtering
+        session_id: A2A session context
+
+    Returns:
+        X-Ray events data with session grouping
+    """
+    try:
+        from tools.sse_stream import SSEStream, _enrich_events, _convert_hil_to_events
+        from tools.agent_room_service import get_recent_events, get_pending_decisions
+        from datetime import datetime, timedelta
+
+        # Parse filters
+        since_timestamp = payload.get("since_timestamp")
+        filter_session_id = payload.get("filter_session_id")
+        filter_agent_id = payload.get("filter_agent_id")
+        show_hil_only = payload.get("show_hil_only", False)
+        limit = payload.get("limit", 50)
+
+        # Get recent events from audit log
+        events = get_recent_events(days_back=1, limit=limit)
+
+        # Convert to raw format for enrichment
+        raw_events = []
+        for e in events:
+            raw_events.append({
+                "event_id": e.get("id"),
+                "timestamp": e.get("timestamp"),
+                "actor_id": e.get("agentName", "").lower().replace(" ", "_"),
+                "action": e.get("type", "trabalhando"),
+                "details": {"message": e.get("message", "")},
+                "event_type": e.get("eventType", "AGENT_ACTIVITY"),
+                "session_id": e.get("sessionId"),
+            })
+
+        # Filter by timestamp if provided (for incremental updates)
+        if since_timestamp:
+            try:
+                since_dt = datetime.fromisoformat(since_timestamp.replace("Z", "+00:00"))
+                raw_events = [
+                    e for e in raw_events
+                    if datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00")) > since_dt
+                ]
+            except (ValueError, TypeError):
+                pass  # Invalid timestamp, ignore filter
+
+        # Enrich events with duration, type classification
+        session_timings = {}
+        enriched = _enrich_events(raw_events, session_timings)
+
+        # Get pending HIL tasks and convert to events
+        hil_tasks = get_pending_decisions(user_id)
+        hil_events = _convert_hil_to_events(hil_tasks)
+
+        # Merge all events
+        all_events = enriched + hil_events
+
+        # Apply filters
+        if filter_session_id:
+            all_events = [e for e in all_events if e.get("sessionId") == filter_session_id]
+
+        if filter_agent_id:
+            all_events = [e for e in all_events if e.get("agentId") == filter_agent_id]
+
+        if show_hil_only:
+            all_events = [e for e in all_events if e.get("type") == "hil_decision"]
+
+        # Sort by timestamp (newest first)
+        all_events.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
+        # Limit results
+        all_events = all_events[:limit]
+
+        # Group by session for frontend
+        sessions = {}
+        no_session_events = []
+
+        for event in all_events:
+            sid = event.get("sessionId")
+            if sid:
+                if sid not in sessions:
+                    sessions[sid] = {
+                        "sessionId": sid,
+                        "sessionName": event.get("sessionName") or f"Sessão {sid[:8]}",
+                        "startTime": event.get("timestamp"),
+                        "endTime": None,
+                        "status": "active",
+                        "events": [],
+                        "eventCount": 0,
+                    }
+                sessions[sid]["events"].append(event)
+                sessions[sid]["eventCount"] += 1
+            else:
+                no_session_events.append(event)
+
+        # Calculate session status and durations
+        for sid, session in sessions.items():
+            events_sorted = sorted(
+                session["events"],
+                key=lambda x: x.get("timestamp", "")
+            )
+            if events_sorted:
+                session["startTime"] = events_sorted[0].get("timestamp")
+                last_event = events_sorted[-1]
+                if last_event.get("action") == "concluido":
+                    session["endTime"] = last_event.get("timestamp")
+                    session["status"] = "completed"
+                elif last_event.get("action") == "erro":
+                    session["status"] = "error"
+                # Calculate total duration
+                total_duration = sum(e.get("duration", 0) for e in events_sorted)
+                session["totalDuration"] = total_duration
+
+        # Sort sessions by start time (newest first)
+        session_list = sorted(
+            sessions.values(),
+            key=lambda s: s.get("startTime", ""),
+            reverse=True
+        )
+
+        return {
+            "success": True,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "events": all_events,
+            "sessions": session_list,
+            "noSessionEvents": no_session_events,
+            "totalEvents": len(all_events),
+            "hilPendingCount": len([e for e in all_events if e.get("type") == "hil_decision"]),
+        }
+
+    except Exception as e:
+        print(f"[X-Ray] Error getting events: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": f"Erro ao carregar eventos X-Ray: {str(e)}",
         }
 
 

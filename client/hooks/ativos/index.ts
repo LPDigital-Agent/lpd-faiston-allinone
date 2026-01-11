@@ -109,6 +109,18 @@ export type {
   UseAgentRoomStreamReturn,
 } from './useAgentRoomStream';
 
+// Agent Room X-Ray hooks (real-time traces)
+export {
+  useAgentRoomXRay,
+  useXRayHILDecisions,
+  useXRaySession,
+  useXRayAgent,
+} from './useAgentRoomXRay';
+export type {
+  UseAgentRoomXRayOptions,
+  UseAgentRoomXRayReturn,
+} from './useAgentRoomXRay';
+
 // Context-based hooks (re-exported from contexts for convenience)
 export {
   useAssetManagement,

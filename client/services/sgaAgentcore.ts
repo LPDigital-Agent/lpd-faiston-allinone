@@ -1759,6 +1759,98 @@ export interface AgentRoomDecision {
   entityId?: string;
 }
 
+// =============================================================================
+// Agent Room X-Ray (Real-time Agent Traces)
+// =============================================================================
+
+/**
+ * Options for getting X-Ray events.
+ */
+export interface GetXRayEventsOptions {
+  /** Fetch events newer than this timestamp (for incremental updates) */
+  sinceTimestamp?: string;
+  /** Filter by specific session ID */
+  filterSessionId?: string;
+  /** Filter by specific agent ID */
+  filterAgentId?: string;
+  /** Only return HIL decision events */
+  showHILOnly?: boolean;
+  /** Maximum events to return (default: 50) */
+  limit?: number;
+}
+
+/**
+ * X-Ray event from backend.
+ */
+export interface XRayEventBackend {
+  id: string;
+  timestamp: string;
+  type: 'agent_activity' | 'hil_decision' | 'a2a_delegation' | 'error' | 'session_start' | 'session_end';
+  agentId: string;
+  agentName: string;
+  action: string;
+  message: string;
+  sessionId?: string;
+  sessionName?: string;
+  targetAgent?: string;
+  targetAgentName?: string;
+  duration?: number;
+  details?: Record<string, unknown>;
+  hilTaskId?: string;
+  hilStatus?: 'pending' | 'approved' | 'rejected';
+  hilQuestion?: string;
+  hilOptions?: Array<{ label: string; value: string }>;
+}
+
+/**
+ * X-Ray session from backend.
+ */
+export interface XRaySessionBackend {
+  sessionId: string;
+  sessionName: string;
+  startTime: string;
+  endTime?: string;
+  status: 'active' | 'completed' | 'error';
+  events: XRayEventBackend[];
+  eventCount: number;
+  totalDuration?: number;
+}
+
+/**
+ * Response from get_xray_events action.
+ */
+export interface XRayEventsResponse {
+  success: boolean;
+  timestamp: string;
+  events: XRayEventBackend[];
+  sessions: XRaySessionBackend[];
+  noSessionEvents: XRayEventBackend[];
+  totalEvents: number;
+  hilPendingCount: number;
+}
+
+/**
+ * Get X-Ray events for Agent Room traces panel.
+ *
+ * Returns enriched agent activity events with session grouping,
+ * duration calculations, and HIL task integration.
+ *
+ * @param options - Optional filters (sinceTimestamp for incremental updates)
+ * @returns X-Ray events with session grouping
+ */
+export async function getXRayEvents(
+  options?: GetXRayEventsOptions,
+): Promise<AgentCoreResponse<XRayEventsResponse>> {
+  return invokeSGAAgentCore<XRayEventsResponse>({
+    action: 'get_xray_events',
+    ...(options?.sinceTimestamp && { since_timestamp: options.sinceTimestamp }),
+    ...(options?.filterSessionId && { filter_session_id: options.filterSessionId }),
+    ...(options?.filterAgentId && { filter_agent_id: options.filterAgentId }),
+    ...(options?.showHILOnly && { show_hil_only: options.showHILOnly }),
+    ...(options?.limit && { limit: options.limit }),
+  });
+}
+
 // Re-export types for consumer convenience
 export type {
   KBCitation,

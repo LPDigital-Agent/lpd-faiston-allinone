@@ -109,6 +109,7 @@ To be used on web research we are in year 2026.
 
 - AWS Account ID: `377311924364`
 - AWS Region: `us-east-2`
+- AWS CLI PROFILE (MANDATORY): For ANY AWS CLI command, you MUST use the correct AWS profile from the **AWS CONFIGURATION** section (right account + region). Never run AWS CLI commands without explicitly setting/confirming the profile (e.g., `--profile <profile>`). If the profile is unknown or not configured, STOP and ask before proceeding.
 
 ---
 
@@ -180,6 +181,12 @@ To be used on web research we are in year 2026.
   Inventory data MUST live in **AWS Aurora PostgreSQL (RDS)**.  
   **DO NOT USE DynamoDB**.  
   Any assumption otherwise is **WRONG** and MUST be fixed.
+
+**MCP**
+
+- BEDROCK AGENTCORE MCP (MANDATORY): For communicating, testing, validating, and invoking tools, you MUST use **Amazon Bedrock AgentCore via MCP**:
+  - Use **AgentCore Gateway MCP endpoint** for tool discovery/invocation (`tools/list`, `tools/call`) — do NOT call tool endpoints directly.
+  - Use the **AgentCore MCP Server** in the development environment when you need to transform, deploy, and test AgentCore-compatible agents from your MCP client (Claude Code/Cursor/etc.).
 
 ---
 

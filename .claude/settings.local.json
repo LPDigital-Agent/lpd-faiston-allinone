@@ -350,7 +350,13 @@
       "WebFetch(domain:bricxlabs.com)",
       "Bash(cd /Users/fabio.santos/LPD\\\\ Repos/lpd-faiston-allinone && gh pr checks:*)",
       "Bash(gh pr close:*)",
-      "Bash(git cherry-pick:*)"
+      "Bash(git cherry-pick:*)",
+      "Bash(for agent in nexo_import learning validation schema_evolution intake import estoque_control compliance reconciliacao expedition carrier reverse observation equipment_research)",
+      "Bash(do echo '=== $agent ===' ls -la /Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore-inventory/agents/$agent/)",
+      "Bash(do echo '=== $agent ===' ls /Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore-inventory/agents/$agent/)",
+      "mcp__bedrock-agentcore-mcp-server__search_agentcore_docs",
+      "mcp__bedrock-agentcore-mcp-server__fetch_agentcore_doc",
+      "Bash(unzip:*)"
     ],
     "deny": [],
     "ask": []

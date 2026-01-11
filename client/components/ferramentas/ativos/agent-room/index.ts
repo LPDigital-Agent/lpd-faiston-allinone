@@ -14,6 +14,12 @@ export { PendingDecisions } from './PendingDecisions';
 export { StatusIndicator } from './StatusIndicator';
 export { AgentDetailPanel } from './AgentDetailPanel';
 
+// X-Ray Components (Real-time Agent Traces)
+export { AgentXRay } from './AgentXRay';
+export { XRaySessionGroup } from './XRaySessionGroup';
+export { XRayEventCard } from './XRayEventCard';
+export { XRayHILCard } from './XRayHILCard';
+
 // Skeleton Components
 export {
   LiveFeedSkeleton,
@@ -21,5 +27,6 @@ export {
   LearningStoriesSkeleton,
   WorkflowTimelineSkeleton,
   PendingDecisionsSkeleton,
+  AgentXRaySkeleton,
   AgentRoomPageSkeleton,
 } from './AgentRoomSkeleton';

@@ -32,12 +32,12 @@ import {
   AgentTeam,
   LearningStories,
   WorkflowTimeline,
-  PendingDecisions,
+  AgentXRay,
   LiveFeedSkeleton,
   AgentTeamSkeleton,
   LearningStoriesSkeleton,
   WorkflowTimelineSkeleton,
-  PendingDecisionsSkeleton,
+  AgentXRaySkeleton,
 } from '@/components/ferramentas/ativos/agent-room';
 
 // Hook for connection status
@@ -260,8 +260,8 @@ export default function AgentRoomPage() {
             </Suspense>
           </motion.section>
 
-          {/* Secondary Panels - 3 column grid at xl */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+          {/* Row 1: Learning Stories + X-Ray (2 columns) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Learning Stories Panel */}
             <motion.section
               initial={{ opacity: 0, y: 10 }}
@@ -277,36 +277,36 @@ export default function AgentRoomPage() {
               </Suspense>
             </motion.section>
 
-            {/* Workflow Timeline Panel */}
+            {/* X-Ray Panel (Real-time Agent Traces) */}
             <motion.section
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              aria-labelledby="workflow-title"
+              transition={{ delay: 0.35 }}
+              aria-labelledby="xray-title"
             >
-              <h2 id="workflow-title" className="sr-only">
-                Fluxo de trabalho atual
+              <h2 id="xray-title" className="sr-only">
+                X-Ray - Rastreamento de atividades em tempo real
               </h2>
-              <Suspense fallback={<WorkflowTimelineSkeleton />}>
-                <WorkflowTimeline />
-              </Suspense>
-            </motion.section>
-
-            {/* Pending Decisions Panel */}
-            <motion.section
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              aria-labelledby="decisions-title"
-            >
-              <h2 id="decisions-title" className="sr-only">
-                Decisões que precisam de você
-              </h2>
-              <Suspense fallback={<PendingDecisionsSkeleton />}>
-                <PendingDecisions />
+              <Suspense fallback={<AgentXRaySkeleton />}>
+                <AgentXRay />
               </Suspense>
             </motion.section>
           </div>
+
+          {/* Row 2: Workflow Timeline (full width) */}
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            aria-labelledby="workflow-title"
+          >
+            <h2 id="workflow-title" className="sr-only">
+              Fluxo de trabalho atual
+            </h2>
+            <Suspense fallback={<WorkflowTimelineSkeleton />}>
+              <WorkflowTimeline />
+            </Suspense>
+          </motion.section>
         </>
       )}
 
