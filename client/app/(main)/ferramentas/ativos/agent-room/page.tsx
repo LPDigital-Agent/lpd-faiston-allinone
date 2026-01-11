@@ -245,73 +245,67 @@ export default function AgentRoomPage() {
             </Suspense>
           </motion.section>
 
-          {/* Main Grid - 2 columns on desktop, 1 on mobile */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-            {/* Left Column */}
-            <div className="space-y-4 sm:space-y-6">
-              {/* Agent Team Panel */}
-              <motion.section
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                aria-labelledby="agent-team-title"
-              >
-                <h2 id="agent-team-title" className="sr-only">
-                  Nossa equipe de agentes de IA
-                </h2>
-                <Suspense fallback={<AgentTeamSkeleton />}>
-                  <AgentTeam />
-                </Suspense>
-              </motion.section>
+          {/* Agent Team - FULL WIDTH Primary Panel */}
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            aria-labelledby="agent-team-title"
+          >
+            <h2 id="agent-team-title" className="sr-only">
+              Nossa equipe de agentes de IA
+            </h2>
+            <Suspense fallback={<AgentTeamSkeleton />}>
+              <AgentTeam />
+            </Suspense>
+          </motion.section>
 
-              {/* Workflow Timeline Panel */}
-              <motion.section
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
-                aria-labelledby="workflow-title"
-              >
-                <h2 id="workflow-title" className="sr-only">
-                  Fluxo de trabalho atual
-                </h2>
-                <Suspense fallback={<WorkflowTimelineSkeleton />}>
-                  <WorkflowTimeline />
-                </Suspense>
-              </motion.section>
-            </div>
+          {/* Secondary Panels - 3 column grid at xl */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+            {/* Learning Stories Panel */}
+            <motion.section
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              aria-labelledby="learning-title"
+            >
+              <h2 id="learning-title" className="sr-only">
+                O que os agentes aprenderam
+              </h2>
+              <Suspense fallback={<LearningStoriesSkeleton />}>
+                <LearningStories />
+              </Suspense>
+            </motion.section>
 
-            {/* Right Column */}
-            <div className="space-y-4 sm:space-y-6">
-              {/* Learning Stories Panel */}
-              <motion.section
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                aria-labelledby="learning-title"
-              >
-                <h2 id="learning-title" className="sr-only">
-                  O que os agentes aprenderam
-                </h2>
-                <Suspense fallback={<LearningStoriesSkeleton />}>
-                  <LearningStories />
-                </Suspense>
-              </motion.section>
+            {/* Workflow Timeline Panel */}
+            <motion.section
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              aria-labelledby="workflow-title"
+            >
+              <h2 id="workflow-title" className="sr-only">
+                Fluxo de trabalho atual
+              </h2>
+              <Suspense fallback={<WorkflowTimelineSkeleton />}>
+                <WorkflowTimeline />
+              </Suspense>
+            </motion.section>
 
-              {/* Pending Decisions Panel */}
-              <motion.section
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5 }}
-                aria-labelledby="decisions-title"
-              >
-                <h2 id="decisions-title" className="sr-only">
-                  Decisões que precisam de você
-                </h2>
-                <Suspense fallback={<PendingDecisionsSkeleton />}>
-                  <PendingDecisions />
-                </Suspense>
-              </motion.section>
-            </div>
+            {/* Pending Decisions Panel */}
+            <motion.section
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              aria-labelledby="decisions-title"
+            >
+              <h2 id="decisions-title" className="sr-only">
+                Decisões que precisam de você
+              </h2>
+              <Suspense fallback={<PendingDecisionsSkeleton />}>
+                <PendingDecisions />
+              </Suspense>
+            </motion.section>
           </div>
         </>
       )}
