@@ -438,19 +438,20 @@ def get_agent_room_data(user_id: str, session_id: Optional[str] = None) -> Dict:
     Returns:
         Complete Agent Room data dict with all panels
     """
-    # Lazy load DynamoDB client
-    from tools.dynamodb_client import SGADynamoDBClient
-    db_client = SGADynamoDBClient()
+    # NOTE: Each function creates its own DynamoDB client with the correct table:
+    # - get_recent_events() -> AUDIT_LOG_TABLE (for agent activity events)
+    # - get_pending_decisions() -> default inventory table (for HIL tasks)
+    # Do NOT pass a shared db_client as it would use the wrong table!
 
     # Aggregate all data
     return {
         "success": True,
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "agents": get_agent_profiles(),
-        "liveFeed": get_recent_events(days_back=1, limit=30, db_client=db_client),
+        "liveFeed": get_recent_events(days_back=1, limit=30),
         "learningStories": get_learning_stories(limit=5),
         "activeWorkflow": get_active_workflow(session_id),
-        "pendingDecisions": get_pending_decisions(user_id, db_client),
+        "pendingDecisions": get_pending_decisions(user_id),
     }
 
 
