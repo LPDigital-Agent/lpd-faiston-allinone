@@ -36,6 +36,7 @@
 | Document | Purpose |
 |----------|---------|
 | [IMPLEMENTATION_GUIDE.md](AgentCore/IMPLEMENTATION_GUIDE.md) | Complete AgentCore architecture and implementation rules |
+| [Identity_Implementation_guide.md](AgentCore/Identity_%20Implementation_guide.md) | AgentCore Identity v1.0 compliance guide |
 | [agentcore-adk-framework.md](AgentCore/agentcore-adk-framework.md) | Google ADK framework integration |
 | [agentcore-gateway.md](AgentCore/agentcore-gateway.md) | MCP Gateway configuration |
 | [agentcore-invokeAgent.md](AgentCore/agentcore-invokeAgent.md) | Agent invocation patterns |
@@ -236,6 +237,8 @@ This platform follows security-first development practices:
 ### Security Practices
 
 - JWT Bearer token authentication (Cognito)
+- **AgentCore Identity v1.0 compliance** (all 14 agents use `identity_utils.py`)
+- User identity extracted from `context.identity` (JWT validated), not payload
 - No hardcoded credentials (GitHub Secrets)
 - Terraform-only infrastructure (no manual AWS changes)
 - CI/CD deployment only (no local console deploys)
