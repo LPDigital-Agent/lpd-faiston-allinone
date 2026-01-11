@@ -131,6 +131,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Setup Python for packaging
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
       - name: Package agent
         working-directory: server/agentcore-inventory
         run: |
@@ -148,7 +153,7 @@ jobs:
           mkdir -p "$PACKAGE_DIR/shared"
           cp -r shared/* "$PACKAGE_DIR/shared/"
 
-          # Copy requirements if not exists (use agent's own or create from shared)
+          # Ensure requirements.txt exists with all needed dependencies
           if [ ! -f "$PACKAGE_DIR/requirements.txt" ]; then
             echo "Creating default requirements.txt"
             cat > "$PACKAGE_DIR/requirements.txt" << 'EOF'
@@ -158,16 +163,23 @@ jobs:
           httpx>=0.27.0
           aws-xray-sdk>=2.14.0
           anyio>=4.0.0
+          pydantic>=2.0.0
           EOF
           fi
 
-          # Create ZIP package
+          # ✅ FIX: Install Python dependencies into package directory
+          # This was the ROOT CAUSE of ModuleNotFoundError: No module named 'bedrock_agentcore'
+          echo "Installing dependencies into package..."
+          pip install -r "$PACKAGE_DIR/requirements.txt" --target "$PACKAGE_DIR" --quiet --upgrade --no-user
+
+          # Create ZIP package with dependencies included
           cd "dist/$AGENT"
-          zip -r "../$AGENT.zip" . -x "*.pyc" -x "__pycache__/*"
+          zip -r "../$AGENT.zip" . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*" -x "*.egg-info/*"
           cd ../..
 
           echo "Package created: dist/$AGENT.zip"
-          ls -la dist/
+          ls -lah "dist/$AGENT.zip"
+          echo "Package size: $(du -h dist/$AGENT.zip | cut -f1)"
 
       - name: Upload to S3
         working-directory: server/agentcore-inventory
