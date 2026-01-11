@@ -4,10 +4,6 @@ This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.a
 
 To be used on web research we are in year 2026.
 
-> **MEMORY ARCHITECTURE (CRITICAL):**  
-> This root `CLAUDE.md` contains **ONLY essential global rules**.  
-> Context-specific or module-level details MUST live in subdirectory `CLAUDE.md` files (lazy-loaded).
-
 ---
 
 <!-- ===================================================== -->
@@ -42,7 +38,7 @@ To be used on web research we are in year 2026.
 
 ## 🐛 BUGFIX & CONSISTENCY CHECK — MANDATORY
 
-- When fixing **ANY bug, issue, typo, naming error, logic flaw, or configuration problem**, you MUST NOT apply a partial or local fix.
+- When fixing **ANY bug, issue, typo, naming error, logic flaw, or configuration problem**, you MUST NOT apply a partial or local fix. YOU MUST MANDATORY ASK ME AND DISCUSS THE SOLUTION WILL BE IMPLEMENTED. ALL SOLUTION TO FIX A ISSUE MUST BE EXECUTED IN PLAN MODE **MANDATORY - ATTENTION IN THIS ITEM EVER**
 - After making a correction, you MUST validate the **ENTIRE codebase**:
   - code
   - imports
@@ -53,6 +49,7 @@ To be used on web research we are in year 2026.
   - documentation
 - A fix is **INCOMPLETE** until global consistency is verified.
 - If unsure → **STOP AND ASK BEFORE PROCEEDING**.
+- COMPACTION WORKFLOW (IMMUTABLE & MANDATORY): Before ANY context compaction (`/compact` or automatic compaction), you MUST run `/sync-project` FIRST to persist the real project state (docs + code + IaC + AWS reality) into memory and references. After compaction, you MUST re-run `/prime` (or an equivalent post-compact prime injection) to reload `CLAUDE.md` rules and current project context. If `/sync-project` was not executed before compaction, compaction MUST be blocked.
 
 ---
 
@@ -80,6 +77,7 @@ To be used on web research we are in year 2026.
 - DO NOT use client-server, REST-only, or function-oriented architectures.
 - Lambda is allowed **ONLY** as an execution substrate required by **AWS Bedrock AgentCore**.
 - IF you are about to design a “normal Lambda service” → **STOP IMMEDIATELY**.
+- DO NOT IMPLEMENTE ANY TRADITIONAL SOFTWARE ORIENTED OBJECT ARCHITETCURE. THIS IS A AGENTIC SOLUTION.
 
 ---
 
@@ -177,24 +175,6 @@ To be used on web research we are in year 2026.
 
 - NO SPECULATION / READ BEFORE ANSWERING (MANDATORY): Never speculate about code you have not opened. If a specific file is referenced, you MUST read it before answering. Investigate and read relevant files BEFORE making any claim. Provide grounded, hallucination-free answers; if uncertain, say so and read more before proceeding.
 
-
----
-## 🚨 AGENTCORE COLD START LIMIT — CRITICAL
-
-- Cold start limit: **30 seconds**
-- Violations cause **HTTP 424** and break AI features.
-
-### ❌ NEVER DO
-1. Heavy dependencies (`lxml`, `beautifulsoup4`, etc.)
-2. Imports in `agents/__init__.py` or `tools/__init__.py`
-3. Agent imports at module level
-
-### ✅ ALWAYS DO
-1. Minimal `requirements.txt`
-2. Lazy imports inside handlers
-3. Use Python stdlib (`xml.etree.ElementTree`)
-4. Check AgentCore pre-installed libraries
-
 ---
 
 ## 📌 PRIMARY INSTRUCTIONS
@@ -211,8 +191,8 @@ To be used on web research we are in year 2026.
 
 ## SubAgents & Skills
 
-- ALWAYS use Claude Code SubAgents and Skills
-- Use `prompt-engineer` SubAgent to improve prompts
+- ALWAYS use Claude Code SubAgents and Skills in all taks or debugs. THIS IS MANDATORY
+- Use `prompt-engineer` SubAgent to improve prompts. MANDATORY
 
 ---
 
@@ -446,10 +426,13 @@ To be used on web research we are in year 2026.
 - **ARCHITECTURE DOCS (Reference as needed):**
   - SGA Module: `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
   - **NEXO Memory**: `docs/architecture/NEXO_MEMORY_ARCHITECTURE.md` *(MANDATORY for memory features)*
-  - AgentCore Implementation: `docs/AgentCore/IMPLEMENTATION_GUIDE.md`
+  - AgentCore Implementation: `docs/AgentCore/' CHECK ALL FILES 
   - Frontend Auth: `docs/FRONTEND_AUTH.md`
   - Agent Design: `docs/agents/ADK_AGENTCORE_ARCHITECT.md`
-
+  - AGENT ADK MUST FOLOW:
+    https://google.github.io/adk-docs/llms-full.txt
+    https://google.github.io/adk-docs/llms.txt
+  
 - **PRD DOCS (Reference for requirements):**
   - SGA Estoque PRD: `docs/prd_modulo_gestao_estoque_faiston_sga2.md`
   - Inventory Management: `docs/Faiston_Investory_Mamagement.md`

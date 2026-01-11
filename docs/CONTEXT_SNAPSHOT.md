@@ -1,22 +1,17 @@
 # CONTEXT SNAPSHOT (AUTO)
-Updated: 2026-01-11 21:15:00 UTC
+Updated: 2026-01-11 20:54:46 UTC
 
 ## Current Goal
-- Fix 403 Forbidden error on A2A cross-runtime invocation (COMPLETED)
+- TBD - no user message captured
 
 ## Current Plan (Next 3 Steps)
-1. Wait for GitHub Actions terraform apply to complete
-2. Await AgentCore container cold start (SSM cache refresh)
-3. Test NEXO import flow with CSV upload
+1. Continue with current task
+2. Validate changes
+3. Test and verify
 
 ## Last Turn Summary
-- User: Investigate 403 error on NEXO import agent invocation
-- Assistant: Fixed SSM agent registry URLs to use full ARN (URL-encoded) instead of short runtime ID
-
-## Recent Fix Applied
-- **Commit:** 8292258 - fix(a2a): use full ARN in SSM agent URLs
-- **Root Cause:** SSM stored URLs with short runtime ID instead of full ARN
-- **Solution:** Changed `terraform/main/agentcore_runtimes.tf` lines 355 and 377 to use `urlencode(agent_runtime_arn)` + `?qualifier=DEFAULT`
+- User: (no user message captured)
+- Assistant: (no assistant response captured)
 
 ## Active Constraints (from CLAUDE.md)
 - AI-FIRST / AGENTIC architecture only (no traditional microservices)
@@ -27,4 +22,4 @@ Updated: 2026-01-11 21:15:00 UTC
 - Python 3.13 + arm64 for all Lambdas
 
 ## Risks / Blockers
-- SSM cache in AgentCore container may retain old URLs until cold start
+- None identified

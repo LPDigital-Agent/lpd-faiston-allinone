@@ -335,7 +335,8 @@
       "Bash(git branch:*)",
       "Bash(PYTHONPATH=\"$PWD:$PYTHONPATH\" python3 -m pytest:*)",
       "Bash(PYTHONPATH=\"$PWD:$PYTHONPATH\" python3:*)",
-      "Bash(python -m pytest:*)"
+      "Bash(python -m pytest:*)",
+      "Bash(git diff-tree:*)"
     ],
     "deny": [],
     "ask": []
