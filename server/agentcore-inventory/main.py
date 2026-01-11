@@ -50,6 +50,90 @@ USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "true").lower() == "true"
 AGENTCORE_GATEWAY_URL = os.environ.get("AGENTCORE_GATEWAY_URL", "")
 AGENTCORE_GATEWAY_ID = os.environ.get("AGENTCORE_GATEWAY_ID", "")
 
+# Cached A2A client instance (lazy initialized)
+_a2a_client = None
+
+
+def _get_a2a_client():
+    """
+    Lazy-load A2A client for agent invocations.
+
+    Returns cached instance to avoid repeated initialization.
+    """
+    global _a2a_client
+    if _a2a_client is None:
+        from shared.a2a_client import A2AClient
+        _a2a_client = A2AClient()
+    return _a2a_client
+
+
+async def _invoke_agent_a2a(
+    agent_id: str,
+    action: str,
+    payload: dict,
+    session_id: str,
+    user_id: str = None,
+) -> dict:
+    """
+    Invoke an agent via A2A Protocol (JSON-RPC 2.0).
+
+    This is the standard pattern for 100% Agentic architecture:
+    - Each agent runs in its own AgentCore runtime
+    - Communication via A2A Protocol (JSON-RPC 2.0)
+    - Session propagated for context continuity
+
+    Args:
+        agent_id: Target agent ID (e.g., "intake", "nexo_import")
+        action: Action to perform (e.g., "process_nf", "analyze_file")
+        payload: Action-specific payload
+        session_id: Session ID for context
+        user_id: Optional user ID
+
+    Returns:
+        Agent response dict with success/error status
+    """
+    client = _get_a2a_client()
+
+    # Build A2A payload
+    a2a_payload = {
+        "action": action,
+        **payload,
+    }
+    if user_id:
+        a2a_payload["user_id"] = user_id
+
+    # Invoke agent via A2A
+    result = await client.invoke_agent(
+        agent_id=agent_id,
+        payload=a2a_payload,
+        session_id=session_id,
+    )
+
+    if not result.success:
+        return {
+            "success": False,
+            "error": result.error or "A2A invocation failed",
+            "agent_id": agent_id,
+        }
+
+    # Parse response - agents return JSON in the response text
+    try:
+        import json
+        response_data = json.loads(result.response) if result.response else {}
+
+        # A2A response wraps actual result in 'result' field
+        if "result" in response_data:
+            return response_data["result"]
+        return response_data
+
+    except json.JSONDecodeError:
+        # If response is not JSON, return as-is
+        return {
+            "success": True,
+            "response": result.response,
+            "agent_id": agent_id,
+        }
+
 # Cached adapter instance (lazy initialized)
 _database_adapter = None
 
@@ -299,25 +383,25 @@ def invoke(payload: dict, context) -> dict:
             return asyncio.run(_nexo_estoque_chat(payload, user_id, session_id))
 
         # =================================================================
-        # NF Processing (IntakeAgent)
+        # NF Processing (IntakeAgent) - A2A Protocol
         # =================================================================
         elif action == "get_nf_upload_url":
-            return asyncio.run(_get_nf_upload_url(payload))
+            return asyncio.run(_get_nf_upload_url(payload, session_id))
 
         elif action == "process_nf_upload":
-            return asyncio.run(_process_nf_upload(payload, user_id))
+            return asyncio.run(_process_nf_upload(payload, user_id, session_id))
 
         elif action == "validate_nf_extraction":
-            return asyncio.run(_validate_nf_extraction(payload))
+            return asyncio.run(_validate_nf_extraction(payload, session_id))
 
         elif action == "confirm_nf_entry":
-            return asyncio.run(_confirm_nf_entry(payload, user_id))
+            return asyncio.run(_confirm_nf_entry(payload, user_id, session_id))
 
         elif action == "process_scanned_nf_upload":
-            return asyncio.run(_process_scanned_nf_upload(payload, user_id))
+            return asyncio.run(_process_scanned_nf_upload(payload, user_id, session_id))
 
         elif action == "process_image_ocr":
-            return asyncio.run(_process_image_ocr(payload, user_id))
+            return asyncio.run(_process_image_ocr(payload, user_id, session_id))
 
         # =================================================================
         # Manual Entry
@@ -335,22 +419,22 @@ def invoke(payload: dict, context) -> dict:
             return asyncio.run(_execute_sap_import(payload, user_id))
 
         # =================================================================
-        # Movements (EstoqueControlAgent)
+        # Movements (EstoqueControlAgent) - A2A Protocol
         # =================================================================
         elif action == "create_movement":
-            return asyncio.run(_create_movement(payload, user_id))
+            return asyncio.run(_create_movement(payload, user_id, session_id))
 
         elif action == "create_reservation":
-            return asyncio.run(_create_reservation(payload, user_id))
+            return asyncio.run(_create_reservation(payload, user_id, session_id))
 
         elif action == "cancel_reservation":
-            return asyncio.run(_cancel_reservation(payload, user_id))
+            return asyncio.run(_cancel_reservation(payload, user_id, session_id))
 
         elif action == "process_expedition":
-            return asyncio.run(_process_expedition(payload, user_id))
+            return asyncio.run(_process_expedition(payload, user_id, session_id))
 
         elif action == "create_transfer":
-            return asyncio.run(_create_transfer(payload, user_id))
+            return asyncio.run(_create_transfer(payload, user_id, session_id))
 
         # =================================================================
         # HIL Tasks (ComplianceAgent)
@@ -368,16 +452,16 @@ def invoke(payload: dict, context) -> dict:
         # Inventory Counting (ReconciliacaoAgent)
         # =================================================================
         elif action == "start_inventory_count":
-            return asyncio.run(_start_inventory_count(payload, user_id))
+            return asyncio.run(_start_inventory_count(payload, user_id, session_id))
 
         elif action == "submit_count_result":
-            return asyncio.run(_submit_count_result(payload, user_id))
+            return asyncio.run(_submit_count_result(payload, user_id, session_id))
 
         elif action == "analyze_divergences":
-            return asyncio.run(_analyze_divergences(payload))
+            return asyncio.run(_analyze_divergences(payload, session_id))
 
         elif action == "propose_adjustment":
-            return asyncio.run(_propose_adjustment(payload, user_id))
+            return asyncio.run(_propose_adjustment(payload, user_id, session_id))
 
         # =================================================================
         # Cadastros (Part Numbers, Locations, Projects)
@@ -419,22 +503,22 @@ def invoke(payload: dict, context) -> dict:
         # Bulk Import (ImportAgent)
         # =================================================================
         elif action == "preview_import":
-            return asyncio.run(_preview_import(payload, user_id))
+            return asyncio.run(_preview_import(payload, user_id, session_id))
 
         elif action == "execute_import":
-            return asyncio.run(_execute_import(payload, user_id))
+            return asyncio.run(_execute_import(payload, user_id, session_id))
 
         elif action == "validate_pn_mapping":
-            return asyncio.run(_validate_pn_mapping(payload))
+            return asyncio.run(_validate_pn_mapping(payload, session_id))
 
         # =================================================================
         # Smart Import (Auto-detect file type)
         # =================================================================
         elif action == "smart_import_upload":
-            return asyncio.run(_smart_import_upload(payload, user_id))
+            return asyncio.run(_smart_import_upload(payload, user_id, session_id))
 
         elif action == "generate_import_observations":
-            return asyncio.run(_generate_import_observations(payload))
+            return asyncio.run(_generate_import_observations(payload, session_id))
 
         # =================================================================
         # NEXO Intelligent Import (Agentic AI-First)
@@ -459,10 +543,10 @@ def invoke(payload: dict, context) -> dict:
             return asyncio.run(_nexo_execute_import(payload, user_id, session_id))
 
         elif action == "nexo_get_prior_knowledge":
-            return asyncio.run(_nexo_get_prior_knowledge(payload, user_id))
+            return asyncio.run(_nexo_get_prior_knowledge(payload, user_id, session_id))
 
         elif action == "nexo_get_adaptive_threshold":
-            return asyncio.run(_nexo_get_adaptive_threshold(payload, user_id))
+            return asyncio.run(_nexo_get_adaptive_threshold(payload, user_id, session_id))
 
         # =================================================================
         # Schema Introspection (Schema-Aware Import - January 2026)
@@ -474,40 +558,40 @@ def invoke(payload: dict, context) -> dict:
         # Expedition (ExpeditionAgent)
         # =================================================================
         elif action == "process_expedition_request":
-            return asyncio.run(_process_expedition_request(payload, user_id))
+            return asyncio.run(_process_expedition_request(payload, user_id, session_id))
 
         elif action == "verify_expedition_stock":
-            return asyncio.run(_verify_expedition_stock(payload))
+            return asyncio.run(_verify_expedition_stock(payload, session_id))
 
         elif action == "confirm_separation":
-            return asyncio.run(_confirm_separation(payload, user_id))
+            return asyncio.run(_confirm_separation(payload, user_id, session_id))
 
         elif action == "complete_expedition":
-            return asyncio.run(_complete_expedition(payload, user_id))
+            return asyncio.run(_complete_expedition(payload, user_id, session_id))
 
         # =================================================================
         # Reverse Logistics (ReverseAgent)
         # =================================================================
         elif action == "process_return":
-            return asyncio.run(_process_return(payload, user_id))
+            return asyncio.run(_process_return(payload, user_id, session_id))
 
         elif action == "validate_return_origin":
-            return asyncio.run(_validate_return_origin(payload))
+            return asyncio.run(_validate_return_origin(payload, session_id))
 
         elif action == "evaluate_return_condition":
-            return asyncio.run(_evaluate_return_condition(payload))
+            return asyncio.run(_evaluate_return_condition(payload, session_id))
 
         # =================================================================
         # Carrier Quotes (CarrierAgent)
         # =================================================================
         elif action == "get_shipping_quotes":
-            return asyncio.run(_get_shipping_quotes(payload))
+            return asyncio.run(_get_shipping_quotes(payload, session_id))
 
         elif action == "recommend_carrier":
-            return asyncio.run(_recommend_carrier(payload))
+            return asyncio.run(_recommend_carrier(payload, session_id))
 
         elif action == "track_shipment":
-            return asyncio.run(_track_shipment(payload))
+            return asyncio.run(_track_shipment(payload, session_id))
 
         # =================================================================
         # Equipment Research (EquipmentResearchAgent)
@@ -515,16 +599,16 @@ def invoke(payload: dict, context) -> dict:
         # Researches equipment documentation using Gemini + google_search
         # and stores in S3 for Bedrock Knowledge Base ingestion
         elif action == "research_equipment":
-            return asyncio.run(_research_equipment(payload, user_id))
+            return asyncio.run(_research_equipment(payload, user_id, session_id))
 
         elif action == "research_equipment_batch":
-            return asyncio.run(_research_equipment_batch(payload, user_id))
+            return asyncio.run(_research_equipment_batch(payload, user_id, session_id))
 
         elif action == "get_research_status":
-            return asyncio.run(_get_research_status(payload))
+            return asyncio.run(_get_research_status(payload, session_id))
 
         elif action == "query_equipment_docs":
-            return asyncio.run(_query_equipment_docs(payload, user_id))
+            return asyncio.run(_query_equipment_docs(payload, user_id, session_id))
 
         # =================================================================
         # Agent Room (Sala de Transparencia)
@@ -631,30 +715,35 @@ async def _search_assets(payload: dict) -> dict:
     }
 
 
-async def _where_is_serial(payload: dict) -> dict:
+async def _where_is_serial(payload: dict, session_id: str = "default") -> dict:
     """
     Find the current location of a serialized asset.
 
     Natural language query: "Onde esta o serial XYZ?"
+
+    Architecture:
+    - Invokes EstoqueControlAgent in dedicated runtime via A2A Protocol
     """
     serial = payload.get("serial", "")
     if not serial:
         return {"success": False, "error": "Serial number required"}
 
-    # Use EstoqueControlAgent for query
-    from agents.estoque_control_agent import EstoqueControlAgent
+    return await _invoke_agent_a2a(
+        agent_id="estoque_control",
+        action="query_asset_location",
+        payload={"serial_number": serial},
+        session_id=session_id,
+    )
 
-    agent = EstoqueControlAgent()
-    result = await agent.query_asset_location(serial_number=serial)
 
-    return result
-
-
-async def _get_balance(payload: dict) -> dict:
+async def _get_balance(payload: dict, session_id: str = "default") -> dict:
     """
     Get current balance for a part number at a location.
 
     Returns quantity available, reserved, and total.
+
+    Architecture:
+    - Invokes EstoqueControlAgent in dedicated runtime via A2A Protocol
     """
     part_number = payload.get("part_number", "")
     location_id = payload.get("location_id")
@@ -663,16 +752,16 @@ async def _get_balance(payload: dict) -> dict:
     if not part_number:
         return {"success": False, "error": "part_number required"}
 
-    from agents.estoque_control_agent import EstoqueControlAgent
-
-    agent = EstoqueControlAgent()
-    result = await agent.query_balance(
-        part_number=part_number,
-        location_id=location_id,
-        project_id=project_id,
+    return await _invoke_agent_a2a(
+        agent_id="estoque_control",
+        action="query_balance",
+        payload={
+            "part_number": part_number,
+            "location_id": location_id,
+            "project_id": project_id,
+        },
+        session_id=session_id,
     )
-
-    return result
 
 
 async def _get_asset_timeline(payload: dict) -> dict:
@@ -730,7 +819,7 @@ async def _nexo_estoque_chat(payload: dict, user_id: str, session_id: str) -> di
 # =============================================================================
 
 
-async def _get_nf_upload_url(payload: dict) -> dict:
+async def _get_nf_upload_url(payload: dict, session_id: str = "default") -> dict:
     """
     Get presigned URL for NF/document upload.
 
@@ -742,6 +831,11 @@ async def _get_nf_upload_url(payload: dict) -> dict:
 
     Returns:
         Dict with upload_url, s3_key, and expires_in
+
+    Architecture:
+    - Invokes IntakeAgent in dedicated runtime via A2A Protocol
+
+    Note: This function delegates to IntakeAgent's get_upload_url action.
     """
     filename = payload.get("filename", "")
     content_type = payload.get("content_type", "application/octet-stream")
@@ -749,28 +843,22 @@ async def _get_nf_upload_url(payload: dict) -> dict:
     if not filename:
         return {"success": False, "error": "filename is required"}
 
-    # CRITICAL: Force reset S3 client to ensure SigV4 config is applied
-    # This is needed because warm instances cache the old client
-    # See: CLAUDE.md "S3 Presigned URL Issues - CORS 307 Redirect (CRITICAL)"
-    import tools.s3_client as s3_module
-    s3_module._s3_client = None  # Force recreation with SigV4 config
-    print(f"[get_nf_upload_url] Reset S3 client - version {s3_module._MODULE_VERSION}")
-
-    from agents.intake_agent import IntakeAgent
-
-    agent = IntakeAgent()
-    # Force reset agent's cached S3 client too
-    agent._s3_client = None
-    result = agent.get_upload_url(filename=filename, content_type=content_type)
-
+    result = await _invoke_agent_a2a(
+        agent_id="intake",
+        action="get_upload_url",
+        payload={
+            "filename": filename,
+            "content_type": content_type,
+        },
+        session_id=session_id,
+    )
     # Map 'key' to 's3_key' for frontend compatibility
-    if result.get("success") and "key" in result:
+    if isinstance(result, dict) and result.get("success") and "key" in result:
         result["s3_key"] = result.pop("key")
-
     return result
 
 
-async def _process_nf_upload(payload: dict, user_id: str) -> dict:
+async def _process_nf_upload(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Process uploaded NF (PDF or XML).
 
@@ -781,6 +869,9 @@ async def _process_nf_upload(payload: dict, user_id: str) -> dict:
     - Supplier information
 
     Returns extraction with confidence score.
+
+    Architecture:
+    - Invokes IntakeAgent in dedicated runtime via A2A Protocol
     """
     s3_key = payload.get("s3_key", "")
     file_type = payload.get("file_type", "xml")
@@ -790,21 +881,21 @@ async def _process_nf_upload(payload: dict, user_id: str) -> dict:
     if not s3_key:
         return {"success": False, "error": "s3_key required"}
 
-    from agents.intake_agent import IntakeAgent
-
-    agent = IntakeAgent()
-    result = await agent.process_nf_upload(
-        s3_key=s3_key,
-        file_type=file_type,
-        project_id=project_id,
-        destination_location_id=destination_location_id,
-        uploaded_by=user_id,
+    return await _invoke_agent_a2a(
+        agent_id="intake",
+        action="process_nf",
+        payload={
+            "s3_key": s3_key,
+            "file_type": file_type,
+            "project_id": project_id,
+            "destination_location_id": destination_location_id,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result.to_dict()
 
-
-async def _validate_nf_extraction(payload: dict) -> dict:
+async def _validate_nf_extraction(payload: dict, session_id: str = "default") -> dict:
     """
     Validate NF extraction before confirmation.
 
@@ -812,17 +903,19 @@ async def _validate_nf_extraction(payload: dict) -> dict:
     - Part numbers exist or need creation
     - Quantities are reasonable
     - Values match expected ranges
+
+    Architecture:
+    - Invokes IntakeAgent in dedicated runtime via A2A Protocol
     """
-    # TODO: Implement validation logic
-    return {
-        "success": True,
-        "valid": False,
-        "issues": [],
-        "message": "Validation implemented in Sprint 2",
-    }
+    return await _invoke_agent_a2a(
+        agent_id="intake",
+        action="validate_extraction",
+        payload=payload,
+        session_id=session_id,
+    )
 
 
-async def _confirm_nf_entry(payload: dict, user_id: str) -> dict:
+async def _confirm_nf_entry(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Confirm NF entry after user review.
 
@@ -830,6 +923,9 @@ async def _confirm_nf_entry(payload: dict, user_id: str) -> dict:
     - ENTRY movement for each item
     - Updates balances
     - Audit log entry
+
+    Architecture:
+    - Invokes IntakeAgent in dedicated runtime via A2A Protocol
     """
     entry_id = payload.get("entry_id", "")
     item_mappings = payload.get("item_mappings")
@@ -838,20 +934,23 @@ async def _confirm_nf_entry(payload: dict, user_id: str) -> dict:
     if not entry_id:
         return {"success": False, "error": "entry_id required"}
 
-    from agents.intake_agent import IntakeAgent
-
-    agent = IntakeAgent()
-    result = await agent.confirm_entry(
-        entry_id=entry_id,
-        confirmed_by=user_id,
-        item_mappings=item_mappings,
-        notes=notes,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="intake",
+        action="confirm_entry",
+        payload={
+            "entry_id": entry_id,
+            "item_mappings": item_mappings,
+            "notes": notes,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result.to_dict()
 
-
-async def _process_scanned_nf_upload(payload: dict, user_id: str) -> dict:
+async def _process_scanned_nf_upload(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Process scanned NF document using Gemini Vision.
 
@@ -869,9 +968,13 @@ async def _process_scanned_nf_upload(payload: dict, user_id: str) -> dict:
             - project_id: Optional project context
             - destination_location_id: Target location (default: ESTOQUE_CENTRAL)
         user_id: User performing the upload
+        session_id: Session ID for context
 
     Returns:
         Extraction result with confidence score and quality indicators
+
+    Architecture:
+    - Invokes IntakeAgent in dedicated runtime via A2A Protocol
     """
     s3_key = payload.get("s3_key", "")
     project_id = payload.get("project_id", "")
@@ -881,31 +984,27 @@ async def _process_scanned_nf_upload(payload: dict, user_id: str) -> dict:
         return {"success": False, "error": "s3_key required"}
 
     # Determine file type from S3 key
-    file_type = "pdf"
+    original_file_type = "pdf"
     if s3_key.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
-        file_type = "image"
+        original_file_type = "image"
 
-    from agents.intake_agent import IntakeAgent
-
-    agent = IntakeAgent()
-
-    # Use the same processing flow but force scanned mode
-    # by passing file_type as 'pdf' (triggers Vision)
-    result = await agent.process_nf_upload(
-        s3_key=s3_key,
-        file_type="pdf",  # Forces PDF/scanned processing path
-        project_id=project_id,
-        destination_location_id=destination_location_id,
-        uploaded_by=user_id,
+    result = await _invoke_agent_a2a(
+        agent_id="intake",
+        action="process_nf",
+        payload={
+            "s3_key": s3_key,
+            "file_type": "pdf",  # Forces PDF/scanned processing path
+            "project_id": project_id,
+            "destination_location_id": destination_location_id,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
-
-    response = result.to_dict()
-
     # Add scanned-specific metadata
-    response["processing_type"] = "scanned_vision"
-    response["original_file_type"] = file_type
-
-    return response
+    if isinstance(result, dict):
+        result["processing_type"] = "scanned_vision"
+        result["original_file_type"] = original_file_type
+    return result
 
 
 # =============================================================================
@@ -913,7 +1012,7 @@ async def _process_scanned_nf_upload(payload: dict, user_id: str) -> dict:
 # =============================================================================
 
 
-async def _process_image_ocr(payload: dict, user_id: str) -> dict:
+async def _process_image_ocr(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Process an image (scanned NF, mobile photo) with OCR via Gemini Vision.
 
@@ -931,9 +1030,13 @@ async def _process_image_ocr(payload: dict, user_id: str) -> dict:
             - project_id: Optional project context
             - destination_location_id: Target location (default: ESTOQUE_CENTRAL)
         user_id: User performing the upload
+        session_id: Session ID for context
 
     Returns:
         Extraction result with confidence score
+
+    Architecture:
+    - Invokes IntakeAgent in dedicated runtime via A2A Protocol
     """
     s3_key = payload.get("s3_key", "")
     project_id = payload.get("project_id", "")
@@ -942,23 +1045,20 @@ async def _process_image_ocr(payload: dict, user_id: str) -> dict:
     if not s3_key:
         return {"success": False, "error": "s3_key required"}
 
-    from agents.intake_agent import IntakeAgent
-
-    agent = IntakeAgent()
-
-    # Use file_type='image' to ensure Vision processing path
-    result = await agent.process_nf_upload(
-        s3_key=s3_key,
-        file_type="image",  # Forces Vision OCR processing
-        project_id=project_id,
-        destination_location_id=destination_location_id,
-        uploaded_by=user_id,
+    result = await _invoke_agent_a2a(
+        agent_id="intake",
+        action="parse_nf_image",
+        payload={
+            "s3_key": s3_key,
+            "project_id": project_id,
+            "destination_location_id": destination_location_id,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
-
-    response = result.to_dict()
-    response["processing_type"] = "image_vision_ocr"
-
-    return response
+    if isinstance(result, dict):
+        result["processing_type"] = "image_vision_ocr"
+    return result
 
 
 # =============================================================================
@@ -1109,7 +1209,7 @@ async def _create_manual_entry(payload: dict, user_id: str) -> dict:
 # =============================================================================
 
 
-async def _preview_sap_import(payload: dict, user_id: str) -> dict:
+async def _preview_sap_import(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Preview a SAP export file (CSV/XLSX) before importing.
 
@@ -1125,10 +1225,10 @@ async def _preview_sap_import(payload: dict, user_id: str) -> dict:
 
     Returns:
         Preview with column mappings, matched rows, and stats
-    """
-    import base64
-    from agents.import_agent import create_import_agent
 
+    Architecture:
+    - Invokes ImportAgent in dedicated runtime via A2A Protocol
+    """
     file_content_b64 = payload.get("file_content", "")
     filename = payload.get("filename", "sap_export.csv")
     project_id = payload.get("project_id")
@@ -1138,25 +1238,23 @@ async def _preview_sap_import(payload: dict, user_id: str) -> dict:
     if not file_content_b64:
         return {"success": False, "error": "file_content is required"}
 
-    try:
-        file_content = base64.b64decode(file_content_b64)
-    except Exception as e:
-        return {"success": False, "error": f"Invalid base64 content: {e}"}
-
-    agent = create_import_agent()
-    result = await agent.preview_import(
-        file_content=file_content,
-        filename=filename,
-        project_id=project_id,
-        destination_location_id=destination_location_id,
-        sap_format=True,  # Enable SAP-specific column detection
-        full_asset_creation=full_asset_creation,
+    return await _invoke_agent_a2a(
+        agent_id="import",
+        action="preview_import",
+        payload={
+            "file_content": file_content_b64,
+            "filename": filename,
+            "project_id": project_id,
+            "destination_location_id": destination_location_id,
+            "sap_format": True,
+            "full_asset_creation": full_asset_creation,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result
 
-
-async def _execute_sap_import(payload: dict, user_id: str) -> dict:
+async def _execute_sap_import(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Execute SAP import with full asset creation.
 
@@ -1170,9 +1268,10 @@ async def _execute_sap_import(payload: dict, user_id: str) -> dict:
 
     Returns:
         Import result with created assets and movements
-    """
-    from agents.import_agent import create_import_agent
 
+    Architecture:
+    - Invokes ImportAgent in dedicated runtime via A2A Protocol
+    """
     import_id = payload.get("import_id", "")
     pn_overrides = payload.get("pn_overrides", {})
     full_asset_creation = payload.get("full_asset_creation", True)
@@ -1180,15 +1279,17 @@ async def _execute_sap_import(payload: dict, user_id: str) -> dict:
     if not import_id:
         return {"success": False, "error": "import_id is required"}
 
-    # Convert pn_overrides keys to int (JSON keys are strings)
-    pn_overrides_int = {int(k): v for k, v in pn_overrides.items()}
-
-    agent = create_import_agent()
-    result = await agent.execute_sap_import(
-        import_id=import_id,
-        pn_overrides=pn_overrides_int,
-        full_asset_creation=full_asset_creation,
-        operator_id=user_id,
+    result = await _invoke_agent_a2a(
+        agent_id="import",
+        action="execute_sap_import",
+        payload={
+            "import_id": import_id,
+            "pn_overrides": pn_overrides,
+            "full_asset_creation": full_asset_creation,
+            "operator_id": user_id,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
     # Audit logging
@@ -1203,7 +1304,7 @@ async def _execute_sap_import(payload: dict, user_id: str) -> dict:
             details={
                 "full_asset_creation": full_asset_creation,
                 "pn_overrides_count": len(pn_overrides),
-                "success": result.get("success", False),
+                "success": result.get("success", False) if isinstance(result, dict) else False,
             },
         )
     except Exception:
@@ -1217,13 +1318,13 @@ async def _execute_sap_import(payload: dict, user_id: str) -> dict:
 # =============================================================================
 
 
-async def _create_movement(payload: dict, user_id: str) -> dict:
+async def _create_movement(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Create a generic inventory movement.
 
     Movement types: ENTRY, EXIT, TRANSFER, ADJUSTMENT, RETURN, DISCARD, LOSS
     """
-    # TODO: Implement with EstoqueControlAgent
+    # TODO: Implement with EstoqueControlAgent via A2A when action is available
     return {
         "success": True,
         "movement_id": None,
@@ -1231,7 +1332,7 @@ async def _create_movement(payload: dict, user_id: str) -> dict:
     }
 
 
-async def _create_reservation(payload: dict, user_id: str) -> dict:
+async def _create_reservation(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Create a reservation for items.
 
@@ -1240,26 +1341,29 @@ async def _create_reservation(payload: dict, user_id: str) -> dict:
     - Have TTL for automatic expiration
     - Are linked to tickets/chamados
     """
-    from agents.estoque_control_agent import EstoqueControlAgent
-
-    agent = EstoqueControlAgent()
-    result = await agent.create_reservation(
-        part_number=payload.get("part_number", ""),
-        quantity=payload.get("quantity", 1),
-        project_id=payload.get("project_id", ""),
-        chamado_id=payload.get("chamado_id"),
-        serial_numbers=payload.get("serial_numbers"),
-        source_location_id=payload.get("source_location_id", "ESTOQUE_CENTRAL"),
-        destination_location_id=payload.get("destination_location_id"),
-        requested_by=user_id,
-        notes=payload.get("notes"),
-        ttl_hours=payload.get("ttl_hours", 72),
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="estoque_control",
+        action="create_reservation",
+        payload={
+            "part_number": payload.get("part_number", ""),
+            "quantity": payload.get("quantity", 1),
+            "project_id": payload.get("project_id", ""),
+            "chamado_id": payload.get("chamado_id"),
+            "serial_numbers": payload.get("serial_numbers"),
+            "source_location_id": payload.get("source_location_id", "ESTOQUE_CENTRAL"),
+            "destination_location_id": payload.get("destination_location_id"),
+            "notes": payload.get("notes"),
+            "ttl_hours": payload.get("ttl_hours", 72),
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result.to_dict()
 
-
-async def _cancel_reservation(payload: dict, user_id: str) -> dict:
+async def _cancel_reservation(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """Cancel an existing reservation."""
     reservation_id = payload.get("reservation_id", "")
     reason = payload.get("reason")
@@ -1267,19 +1371,22 @@ async def _cancel_reservation(payload: dict, user_id: str) -> dict:
     if not reservation_id:
         return {"success": False, "error": "reservation_id required"}
 
-    from agents.estoque_control_agent import EstoqueControlAgent
-
-    agent = EstoqueControlAgent()
-    result = await agent.cancel_reservation(
-        reservation_id=reservation_id,
-        cancelled_by=user_id,
-        reason=reason,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="estoque_control",
+        action="cancel_reservation",
+        payload={
+            "reservation_id": reservation_id,
+            "reason": reason,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result.to_dict()
 
-
-async def _process_expedition(payload: dict, user_id: str) -> dict:
+async def _process_expedition(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Process an expedition (item exit).
 
@@ -1289,30 +1396,33 @@ async def _process_expedition(payload: dict, user_id: str) -> dict:
     3. Update balances
     4. Clear reservation
     """
-    from agents.estoque_control_agent import EstoqueControlAgent
-
-    agent = EstoqueControlAgent()
-    result = await agent.process_expedition(
-        reservation_id=payload.get("reservation_id"),
-        part_number=payload.get("part_number"),
-        quantity=payload.get("quantity", 1),
-        serial_numbers=payload.get("serial_numbers"),
-        source_location_id=payload.get("source_location_id", "ESTOQUE_CENTRAL"),
-        destination=payload.get("destination", ""),
-        project_id=payload.get("project_id"),
-        chamado_id=payload.get("chamado_id"),
-        recipient_name=payload.get("recipient_name", ""),
-        recipient_contact=payload.get("recipient_contact", ""),
-        shipping_method=payload.get("shipping_method", "HAND_DELIVERY"),
-        processed_by=user_id,
-        notes=payload.get("notes"),
-        evidence_keys=payload.get("evidence_keys"),
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="estoque_control",
+        action="process_expedition",
+        payload={
+            "reservation_id": payload.get("reservation_id"),
+            "part_number": payload.get("part_number"),
+            "quantity": payload.get("quantity", 1),
+            "serial_numbers": payload.get("serial_numbers"),
+            "source_location_id": payload.get("source_location_id", "ESTOQUE_CENTRAL"),
+            "destination": payload.get("destination", ""),
+            "project_id": payload.get("project_id"),
+            "chamado_id": payload.get("chamado_id"),
+            "recipient_name": payload.get("recipient_name", ""),
+            "recipient_contact": payload.get("recipient_contact", ""),
+            "shipping_method": payload.get("shipping_method", "HAND_DELIVERY"),
+            "notes": payload.get("notes"),
+            "evidence_keys": payload.get("evidence_keys"),
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result.to_dict()
 
-
-async def _create_transfer(payload: dict, user_id: str) -> dict:
+async def _create_transfer(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Create a transfer between locations or projects.
 
@@ -1331,21 +1441,24 @@ async def _create_transfer(payload: dict, user_id: str) -> dict:
     if not source_location_id or not destination_location_id:
         return {"success": False, "error": "source and destination locations required"}
 
-    from agents.estoque_control_agent import EstoqueControlAgent
-
-    agent = EstoqueControlAgent()
-    result = await agent.create_transfer(
-        part_number=part_number,
-        quantity=quantity,
-        source_location_id=source_location_id,
-        destination_location_id=destination_location_id,
-        project_id=project_id,
-        serial_numbers=payload.get("serial_numbers"),
-        requested_by=user_id,
-        notes=payload.get("notes"),
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="estoque_control",
+        action="create_transfer",
+        payload={
+            "part_number": part_number,
+            "quantity": quantity,
+            "source_location_id": source_location_id,
+            "destination_location_id": destination_location_id,
+            "project_id": project_id,
+            "serial_numbers": payload.get("serial_numbers"),
+            "notes": payload.get("notes"),
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
-
-    return result.to_dict()
 
 
 # =============================================================================
@@ -1433,31 +1546,34 @@ async def _reject_task(payload: dict, user_id: str) -> dict:
 # =============================================================================
 
 
-async def _start_inventory_count(payload: dict, user_id: str) -> dict:
+async def _start_inventory_count(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Start a new inventory counting campaign.
 
     Creates a counting session for specified locations/items.
     """
-    from agents.reconciliacao_agent import ReconciliacaoAgent
-
-    agent = ReconciliacaoAgent()
-    result = await agent.start_campaign(
-        name=payload.get("name", ""),
-        description=payload.get("description", ""),
-        location_ids=payload.get("location_ids"),
-        project_ids=payload.get("project_ids"),
-        part_numbers=payload.get("part_numbers"),
-        start_date=payload.get("start_date"),
-        end_date=payload.get("end_date"),
-        created_by=user_id,
-        require_double_count=payload.get("require_double_count", False),
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="reconciliacao",
+        action="start_campaign",
+        payload={
+            "name": payload.get("name", ""),
+            "description": payload.get("description", ""),
+            "location_ids": payload.get("location_ids"),
+            "project_ids": payload.get("project_ids"),
+            "part_numbers": payload.get("part_numbers"),
+            "start_date": payload.get("start_date"),
+            "end_date": payload.get("end_date"),
+            "require_double_count": payload.get("require_double_count", False),
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result.to_dict()
 
-
-async def _submit_count_result(payload: dict, user_id: str) -> dict:
+async def _submit_count_result(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Submit counting result for an item.
 
@@ -1470,24 +1586,27 @@ async def _submit_count_result(payload: dict, user_id: str) -> dict:
     if not campaign_id or not part_number or not location_id:
         return {"success": False, "error": "campaign_id, part_number, and location_id required"}
 
-    from agents.reconciliacao_agent import ReconciliacaoAgent
-
-    agent = ReconciliacaoAgent()
-    result = await agent.submit_count(
-        campaign_id=campaign_id,
-        part_number=part_number,
-        location_id=location_id,
-        counted_quantity=payload.get("counted_quantity", 0),
-        counted_serials=payload.get("counted_serials"),
-        counted_by=user_id,
-        evidence_keys=payload.get("evidence_keys"),
-        notes=payload.get("notes"),
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="reconciliacao",
+        action="submit_count",
+        payload={
+            "campaign_id": campaign_id,
+            "part_number": part_number,
+            "location_id": location_id,
+            "counted_quantity": payload.get("counted_quantity", 0),
+            "counted_serials": payload.get("counted_serials"),
+            "evidence_keys": payload.get("evidence_keys"),
+            "notes": payload.get("notes"),
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result.to_dict()
 
-
-async def _analyze_divergences(payload: dict) -> dict:
+async def _analyze_divergences(payload: dict, session_id: str = "default") -> dict:
     """
     Analyze divergences between counted and system quantities.
 
@@ -1497,13 +1616,18 @@ async def _analyze_divergences(payload: dict) -> dict:
     if not campaign_id:
         return {"success": False, "error": "campaign_id required"}
 
-    from agents.reconciliacao_agent import ReconciliacaoAgent
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="reconciliacao",
+        action="analyze_divergences",
+        payload={"campaign_id": campaign_id},
+        session_id=session_id,
+    )
 
-    agent = ReconciliacaoAgent()
-    return await agent.analyze_divergences(campaign_id=campaign_id)
 
-
-async def _propose_adjustment(payload: dict, user_id: str) -> dict:
+async def _propose_adjustment(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Propose an inventory adjustment based on counting.
 
@@ -1516,18 +1640,21 @@ async def _propose_adjustment(payload: dict, user_id: str) -> dict:
     if not campaign_id or not part_number or not location_id:
         return {"success": False, "error": "campaign_id, part_number, and location_id required"}
 
-    from agents.reconciliacao_agent import ReconciliacaoAgent
-
-    agent = ReconciliacaoAgent()
-    result = await agent.propose_adjustment(
-        campaign_id=campaign_id,
-        part_number=part_number,
-        location_id=location_id,
-        proposed_by=user_id,
-        adjustment_reason=payload.get("adjustment_reason", ""),
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="reconciliacao",
+        action="propose_adjustment",
+        payload={
+            "campaign_id": campaign_id,
+            "part_number": part_number,
+            "location_id": location_id,
+            "adjustment_reason": payload.get("adjustment_reason", ""),
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
-
-    return result.to_dict()
 
 
 # =============================================================================
@@ -1631,7 +1758,7 @@ async def _get_movement_history(payload: dict) -> dict:
 # =============================================================================
 
 
-async def _preview_import(payload: dict, user_id: str) -> dict:
+async def _preview_import(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Preview an import file before processing.
 
@@ -1645,10 +1772,10 @@ async def _preview_import(payload: dict, user_id: str) -> dict:
 
     Returns:
         Preview with column mappings, matched rows, and stats
-    """
-    import base64
-    from agents.import_agent import create_import_agent
 
+    Architecture:
+    - Invokes ImportAgent in dedicated runtime via A2A Protocol
+    """
     file_content_b64 = payload.get("file_content_base64", "")
     filename = payload.get("filename", "import.csv")
     project_id = payload.get("project_id")
@@ -1657,23 +1784,21 @@ async def _preview_import(payload: dict, user_id: str) -> dict:
     if not file_content_b64:
         return {"success": False, "error": "file_content_base64 is required"}
 
-    try:
-        file_content = base64.b64decode(file_content_b64)
-    except Exception as e:
-        return {"success": False, "error": f"Invalid base64 content: {e}"}
-
-    agent = create_import_agent()
-    result = await agent.preview_import(
-        file_content=file_content,
-        filename=filename,
-        project_id=project_id,
-        destination_location_id=destination_location_id,
+    return await _invoke_agent_a2a(
+        agent_id="import",
+        action="preview_import",
+        payload={
+            "file_content": file_content_b64,
+            "filename": filename,
+            "project_id": project_id,
+            "destination_location_id": destination_location_id,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result
 
-
-async def _execute_import(payload: dict, user_id: str) -> dict:
+async def _execute_import(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Execute the import after preview/confirmation.
 
@@ -1681,6 +1806,9 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
 
     IMPORTANT: Per CLAUDE.md, inventory data MUST be stored in Aurora PostgreSQL.
     This function uses SGAPostgresClient directly to insert movements.
+
+    NOTE: This handler has complex local processing (S3, CSV parsing, PostgreSQL).
+    A2A migration requires refactoring ImportAgent runtime to handle full flow.
 
     Payload:
         import_id: Import session ID from preview
@@ -1939,7 +2067,7 @@ async def _execute_import(payload: dict, user_id: str) -> dict:
     }
 
 
-async def _validate_pn_mapping(payload: dict) -> dict:
+async def _validate_pn_mapping(payload: dict, session_id: str = "default") -> dict:
     """
     Validate a part number mapping suggestion.
 
@@ -1952,21 +2080,24 @@ async def _validate_pn_mapping(payload: dict) -> dict:
     Returns:
         Validation result with alternative suggestions
     """
-    from agents.import_agent import create_import_agent
-
     description = payload.get("description", "")
     suggested_pn_id = payload.get("suggested_pn_id")
 
     if not description:
         return {"success": False, "error": "description is required"}
 
-    agent = create_import_agent()
-    result = await agent.validate_pn_mapping(
-        description=description,
-        suggested_pn_id=suggested_pn_id,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="import",
+        action="validate_mapping",
+        payload={
+            "description": description,
+            "suggested_pn_id": suggested_pn_id,
+        },
+        session_id=session_id,
     )
-
-    return result
 
 
 # =============================================================================
@@ -1974,7 +2105,7 @@ async def _validate_pn_mapping(payload: dict) -> dict:
 # =============================================================================
 
 
-async def _smart_import_upload(payload: dict, user_id: str) -> dict:
+async def _smart_import_upload(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Smart import that auto-detects file type and routes to appropriate agent.
 
@@ -1996,8 +2127,6 @@ async def _smart_import_upload(payload: dict, user_id: str) -> dict:
     Returns:
         Processing result with source_type, extraction/preview, and confidence
     """
-    import base64
-
     s3_key = payload.get("s3_key", "")
     filename = payload.get("filename", "")
     content_type = payload.get("content_type", "")
@@ -2037,67 +2166,82 @@ async def _smart_import_upload(payload: dict, user_id: str) -> dict:
 
     if file_type in ["xml", "pdf", "image"]:
         # Route to IntakeAgent for NF processing
-        from agents.intake_agent import IntakeAgent
-
-        agent = IntakeAgent()
-        result = await agent.process_nf_upload(
-            s3_key=s3_key,
-            file_type="pdf" if file_type == "image" else file_type,  # images use vision like PDFs
-            project_id=project_id,
-            destination_location_id=destination_location_id,
-            uploaded_by=user_id,
+        # =================================================================
+        # A2A Protocol (100% Agentic Architecture)
+        # =================================================================
+        a2a_result = await _invoke_agent_a2a(
+            agent_id="intake",
+            action="process_nf",
+            payload={
+                "s3_key": s3_key,
+                "file_type": "pdf" if file_type == "image" else file_type,
+                "project_id": project_id,
+                "destination_location_id": destination_location_id,
+            },
+            session_id=session_id,
+            user_id=user_id,
         )
-
-        # Convert to dict if needed
-        if hasattr(result, "to_dict"):
-            result = result.to_dict()
+        result = a2a_result if isinstance(a2a_result, dict) else {"error": "Invalid response"}
 
         # Add smart import metadata
-        result["source_type"] = f"nf_{file_type}"
-        result["detected_file_type"] = file_type
-        result["file_type_label"] = get_file_type_label(file_type)
+        if result:
+            result["source_type"] = f"nf_{file_type}"
+            result["detected_file_type"] = file_type
+            result["file_type_label"] = get_file_type_label(file_type)
 
     elif file_type in ["csv", "xlsx"]:
-        # Route to ImportAgent for spreadsheet processing
-        from agents.import_agent import create_import_agent
+        # Route to ImportAgent for spreadsheet processing via A2A
+        import base64
+        file_content_b64 = base64.b64encode(file_data).decode("utf-8")
 
-        agent = create_import_agent()
-        result = await agent.preview_import(
-            file_content=file_data,
-            filename=filename,
-            project_id=project_id,
-            destination_location_id=destination_location_id,
+        a2a_result = await _invoke_agent_a2a(
+            agent_id="import",
+            action="preview_import",
+            payload={
+                "file_content": file_content_b64,
+                "filename": filename,
+                "project_id": project_id,
+                "destination_location_id": destination_location_id,
+            },
+            session_id=session_id,
+            user_id=user_id,
         )
+        result = a2a_result if isinstance(a2a_result, dict) else {"error": "Invalid response"}
 
         # Add smart import metadata
-        result["source_type"] = "spreadsheet"
-        result["detected_file_type"] = file_type
-        result["file_type_label"] = get_file_type_label(file_type)
+        if result:
+            result["source_type"] = "spreadsheet"
+            result["detected_file_type"] = file_type
+            result["file_type_label"] = get_file_type_label(file_type)
 
     elif file_type == "txt":
-        # Route to ImportAgent for text processing with Gemini AI
-        from agents.import_agent import create_import_agent
-
-        agent = create_import_agent()
-
+        # Route to ImportAgent for text processing via A2A
         # Decode text content
         try:
             text_content = file_data.decode("utf-8")
         except UnicodeDecodeError:
             text_content = file_data.decode("latin-1")
 
-        result = await agent.process_text_import(
-            file_content=text_content,
-            filename=filename,
-            project_id=project_id,
-            destination_location_id=destination_location_id,
+        a2a_result = await _invoke_agent_a2a(
+            agent_id="import",
+            action="process_text_import",
+            payload={
+                "file_content": text_content,
+                "filename": filename,
+                "project_id": project_id,
+                "destination_location_id": destination_location_id,
+            },
+            session_id=session_id,
+            user_id=user_id,
         )
+        result = a2a_result if isinstance(a2a_result, dict) else {"error": "Invalid response"}
 
         # Add smart import metadata
-        result["source_type"] = "text"
-        result["detected_file_type"] = file_type
-        result["file_type_label"] = get_file_type_label(file_type)
-        result["requires_hil"] = True  # Text imports always require review
+        if result:
+            result["source_type"] = "text"
+            result["detected_file_type"] = file_type
+            result["file_type_label"] = get_file_type_label(file_type)
+            result["requires_hil"] = True  # Text imports always require review
 
     # Add common fields to preview
     if result:
@@ -2116,7 +2260,7 @@ async def _smart_import_upload(payload: dict, user_id: str) -> dict:
     }
 
 
-async def _generate_import_observations(payload: dict) -> dict:
+async def _generate_import_observations(payload: dict, session_id: str = "default") -> dict:
     """
     Generate NEXO AI observations for import preview data.
 
@@ -2146,16 +2290,18 @@ async def _generate_import_observations(payload: dict) -> dict:
             "error": "preview data is required",
         }
 
-    # Lazy import to respect AgentCore cold start limit
-    from agents.observation_agent import ObservationAgent
-
-    agent = ObservationAgent()
-    result = agent.generate_observations(
-        preview_data=preview_data,
-        context=context,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="observation",
+        action="generate_observations",
+        payload={
+            "preview_data": preview_data,
+            "context": context,
+        },
+        session_id=session_id,
     )
-
-    return result
 
 
 # =============================================================================
@@ -2163,7 +2309,7 @@ async def _generate_import_observations(payload: dict) -> dict:
 # =============================================================================
 
 
-async def _process_expedition_request(payload: dict, user_id: str) -> dict:
+async def _process_expedition_request(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Process an expedition request from a chamado.
 
@@ -2180,8 +2326,6 @@ async def _process_expedition_request(payload: dict, user_id: str) -> dict:
     Returns:
         Expedition result with SAP-ready data
     """
-    from agents.expedition_agent import create_expedition_agent
-
     chamado_id = payload.get("chamado_id", "")
     project_id = payload.get("project_id", "")
     items = payload.get("items", [])
@@ -2197,23 +2341,28 @@ async def _process_expedition_request(payload: dict, user_id: str) -> dict:
     if not items:
         return {"success": False, "error": "items is required"}
 
-    agent = create_expedition_agent()
-    result = await agent.process_expedition_request(
-        chamado_id=chamado_id,
-        project_id=project_id,
-        items=items,
-        destination_client=destination_client,
-        destination_address=destination_address,
-        urgency=urgency,
-        nature=nature,
-        notes=notes,
-        operator_id=user_id,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="expedition",
+        action="process_expedition_request",
+        payload={
+            "chamado_id": chamado_id,
+            "project_id": project_id,
+            "items": items,
+            "destination_client": destination_client,
+            "destination_address": destination_address,
+            "urgency": urgency,
+            "nature": nature,
+            "notes": notes,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result
 
-
-async def _verify_expedition_stock(payload: dict) -> dict:
+async def _verify_expedition_stock(payload: dict, session_id: str = "default") -> dict:
     """
     Verify stock availability for an item.
 
@@ -2225,8 +2374,6 @@ async def _verify_expedition_stock(payload: dict) -> dict:
     Returns:
         Verification result with availability status
     """
-    from agents.expedition_agent import create_expedition_agent
-
     pn_id = payload.get("pn_id", "")
     serial = payload.get("serial")
     quantity = payload.get("quantity", 1)
@@ -2234,17 +2381,22 @@ async def _verify_expedition_stock(payload: dict) -> dict:
     if not pn_id:
         return {"success": False, "error": "pn_id is required"}
 
-    agent = create_expedition_agent()
-    result = await agent.verify_stock(
-        pn_id=pn_id,
-        serial=serial,
-        quantity=quantity,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="expedition",
+        action="verify_stock",
+        payload={
+            "pn_id": pn_id,
+            "serial": serial,
+            "quantity": quantity,
+        },
+        session_id=session_id,
     )
 
-    return result
 
-
-async def _confirm_separation(payload: dict, user_id: str) -> dict:
+async def _confirm_separation(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Confirm physical separation and packaging.
 
@@ -2256,8 +2408,6 @@ async def _confirm_separation(payload: dict, user_id: str) -> dict:
     Returns:
         Confirmation result
     """
-    from agents.expedition_agent import create_expedition_agent
-
     expedition_id = payload.get("expedition_id", "")
     items_confirmed = payload.get("items_confirmed", [])
     package_info = payload.get("package_info", {})
@@ -2265,18 +2415,23 @@ async def _confirm_separation(payload: dict, user_id: str) -> dict:
     if not expedition_id:
         return {"success": False, "error": "expedition_id is required"}
 
-    agent = create_expedition_agent()
-    result = await agent.confirm_separation(
-        expedition_id=expedition_id,
-        items_confirmed=items_confirmed,
-        package_info=package_info,
-        operator_id=user_id,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="expedition",
+        action="confirm_separation",
+        payload={
+            "expedition_id": expedition_id,
+            "items_confirmed": items_confirmed,
+            "package_info": package_info,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    return result
 
-
-async def _complete_expedition(payload: dict, user_id: str) -> dict:
+async def _complete_expedition(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Complete the expedition after NF emission.
 
@@ -2290,8 +2445,6 @@ async def _complete_expedition(payload: dict, user_id: str) -> dict:
     Returns:
         Completion result with created movements
     """
-    from agents.expedition_agent import create_expedition_agent
-
     expedition_id = payload.get("expedition_id", "")
     nf_number = payload.get("nf_number", "")
     nf_key = payload.get("nf_key", "")
@@ -2304,17 +2457,24 @@ async def _complete_expedition(payload: dict, user_id: str) -> dict:
     if not nf_number:
         return {"success": False, "error": "nf_number is required"}
 
-    agent = create_expedition_agent()
-    result = await agent.complete_expedition(
-        expedition_id=expedition_id,
-        nf_number=nf_number,
-        nf_key=nf_key,
-        carrier=carrier,
-        tracking_code=tracking_code,
-        operator_id=user_id,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    result = await _invoke_agent_a2a(
+        agent_id="expedition",
+        action="complete_expedition",
+        payload={
+            "expedition_id": expedition_id,
+            "nf_number": nf_number,
+            "nf_key": nf_key,
+            "carrier": carrier,
+            "tracking_code": tracking_code,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    # Audit logging
+    # Audit logging for A2A path
     try:
         from tools.dynamodb_client import SGAAuditLogger
         audit = SGAAuditLogger()
@@ -2328,10 +2488,11 @@ async def _complete_expedition(payload: dict, user_id: str) -> dict:
                 "carrier": carrier,
                 "tracking_code": tracking_code,
                 "success": result.get("success", False),
+                "protocol": "A2A",
             },
         )
     except Exception:
-        pass  # Don't fail the request if audit logging fails
+        pass
 
     return result
 
@@ -2341,7 +2502,7 @@ async def _complete_expedition(payload: dict, user_id: str) -> dict:
 # =============================================================================
 
 
-async def _process_return(payload: dict, user_id: str) -> dict:
+async def _process_return(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Process an equipment return (reversa).
 
@@ -2359,8 +2520,6 @@ async def _process_return(payload: dict, user_id: str) -> dict:
     Returns:
         Return result with depot assignment and movement creation
     """
-    from agents.reverse_agent import create_reverse_agent
-
     serial = payload.get("serial", "")
     origin_type = payload.get("origin_type", "")
     origin_address = payload.get("origin_address", "")
@@ -2377,21 +2536,26 @@ async def _process_return(payload: dict, user_id: str) -> dict:
     if not origin_type:
         return {"success": False, "error": "origin_type is required"}
 
-    agent = create_reverse_agent()
-    result = await agent.process_return(
-        serial=serial,
-        origin_type=origin_type,
-        origin_address=origin_address,
-        owner=owner,
-        condition=condition,
-        return_reason=return_reason,
-        chamado_id=chamado_id,
-        project_id=project_id,
-        notes=notes,
-        operator_id=user_id,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    result = await _invoke_agent_a2a(
+        agent_id="reverse",
+        action="process_return",
+        payload={
+            "serial_number": serial,  # Runtime expects serial_number
+            "reason": return_reason,
+            "condition": condition,
+            "origin_reference": origin_address,
+            "project_id": project_id,
+            "notes": notes,
+            "operator_id": user_id,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    # Audit logging
+    # Audit logging for A2A path
     try:
         from tools.dynamodb_client import SGAAuditLogger
         audit = SGAAuditLogger()
@@ -2407,15 +2571,16 @@ async def _process_return(payload: dict, user_id: str) -> dict:
                 "return_reason": return_reason,
                 "chamado_id": chamado_id,
                 "success": result.get("success", False),
+                "protocol": "A2A",
             },
         )
     except Exception:
-        pass  # Don't fail the request if audit logging fails
+        pass
 
     return result
 
 
-async def _validate_return_origin(payload: dict) -> dict:
+async def _validate_return_origin(payload: dict, session_id: str = "default") -> dict:
     """
     Validate the origin of a return shipment.
 
@@ -2429,24 +2594,27 @@ async def _validate_return_origin(payload: dict) -> dict:
     Returns:
         Validation result with asset info and match confidence
     """
-    from agents.reverse_agent import create_reverse_agent
-
     serial = payload.get("serial", "")
     claimed_origin = payload.get("claimed_origin", "")
 
     if not serial:
         return {"success": False, "error": "serial is required"}
 
-    agent = create_reverse_agent()
-    result = await agent.validate_origin(
-        serial=serial,
-        claimed_origin=claimed_origin,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="reverse",
+        action="validate_origin",
+        payload={
+            "serial_number": serial,  # Runtime expects serial_number
+        },
+        session_id=session_id,
+        user_id="system",
     )
 
-    return result
 
-
-async def _evaluate_return_condition(payload: dict) -> dict:
+async def _evaluate_return_condition(payload: dict, session_id: str = "default") -> dict:
     """
     Evaluate equipment condition and determine destination.
 
@@ -2462,8 +2630,6 @@ async def _evaluate_return_condition(payload: dict) -> dict:
     Returns:
         Evaluation with condition, recommended depot, and confidence
     """
-    from agents.reverse_agent import create_reverse_agent
-
     serial = payload.get("serial", "")
     owner = payload.get("owner", "FAISTON")
     condition_description = payload.get("condition_description", "")
@@ -2475,15 +2641,20 @@ async def _evaluate_return_condition(payload: dict) -> dict:
     if not condition_description:
         return {"success": False, "error": "condition_description is required"}
 
-    agent = create_reverse_agent()
-    result = await agent.evaluate_condition(
-        serial=serial,
-        owner=owner,
-        condition_description=condition_description,
-        photos_s3_keys=photos_s3_keys,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="reverse",
+        action="evaluate_condition",
+        payload={
+            "serial_number": serial,  # Runtime expects serial_number
+            "inspection_notes": condition_description,  # Runtime uses inspection_notes
+            "test_results": None,  # Not used in legacy API
+        },
+        session_id=session_id,
+        user_id="system",
     )
-
-    return result
 
 
 # =============================================================================
@@ -2491,7 +2662,7 @@ async def _evaluate_return_condition(payload: dict) -> dict:
 # =============================================================================
 
 
-async def _get_shipping_quotes(payload: dict) -> dict:
+async def _get_shipping_quotes(payload: dict, session_id: str = "default") -> dict:
     """
     Get shipping quotes from multiple carriers.
 
@@ -2509,8 +2680,6 @@ async def _get_shipping_quotes(payload: dict) -> dict:
     Returns:
         List of quotes with AI recommendation
     """
-    from agents.carrier_agent import create_carrier_agent
-
     origin_cep = payload.get("origin_cep", "")
     destination_cep = payload.get("destination_cep", "")
     weight_kg = payload.get("weight_kg", 1.0)
@@ -2521,20 +2690,26 @@ async def _get_shipping_quotes(payload: dict) -> dict:
     if not origin_cep or not destination_cep:
         return {"success": False, "error": "origin_cep and destination_cep are required"}
 
-    agent = create_carrier_agent()
-    result = await agent.get_quotes(
-        origin_cep=origin_cep,
-        destination_cep=destination_cep,
-        weight_kg=weight_kg,
-        dimensions=dimensions,
-        value=value,
-        urgency=urgency,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="carrier",
+        action="get_quotes",
+        payload={
+            "origin_cep": origin_cep,
+            "destination_cep": destination_cep,
+            "weight_kg": weight_kg,
+            "dimensions": dimensions,
+            "value": value,
+            "urgency": urgency,
+        },
+        session_id=session_id,
+        user_id="system",
     )
 
-    return result
 
-
-async def _recommend_carrier(payload: dict) -> dict:
+async def _recommend_carrier(payload: dict, session_id: str = "default") -> dict:
     """
     Get AI recommendation for best carrier.
 
@@ -2551,27 +2726,31 @@ async def _recommend_carrier(payload: dict) -> dict:
     Returns:
         Carrier recommendation with reasoning
     """
-    from agents.carrier_agent import create_carrier_agent
-
     urgency = payload.get("urgency", "NORMAL")
     weight_kg = payload.get("weight_kg", 1.0)
     value = payload.get("value", 100.0)
     destination_state = payload.get("destination_state", "SP")
     same_city = payload.get("same_city", False)
 
-    agent = create_carrier_agent()
-    result = await agent.recommend_carrier(
-        urgency=urgency,
-        weight_kg=weight_kg,
-        value=value,
-        destination_state=destination_state,
-        same_city=same_city,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="carrier",
+        action="recommend_carrier",
+        payload={
+            "urgency": urgency,
+            "weight_kg": weight_kg,
+            "value": value,
+            "destination_state": destination_state,
+            "same_city": same_city,
+        },
+        session_id=session_id,
+        user_id="system",
     )
 
-    return result
 
-
-async def _track_shipment(payload: dict) -> dict:
+async def _track_shipment(payload: dict, session_id: str = "default") -> dict:
     """
     Track a shipment by tracking code.
 
@@ -2585,21 +2764,25 @@ async def _track_shipment(payload: dict) -> dict:
     Returns:
         Tracking information with events
     """
-    from agents.carrier_agent import create_carrier_agent
-
     tracking_code = payload.get("tracking_code", "")
     carrier = payload.get("carrier")
 
     if not tracking_code:
         return {"success": False, "error": "tracking_code is required"}
 
-    agent = create_carrier_agent()
-    result = await agent.track_shipment(
-        tracking_code=tracking_code,
-        carrier=carrier,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="carrier",
+        action="track_shipment",
+        payload={
+            "tracking_code": tracking_code,
+            "carrier": carrier,
+        },
+        session_id=session_id,
+        user_id="system",
     )
-
-    return result
 
 
 # =============================================================================
@@ -2929,40 +3112,32 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
     if not filename:
         return {"success": False, "error": "filename is required"}
 
-    # Download file from S3
-    from tools.s3_client import SGAS3Client
-
-    s3_client = SGAS3Client()
-    try:
-        file_data = s3_client.download_file(s3_key)
-    except Exception as e:
-        return {"success": False, "error": f"Failed to download file from S3: {e}"}
-
-    # Lazy import to respect AgentCore cold start limit
-    from agents.nexo_import_agent import NexoImportAgent
+    # Import agent room service for status events
     from tools.agent_room_service import emit_agent_event
 
-    agent = NexoImportAgent()
     print(f"[nexo_analyze_file] Starting analysis for: {filename}, s3_key: {s3_key}")
-    print(f"[nexo_analyze_file] File data size: {len(file_data) if file_data else 0} bytes")
 
-    # Emit detailed Agent Room event with file info
-    file_size_kb = len(file_data) // 1024 if file_data else 0
+    # Emit initial Agent Room event
     emit_agent_event(
         agent_id="nexo_import",
         status="trabalhando",
-        message=f"Recebi o arquivo {filename} ({file_size_kb} KB). Analisando estrutura...",
+        message=f"Recebi o arquivo {filename}. Analisando estrutura...",
         session_id=session_id,
-        details={"filename": filename, "size_kb": file_size_kb},
+        details={"filename": filename},
     )
 
-    # Pass user_id for Memory-First architecture (retrieve prior knowledge)
-    result = await agent.analyze_file_intelligently(
-        filename=filename,
-        s3_key=s3_key,
-        file_content=file_data,
-        prior_knowledge=prior_knowledge,
-        user_id=user_id,  # Required for TRUE agentic pattern (REMEMBER phase)
+    # Invoke NexoImportAgent via A2A Protocol
+    result = await _invoke_agent_a2a(
+        agent_id="nexo_import",
+        action="analyze_file",
+        payload={
+            "filename": filename,
+            "s3_key": s3_key,
+            "prior_knowledge": prior_knowledge,
+            "user_id": user_id,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
     print(f"[nexo_analyze_file] Agent raw result: {result}")
@@ -3126,20 +3301,21 @@ async def _nexo_get_questions(payload: dict, session_id: str) -> dict:
 
     Returns:
         List of questions with options and importance levels, plus updated session state
+
+    Architecture:
+    - Invokes NexoImportAgent in dedicated runtime via A2A Protocol
     """
     session_state = payload.get("session_state")
 
     if not session_state:
         return {"success": False, "error": "session_state is required (stateless architecture)"}
 
-    from agents.nexo_import_agent import NexoImportAgent
-
-    agent = NexoImportAgent()
-    # Restore session from frontend state
-    session = agent._restore_session(session_state)
-    result = await agent.get_questions(session=session)
-
-    return result
+    return await _invoke_agent_a2a(
+        agent_id="nexo_import",
+        action="get_questions",
+        payload={"session_state": session_state},
+        session_id=session_id,
+    )
 
 
 async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
@@ -3156,10 +3332,12 @@ async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
 
     Returns:
         Updated session state with refined mappings based on answers
+
+    Architecture:
+    - Invokes NexoImportAgent in dedicated runtime via A2A Protocol
     """
     session_state = payload.get("session_state")
     answers = payload.get("answers", {})
-    # FIX (January 2026): Accept global user feedback for AI interpretation
     user_feedback = payload.get("user_feedback")
 
     if not session_state:
@@ -3168,18 +3346,16 @@ async def _nexo_submit_answers(payload: dict, session_id: str) -> dict:
     if not answers:
         return {"success": False, "error": "answers is required"}
 
-    from agents.nexo_import_agent import NexoImportAgent
-
-    agent = NexoImportAgent()
-    # Restore session from frontend state
-    session = agent._restore_session(session_state)
-    result = await agent.submit_answers(
-        session=session,
-        answers=answers,
-        user_feedback=user_feedback,  # FIX: Pass global feedback to agent
+    return await _invoke_agent_a2a(
+        agent_id="nexo_import",
+        action="submit_answers",
+        payload={
+            "session_state": session_state,
+            "answers": answers,
+            "user_feedback": user_feedback,
+        },
+        session_id=session_id,
     )
-
-    return result
 
 
 async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
@@ -3197,6 +3373,9 @@ async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
 
     Returns:
         Learning confirmation with episode_id and patterns stored
+
+    Architecture:
+    - Invokes NexoImportAgent in dedicated runtime via A2A Protocol
     """
     session_state = payload.get("session_state")
     import_result = payload.get("import_result", {})
@@ -3206,19 +3385,17 @@ async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
     if not session_state:
         return {"success": False, "error": "session_state is required (stateless architecture)"}
 
-    from agents.nexo_import_agent import NexoImportAgent
-
-    agent = NexoImportAgent()
-    # Restore session from frontend state
-    session = agent._restore_session(session_state)
-    result = await agent.learn_from_import(
-        session=session,
-        import_result=import_result,
-        user_id=user_id,
-        user_corrections=user_corrections,
+    return await _invoke_agent_a2a(
+        agent_id="nexo_import",
+        action="learn_from_import",
+        payload={
+            "session_state": session_state,
+            "import_result": import_result,
+            "user_corrections": user_corrections,
+            "user_id": user_id,
+        },
+        session_id=session_id,
     )
-
-    return result
 
 
 async def _nexo_execute_import(payload: dict, user_id: str, session_id: str) -> dict:
@@ -3429,7 +3606,7 @@ async def _nexo_execute_import(payload: dict, user_id: str, session_id: str) -> 
     }
 
 
-async def _nexo_get_prior_knowledge(payload: dict, user_id: str) -> dict:
+async def _nexo_get_prior_knowledge(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Retrieve prior knowledge before file analysis (RECALL phase).
 
@@ -3447,31 +3624,30 @@ async def _nexo_get_prior_knowledge(payload: dict, user_id: str) -> dict:
         - suggested_mappings: Column mappings from successful imports
         - confidence_boost: Whether to trust auto-mappings
         - reflections: Cross-session insights
+
+    Architecture:
+    - Invokes NexoImportAgent in dedicated runtime via A2A Protocol
     """
     filename = payload.get("filename", "")
-    # NOTE: file_analysis is OPTIONAL - we can match by filename pattern alone
-    # for initial recall. Full signature matching happens after analysis.
-    file_analysis = payload.get("file_analysis")  # Can be None
+    file_analysis = payload.get("file_analysis")
 
     if not filename:
         return {"success": False, "error": "filename is required"}
 
-    # file_analysis is OPTIONAL - LearningAgent can match by filename pattern alone
-    # This fixes the bug where prior knowledge was never retrieved because
-    # file_analysis isn't available when frontend calls this before analysis
-    from agents.nexo_import_agent import NexoImportAgent
-
-    agent = NexoImportAgent()
-    result = await agent.get_prior_knowledge(
-        filename=filename,
-        file_analysis=file_analysis,  # Can be None - agent handles this
+    return await _invoke_agent_a2a(
+        agent_id="nexo_import",
+        action="get_prior_knowledge",
+        payload={
+            "filename": filename,
+            "file_analysis": file_analysis,
+            "user_id": user_id,
+        },
+        session_id=session_id,
         user_id=user_id,
     )
 
-    return result
 
-
-async def _nexo_get_adaptive_threshold(payload: dict, user_id: str) -> dict:
+async def _nexo_get_adaptive_threshold(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Get adaptive confidence threshold based on historical patterns.
 
@@ -3487,25 +3663,39 @@ async def _nexo_get_adaptive_threshold(payload: dict, user_id: str) -> dict:
         - threshold: Confidence threshold (0.0 to 1.0)
         - reason: Explanation for threshold choice
         - history_count: Number of similar imports in history
+
+    Architecture:
+    - Invokes NexoImportAgent in dedicated runtime via A2A Protocol
     """
     filename = payload.get("filename", "")
 
     if not filename:
         return {"success": False, "error": "filename is required"}
 
-    from agents.nexo_import_agent import NexoImportAgent
-
-    agent = NexoImportAgent()
-    threshold = await agent.get_adaptive_threshold(
-        filename=filename,
+    result = await _invoke_agent_a2a(
+        agent_id="nexo_import",
+        action="get_adaptive_threshold",
+        payload={
+            "filename": filename,
+            "user_id": user_id,
+        },
+        session_id=session_id,
         user_id=user_id,
     )
 
-    return {
-        "success": True,
-        "threshold": threshold,
-        "filename": filename,
-    }
+    # Extract threshold from result or return the whole result
+    if isinstance(result, dict) and result.get("success"):
+        return result
+
+    # Wrap threshold value if agent returns just a number
+    if isinstance(result, (int, float)):
+        return {
+            "success": True,
+            "threshold": result,
+            "filename": filename,
+        }
+
+    return result
 
 
 async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
@@ -3523,13 +3713,15 @@ async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
 
     Returns:
         Processing configuration ready for execute_import, plus updated session state
+
+    Architecture:
+    - Invokes NexoImportAgent in dedicated runtime via A2A Protocol
     """
     session_state = payload.get("session_state")
 
     if not session_state:
         return {"success": False, "error": "session_state is required (stateless architecture)"}
 
-    from agents.nexo_import_agent import NexoImportAgent
     from tools.agent_room_service import emit_agent_event
 
     # Emit event: starting to prepare import
@@ -3540,13 +3732,15 @@ async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
         session_id=session_id,
     )
 
-    agent = NexoImportAgent()
-    # Restore session from frontend state
-    session = agent._restore_session(session_state)
-    result = await agent.prepare_for_processing(session=session)
+    result = await _invoke_agent_a2a(
+        agent_id="nexo_import",
+        action="prepare_for_processing",
+        payload={"session_state": session_state},
+        session_id=session_id,
+    )
 
     # Emit completion event
-    if result.get("success"):
+    if isinstance(result, dict) and result.get("success"):
         item_count = result.get("item_count", 0)
         emit_agent_event(
             agent_id="nexo_import",
@@ -3559,7 +3753,7 @@ async def _nexo_prepare_processing(payload: dict, session_id: str) -> dict:
         emit_agent_event(
             agent_id="nexo_import",
             status="problema",
-            message=f"Erro ao preparar importação: {result.get('error', 'erro desconhecido')}",
+            message=f"Erro ao preparar importação: {result.get('error', 'erro desconhecido') if isinstance(result, dict) else 'erro desconhecido'}",
             session_id=session_id,
         )
 
@@ -3692,7 +3886,7 @@ async def _get_import_schema(payload: dict) -> dict:
 # =============================================================================
 
 
-async def _research_equipment(payload: dict, user_id: str) -> dict:
+async def _research_equipment(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Research documentation for a single piece of equipment.
 
@@ -3710,8 +3904,6 @@ async def _research_equipment(payload: dict, user_id: str) -> dict:
     Returns:
         Research result with status, sources found, and documents downloaded
     """
-    from agents.equipment_research_agent import EquipmentResearchAgent
-
     part_number = payload.get("part_number", "")
     description = payload.get("description", "")
     serial_number = payload.get("serial_number")
@@ -3724,40 +3916,25 @@ async def _research_equipment(payload: dict, user_id: str) -> dict:
     if not description:
         return {"success": False, "error": "description is required"}
 
-    agent = EquipmentResearchAgent()
-    result = await agent.research_equipment(
-        part_number=part_number,
-        description=description,
-        serial_number=serial_number,
-        manufacturer=manufacturer,
-        additional_info=additional_info,
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="equipment_research",
+        action="research_equipment",
+        payload={
+            "part_number": part_number,
+            "description": description,
+            "serial_number": serial_number,
+            "manufacturer": manufacturer,
+            "additional_info": additional_info,
+        },
+        session_id=session_id,
+        user_id=user_id,
     )
 
-    # Convert dataclass to dict for JSON serialization
-    return {
-        "success": result.status.value in ["COMPLETED", "NO_DOCS_FOUND"],
-        "part_number": result.part_number,
-        "status": result.status.value,
-        "search_queries": result.search_queries,
-        "sources_found": len(result.sources_found),
-        "documents_downloaded": [
-            {
-                "s3_key": doc.s3_key,
-                "filename": doc.filename,
-                "document_type": doc.document_type,
-                "size_bytes": doc.size_bytes,
-            }
-            for doc in result.documents_downloaded
-        ],
-        "s3_prefix": result.s3_prefix,
-        "summary": result.summary,
-        "confidence": result.confidence.to_dict() if result.confidence else None,
-        "reasoning_trace": result.reasoning_trace,
-        "error": result.error,
-    }
 
-
-async def _research_equipment_batch(payload: dict, user_id: str) -> dict:
+async def _research_equipment_batch(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Research documentation for multiple equipment items.
 
@@ -3774,8 +3951,6 @@ async def _research_equipment_batch(payload: dict, user_id: str) -> dict:
     Returns:
         Batch result with status for each item
     """
-    from agents.equipment_research_agent import EquipmentResearchAgent
-
     equipment_list = payload.get("equipment_list", [])
 
     if not equipment_list:
@@ -3784,33 +3959,28 @@ async def _research_equipment_batch(payload: dict, user_id: str) -> dict:
     if len(equipment_list) > 50:
         return {"success": False, "error": "Maximum 50 items per batch"}
 
-    agent = EquipmentResearchAgent()
-    results = await agent.research_batch(equipment_list=equipment_list)
-
-    return {
-        "success": True,
-        "total_items": len(equipment_list),
-        "completed": sum(1 for r in results if r.status.value == "COMPLETED"),
-        "no_docs_found": sum(1 for r in results if r.status.value == "NO_DOCS_FOUND"),
-        "failed": sum(1 for r in results if r.status.value == "FAILED"),
-        "rate_limited": sum(1 for r in results if r.status.value == "RATE_LIMITED"),
-        "results": [
-            {
-                "part_number": r.part_number,
-                "status": r.status.value,
-                "documents_downloaded": len(r.documents_downloaded),
-                "summary": r.summary,
-            }
-            for r in results
-        ],
-    }
+    # =================================================================
+    # A2A Protocol (100% Agentic Architecture)
+    # =================================================================
+    return await _invoke_agent_a2a(
+        agent_id="equipment_research",
+        action="research_batch",
+        payload={
+            "equipment_list": equipment_list,
+        },
+        session_id=session_id,
+        user_id=user_id,
+    )
 
 
-async def _get_research_status(payload: dict) -> dict:
+async def _get_research_status(payload: dict, session_id: str = "default") -> dict:
     """
     Get research status for a part number.
 
     Checks if documentation research has been completed for this item.
+
+    Note: This handler uses direct S3 access, not the EquipmentResearchAgent.
+    Session ID is passed for consistency but not currently used.
 
     Payload:
         part_number: Part number to check
@@ -3867,12 +4037,15 @@ async def _get_research_status(payload: dict) -> dict:
     }
 
 
-async def _query_equipment_docs(payload: dict, user_id: str) -> dict:
+async def _query_equipment_docs(payload: dict, user_id: str, session_id: str = "default") -> dict:
     """
     Query equipment documentation using Bedrock Knowledge Base.
 
     Searches the KB for relevant documentation and returns
     answers with citations to source documents.
+
+    Note: This handler uses Bedrock Knowledge Base directly, not an agent.
+    Session ID is passed for consistency but not currently used.
 
     Payload:
         query: Natural language question about equipment
@@ -3909,6 +4082,7 @@ async def _query_equipment_docs(payload: dict, user_id: str) -> dict:
 async def _trigger_equipment_research_async(
     imported_items: list,
     user_id: str,
+    session_id: str = "default",
 ) -> None:
     """
     Trigger equipment research asynchronously after import.
@@ -3919,10 +4093,12 @@ async def _trigger_equipment_research_async(
     Args:
         imported_items: List of imported item dicts
         user_id: User who performed the import
+        session_id: Session ID for tracking
+
+    Architecture:
+    - Invokes EquipmentResearchAgent in dedicated runtime via A2A Protocol
     """
     try:
-        from agents.equipment_research_agent import EquipmentResearchAgent
-
         # Extract unique part numbers with descriptions
         seen_pns = set()
         equipment_to_research = []
@@ -3943,14 +4119,20 @@ async def _trigger_equipment_research_async(
 
         print(f"[EquipmentResearch] Triggering research for {len(equipment_to_research)} part numbers")
 
-        # Research in batch (respects rate limits)
-        agent = EquipmentResearchAgent()
-        results = await agent.research_batch(
-            equipment_list=equipment_to_research[:20],  # Limit to 20 per import
+        # Research in batch via A2A Protocol
+        result = await _invoke_agent_a2a(
+            agent_id="equipment_research",
+            action="research_batch",
+            payload={
+                "equipment_list": equipment_to_research[:20],  # Limit to 20 per import
+            },
+            session_id=session_id,
+            user_id=user_id,
         )
 
-        completed = sum(1 for r in results if r.status.value == "COMPLETED")
-        print(f"[EquipmentResearch] Completed: {completed}/{len(results)}")
+        if isinstance(result, dict):
+            completed = result.get("completed", 0)
+            print(f"[EquipmentResearch] Completed: {completed}/{len(equipment_to_research[:20])}")
 
     except Exception as e:
         # Log but don't fail - research is non-blocking

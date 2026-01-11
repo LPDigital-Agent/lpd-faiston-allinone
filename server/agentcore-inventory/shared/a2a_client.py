@@ -25,12 +25,36 @@
 import os
 import json
 import uuid
-from typing import Dict, Any, Optional, List
+import asyncio
+import random
+import logging
+from typing import Dict, Any, Optional, List, Set
 from dataclasses import dataclass, field
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Lazy imports for cold start optimization
 _httpx = None
 _boto3 = None
+
+# =============================================================================
+# Retry Configuration (AWS Best Practices)
+# =============================================================================
+
+# Retryable HTTP status codes
+RETRYABLE_STATUS_CODES: Set[int] = {
+    429,  # Too Many Requests (throttling)
+    502,  # Bad Gateway
+    503,  # Service Unavailable
+    504,  # Gateway Timeout
+}
+
+# Retry configuration
+MAX_RETRIES = 5
+BASE_DELAY = 1.0  # seconds
+MAX_DELAY = 16.0  # seconds
+JITTER_RANGE = 0.5  # ±50% jitter
 
 
 def _get_httpx():
@@ -330,20 +354,71 @@ class A2AClient:
         try:
             httpx = _get_httpx()
 
-            # Make the request with SigV4 auth (via botocore)
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                # For AgentCore, we need SigV4 signing
-                # In production, this is handled by the AgentCore runtime
-                response = await client.post(
-                    agent_url,
-                    json=a2a_request,
-                    headers=headers,
-                )
+            # =================================================================
+            # Exponential Backoff with Jitter (AWS Best Practices)
+            # =================================================================
+            last_exception = None
 
-                response.raise_for_status()
-                response_data = response.json()
+            for attempt in range(MAX_RETRIES):
+                try:
+                    async with httpx.AsyncClient(timeout=timeout) as client:
+                        response = await client.post(
+                            agent_url,
+                            json=a2a_request,
+                            headers=headers,
+                        )
 
-            return self._parse_a2a_response(response_data, agent_id, message_id)
+                        # Check if retryable status code
+                        if response.status_code in RETRYABLE_STATUS_CODES:
+                            # Calculate backoff delay with jitter
+                            delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+                            jitter = delay * JITTER_RANGE * (2 * random.random() - 1)
+                            delay = delay + jitter
+
+                            # Check Retry-After header
+                            retry_after = response.headers.get("Retry-After")
+                            if retry_after:
+                                try:
+                                    delay = max(delay, float(retry_after))
+                                except ValueError:
+                                    pass
+
+                            logger.warning(
+                                f"[A2A] {response.status_code} from {agent_id}, "
+                                f"retry {attempt + 1}/{MAX_RETRIES} after {delay:.2f}s"
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+
+                        response.raise_for_status()
+                        response_data = response.json()
+
+                        return self._parse_a2a_response(response_data, agent_id, message_id)
+
+                except httpx.TimeoutException as e:
+                    last_exception = e
+                    if attempt < MAX_RETRIES - 1:
+                        delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+                        jitter = delay * JITTER_RANGE * (2 * random.random() - 1)
+                        delay = delay + jitter
+                        logger.warning(
+                            f"[A2A] Timeout calling {agent_id}, "
+                            f"retry {attempt + 1}/{MAX_RETRIES} after {delay:.2f}s"
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        raise
+
+                except httpx.HTTPStatusError as e:
+                    # Non-retryable HTTP errors
+                    if e.response.status_code not in RETRYABLE_STATUS_CODES:
+                        raise
+                    last_exception = e
+
+            # Max retries exceeded
+            if last_exception:
+                raise last_exception
+            raise Exception(f"Max retries ({MAX_RETRIES}) exceeded for {agent_id}")
 
         except Exception as e:
             audit.error(

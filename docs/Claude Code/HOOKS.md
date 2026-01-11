@@ -2,54 +2,122 @@
 
 This document describes the custom Claude Code hooks configured for this repository.
 
+## Purpose: Continuous Context
+
+These hooks implement **CONTINUOUS CONTEXT** so Claude Code never drifts and always has:
+1. **IMMUTABLE rules** injected before every prompt
+2. **CONTEXT_SNAPSHOT.md** injected before every prompt
+3. **CONTEXT_SNAPSHOT.md** updated after every response
+4. **WORKLOG.md** appended after every response (audit trail)
+
+---
+
 ## Enabled Hooks
 
 ### 1. UserPromptSubmit: Context Injection
 
-**Script:** `.claude/hooks/inject_claude_rules.sh`
+**Script:** `.claude/hooks/inject_context.sh`
 
-**Purpose:** Automatically injects the IMMUTABLE block from `CLAUDE.md` into every prompt's context, ensuring critical rules are always "fresh" in Claude's memory.
+**Purpose:** Injects IMMUTABLE rules AND current project context before every prompt.
 
-**What it does:**
-- Extracts lines 13-488 from `CLAUDE.md` (the IMMUTABLE block)
-- Falls back to first 160 lines if extraction fails
-- Outputs extracted rules to stdout (Claude Code adds to context)
+**What it injects:**
+1. **IMMUTABLE block** from `CLAUDE.md`
+   - Extracted dynamically using markers (not hardcoded line numbers)
+   - Start marker: `IMMUTABLE BLOCK – DO NOT MODIFY OR REMOVE`
+   - End marker: `END OF IMMUTABLE BLOCK`
+   - Fallback: first 200 lines if markers not found
 
-### 2. Stop: Work Log Memory
+2. **CONTEXT_SNAPSHOT.md**
+   - Current project state (goal, plan, last turn summary, constraints)
+   - If file doesn't exist yet, injects placeholder message
 
-**Script:** `.claude/hooks/post_turn_memory.py`
+**Output format:**
+```
+--- INJECTED CLAUDE.MD RULES (IMMUTABLE BLOCK) ---
+[IMMUTABLE block content]
+--- END INJECTED RULES ---
 
-**Purpose:** Maintains a running, human-readable record of work and decisions in `docs/WORKLOG.md`.
+--- CURRENT PROJECT CONTEXT SNAPSHOT ---
+[CONTEXT_SNAPSHOT.md content or placeholder]
+--- END CONTEXT SNAPSHOT ---
+```
 
-**What it does:**
-- Reads transcript from Claude Code's payload
-- Extracts latest user message and assistant response
-- Appends timestamped entry to `docs/WORKLOG.md`
-- **HARDCORE MODE:** Blocks if update fails (see below)
+---
+
+### 2. Stop: Post-Turn Update
+
+**Script:** `.claude/hooks/post_turn_update.py`
+
+**Purpose:** Updates context files after each Claude Code response.
+
+**What it updates:**
+
+#### A. `docs/CONTEXT_SNAPSHOT.md` (OVERWRITE)
+
+Fixed format (~30 lines):
+```markdown
+# CONTEXT SNAPSHOT (AUTO)
+Updated: <UTC timestamp>
+
+## Current Goal
+- <inferred from last user message>
+
+## Current Plan (Next 3 Steps)
+1. <step>
+2. <step>
+3. <step>
+
+## Last Turn Summary
+- User: <max 240 chars>
+- Assistant: <max 240 chars>
+
+## Active Constraints (from CLAUDE.md)
+- <6 key constraints>
+
+## Risks / Blockers
+- <if any>
+```
+
+#### B. `docs/WORKLOG.md` (APPEND)
+
+Audit trail format:
+```markdown
+## Turn Log — <UTC timestamp>
+
+**User:** <max 1200 chars>
+
+**Assistant:** <max 1200 chars>
+
+---
+```
+
+---
 
 ## HARDCORE Blocking Mode
 
-The Stop hook implements **blocking on failure**. If the WORKLOG update fails for any reason, the hook returns:
+The Stop hook implements **blocking on failure**. If any update fails, the hook returns:
 
 ```json
-{"decision": "block", "reason": "WORKLOG update failed: <reason>. Fix hooks or disable block mode."}
+{"decision": "block", "reason": "Post-turn context update failed: <reason>. Fix hooks or set CLAUDE_HOOKS_ALLOW_FAIL=true temporarily."}
 ```
 
-This ensures failures cannot be silently ignored.
+This ensures context updates cannot be silently skipped.
 
 ### Escape Hatch
 
-To temporarily disable blocking (e.g., for debugging):
+To temporarily disable blocking (for debugging or emergencies):
 
 ```bash
 export CLAUDE_HOOKS_ALLOW_FAIL=true
 ```
 
-With this set, the hook will log errors to stderr but NOT block.
+With this set, the hook logs errors to stderr but does **NOT** block.
+
+---
 
 ## Configuration Location
 
-Hooks are configured in `.claude/settings.local.json` (not committed by default).
+Hooks are configured in `.claude/settings.local.json`:
 
 ```json
 {
@@ -59,7 +127,7 @@ Hooks are configured in `.claude/settings.local.json` (not committed by default)
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_claude_rules.sh\""
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/inject_context.sh\""
           }
         ]
       }
@@ -69,7 +137,7 @@ Hooks are configured in `.claude/settings.local.json` (not committed by default)
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post_turn_memory.py\""
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/post_turn_update.py\""
           }
         ]
       }
@@ -77,6 +145,8 @@ Hooks are configured in `.claude/settings.local.json` (not committed by default)
   }
 }
 ```
+
+---
 
 ## Enable/Disable Hooks
 
@@ -93,94 +163,132 @@ Add to settings:
 
 Remove or comment out the specific hook entry in `settings.local.json`.
 
-## Promote to Shared Settings
-
-Once verified, promote hooks to the shared settings file:
-
-1. Copy the hooks section from `.claude/settings.local.json`
-2. Paste into `.claude/settings.json`
-3. Commit `.claude/settings.json`
-
-**Note:** `.claude/settings.local.json` is gitignored and takes precedence over `.claude/settings.json`.
+---
 
 ## Testing Hooks
 
-### Test Context Injection Hook
+### Test 1: Context Injection
 
 ```bash
-bash .claude/hooks/inject_claude_rules.sh | head -40
+cd /Users/fabio.santos/LPD\ Repos/lpd-faiston-allinone
+bash .claude/hooks/inject_context.sh | head -80
 ```
 
-Should output:
+Expected output:
 ```
 --- INJECTED CLAUDE.MD RULES (IMMUTABLE BLOCK) ---
 <!-- ===================================================== -->
-<!-- IMMUTABLE BLOCK – DO NOT MODIFY OR REMOVE       -->
+<!-- 🔒 IMMUTABLE BLOCK – DO NOT MODIFY OR REMOVE 🔒       -->
 ...
+--- END INJECTED RULES ---
+
+--- CURRENT PROJECT CONTEXT SNAPSHOT ---
+# CONTEXT SNAPSHOT (AUTO)
+...
+--- END CONTEXT SNAPSHOT ---
 ```
 
-### Test Work Log Hook (Success)
+### Test 2: Stop Hook (Success)
 
 ```bash
 # Create mock transcript
-echo '{"role":"user","content":"Test user message"}' > /tmp/claude_transcript.jsonl
-echo '{"role":"assistant","content":"Test assistant response"}' >> /tmp/claude_transcript.jsonl
+echo '{"role":"user","content":"Test user message for hooks verification"}' > /tmp/claude_transcript.jsonl
+echo '{"role":"assistant","content":"Test assistant response - hooks are working correctly"}' >> /tmp/claude_transcript.jsonl
 
 # Run hook
-echo '{"transcript_path":"/tmp/claude_transcript.jsonl","stop_hook_active":false}' | python3 .claude/hooks/post_turn_memory.py
+cd /Users/fabio.santos/LPD\ Repos/lpd-faiston-allinone
+echo '{"transcript_path":"/tmp/claude_transcript.jsonl","stop_hook_active":false}' | python3 .claude/hooks/post_turn_update.py
 
-# Check result
-cat docs/WORKLOG.md
+# Verify CONTEXT_SNAPSHOT.md
+cat docs/CONTEXT_SNAPSHOT.md
+
+# Verify WORKLOG.md
+tail -20 docs/WORKLOG.md
 ```
 
-### Test Work Log Hook (Failure/Blocking)
+### Test 3: Stop Hook (Blocking on Failure)
 
 ```bash
-# Test with non-existent file
-echo '{"transcript_path":"/tmp/does_not_exist.jsonl","stop_hook_active":false}' | python3 .claude/hooks/post_turn_memory.py
+echo '{"transcript_path":"/tmp/does_not_exist.jsonl","stop_hook_active":false}' | python3 .claude/hooks/post_turn_update.py
 ```
 
-Should output:
+Expected output:
 ```json
-{"decision":"block","reason":"WORKLOG update failed: Transcript file not found: /tmp/does_not_exist.jsonl. Fix hooks or disable block mode."}
+{"decision":"block","reason":"Post-turn context update failed: Transcript file not found: /tmp/does_not_exist.jsonl. Fix hooks or set CLAUDE_HOOKS_ALLOW_FAIL=true temporarily."}
 ```
 
-### Test Escape Hatch
+### Test 4: Escape Hatch
 
 ```bash
-CLAUDE_HOOKS_ALLOW_FAIL=true \
-echo '{"transcript_path":"/tmp/does_not_exist.jsonl","stop_hook_active":false}' | python3 .claude/hooks/post_turn_memory.py
+CLAUDE_HOOKS_ALLOW_FAIL=true echo '{"transcript_path":"/tmp/does_not_exist.jsonl","stop_hook_active":false}' | python3 .claude/hooks/post_turn_update.py
 ```
 
-Should NOT output blocking JSON (logs to stderr instead).
+Expected: No blocking JSON (error logged to stderr only).
 
-## Safety Notes
+---
+
+## Safety Features
 
 1. **No infinite loops:** The `stop_hook_active` flag prevents recursion
-2. **No secrets:** Scripts do not read or print sensitive files
-3. **Fail-safe:** Context injection failures don't block (just warn)
-4. **Stdlib only:** Python hook uses no external dependencies
+2. **No secrets:** Scripts never read or print sensitive files (.env, credentials)
+3. **Fail-safe injection:** Context injection failures don't block (just warn)
+4. **Python stdlib only:** No external dependencies
+5. **POSIX bash:** Uses `set -euo pipefail` for safe execution
+
+---
 
 ## Troubleshooting
 
 ### Hook not running?
 
 1. Check `disableAllHooks` is not set to `true`
-2. Verify script is executable: `chmod +x .claude/hooks/*.sh`
-3. Check settings.local.json syntax with a JSON validator
+2. Verify scripts are executable: `chmod +x .claude/hooks/*.sh .claude/hooks/*.py`
+3. Validate `settings.local.json` syntax
 
-### WORKLOG not updating?
+### CONTEXT_SNAPSHOT.md not updating?
 
-1. Ensure `docs/` directory exists
-2. Check for file permission issues
-3. Verify transcript path is valid
-4. Check stderr for error messages
+1. Check `docs/` directory exists
+2. Verify file permissions
+3. Check stderr for error messages: `python3 .claude/hooks/post_turn_update.py 2>&1`
 
 ### Getting blocked unexpectedly?
 
-Set escape hatch:
+Set escape hatch and investigate:
 ```bash
 export CLAUDE_HOOKS_ALLOW_FAIL=true
+# Then run Claude Code and check stderr for actual error
 ```
 
-Then investigate the root cause in hook output.
+### IMMUTABLE block not extracting correctly?
+
+Test extraction directly:
+```bash
+# Check markers exist
+grep -n "IMMUTABLE BLOCK" CLAUDE.md
+
+# Test extraction
+sed -n '/IMMUTABLE BLOCK – DO NOT MODIFY OR REMOVE/,/END OF IMMUTABLE BLOCK/p' CLAUDE.md | head -50
+```
+
+---
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `.claude/hooks/inject_context.sh` | UserPromptSubmit hook (context injection) |
+| `.claude/hooks/post_turn_update.py` | Stop hook (context + worklog update) |
+| `docs/CONTEXT_SNAPSHOT.md` | Current project state (auto-updated) |
+| `docs/WORKLOG.md` | Audit trail of all turns (append-only) |
+| `.claude/settings.local.json` | Hook configuration (local, not committed) |
+
+---
+
+## CLAUDE.md Reference
+
+These hooks implement the mandatory policy from CLAUDE.md (lines 68-72):
+
+> **HOOKS ENFORCEMENT (MANDATORY):** Claude Code Hooks MUST be enabled to enforce continuous rule priming and continuous session context:
+> - `UserPromptSubmit` MUST inject essential rules from `CLAUDE.md` (prefer IMMUTABLE block) AND inject the current living context from `docs/CONTEXT_SNAPSHOT.md`.
+> - `Stop` MUST update `docs/CONTEXT_SNAPSHOT.md` after every response (post-turn context refresh) AND append to `docs/WORKLOG.md` (audit trail).
+> - If the post-turn update fails, the Stop hook MUST **BLOCK** completion (unless `CLAUDE_HOOKS_ALLOW_FAIL=true` is explicitly set as a temporary override).

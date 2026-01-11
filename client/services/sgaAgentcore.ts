@@ -1667,16 +1667,31 @@ export async function queryEquipmentDocs(
 // =============================================================================
 
 /**
+ * Options for getting Agent Room data.
+ */
+export interface GetAgentRoomDataOptions {
+  /** Filter events by session ID (A2A session context) */
+  sessionId?: string;
+  /** Maximum number of live feed events to return (default: 50) */
+  limit?: number;
+}
+
+/**
  * Get all Agent Room data for the transparency window.
  *
  * Returns humanized agent statuses, live feed events, learning stories,
  * active workflows, and pending decisions in a single call.
  *
+ * @param options - Optional filters (sessionId for A2A context, limit)
  * @returns Agent Room data with all panels
  */
-export async function getAgentRoomData(): Promise<AgentCoreResponse<AgentRoomDataResponse>> {
+export async function getAgentRoomData(
+  options?: GetAgentRoomDataOptions,
+): Promise<AgentCoreResponse<AgentRoomDataResponse>> {
   return invokeSGAAgentCore<AgentRoomDataResponse>({
     action: 'get_agent_room_data',
+    ...(options?.sessionId && { session_id: options.sessionId }),
+    ...(options?.limit && { limit: options.limit }),
   });
 }
 

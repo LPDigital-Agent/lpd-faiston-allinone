@@ -61,6 +61,10 @@ export interface UseAgentRoomStreamOptions {
   enabled?: boolean;
   /** Polling interval in ms (default: 5000) */
   refetchInterval?: number;
+  /** Filter events by session ID (A2A session context) */
+  sessionId?: string;
+  /** Maximum number of live feed events to return (default: 50) */
+  limit?: number;
 }
 
 export interface UseAgentRoomStreamReturn extends AgentRoomStreamState {
@@ -179,6 +183,8 @@ export function useAgentRoomStream(
   const {
     enabled = true,
     refetchInterval = 5000,
+    sessionId,
+    limit,
   } = options;
 
   const [isPaused, setPaused] = useState(false);
@@ -195,15 +201,17 @@ export function useAgentRoomStream(
     refetch,
     dataUpdatedAt,
   } = useQuery({
-    queryKey: ['agent-room-data'],
+    // Include sessionId in query key for proper cache separation
+    queryKey: ['agent-room-data', sessionId ?? 'all'],
     queryFn: async (): Promise<AgentRoomDataResponse | null> => {
       // PRODUCTION: Always fetch real data from backend
       try {
-        const response = await getAgentRoomData();
+        const response = await getAgentRoomData({ sessionId, limit });
         console.log('[Agent Room] Data fetched:', {
           success: response.data?.success,
           liveFeedCount: response.data?.liveFeed?.length ?? 0,
           agentsCount: response.data?.agents?.length ?? 0,
+          sessionId: sessionId ?? 'all',
         });
         return response.data;
       } catch (err) {
