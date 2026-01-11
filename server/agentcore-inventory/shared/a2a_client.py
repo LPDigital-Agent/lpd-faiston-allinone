@@ -159,6 +159,73 @@ class A2AClient:
             self._ssm_client = boto3.client("ssm", region_name=self.region)
         return self._ssm_client
 
+    def _get_session(self):
+        """Get boto3 session for credential management."""
+        if not hasattr(self, '_boto3_session') or self._boto3_session is None:
+            boto3 = _get_boto3()
+            self._boto3_session = boto3.Session()
+        return self._boto3_session
+
+    def _get_credentials(self):
+        """
+        Get fresh AWS credentials.
+
+        Uses boto3 Session which handles credential refresh automatically
+        for temporary credentials (from IAM roles, instance profiles, etc.)
+        """
+        session = self._get_session()
+        credentials = session.get_credentials()
+        if credentials is None:
+            raise ValueError(
+                "No AWS credentials found. Ensure IAM role is configured "
+                "or AWS credentials are available in environment."
+            )
+        return credentials.get_frozen_credentials()
+
+    def _sign_request(
+        self,
+        method: str,
+        url: str,
+        payload: Dict[str, Any]
+    ) -> Dict[str, str]:
+        """
+        Sign HTTP request with AWS SigV4 for AgentCore Runtime.
+
+        The InvokeAgentRuntime API requires SigV4 authentication.
+        This follows the same pattern as mcp_gateway_client.py.
+
+        Args:
+            method: HTTP method (POST, GET, etc.)
+            url: Full request URL
+            payload: Request body as dictionary
+
+        Returns:
+            Dictionary of signed headers to include in request
+        """
+        from botocore.auth import SigV4Auth
+        from botocore.awsrequest import AWSRequest
+
+        body = json.dumps(payload)
+
+        # Create AWS request object
+        request = AWSRequest(
+            method=method,
+            url=url,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+        )
+
+        # Sign with SigV4 for bedrock-agentcore service
+        credentials = self._get_credentials()
+        SigV4Auth(credentials, "bedrock-agentcore", self.region).add_auth(request)
+
+        logger.debug(f"[A2A] Request signed for bedrock-agentcore")
+
+        return dict(request.headers)
+
     async def get_agent_registry(self) -> Dict[str, Dict]:
         """
         Get agent registry from SSM Parameter Store.
@@ -342,12 +409,11 @@ class A2AClient:
         message_id = str(uuid.uuid4())
         a2a_request = self._build_a2a_request(payload, message_id)
 
-        # Build headers
-        headers = {
-            "Content-Type": "application/json",
-        }
+        # Sign request with SigV4 (REQUIRED for InvokeAgentRuntime API)
+        # FIX: Previous code used plain headers without SigV4 auth, causing 403 Forbidden
+        headers = self._sign_request("POST", agent_url, a2a_request)
 
-        # Add session ID if provided
+        # Add session ID if provided (after signing - not included in signature)
         if session_id:
             headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] = session_id
 
@@ -465,11 +531,14 @@ class A2AClient:
         message_id = str(uuid.uuid4())
         a2a_request = self._build_a2a_request(payload, message_id)
 
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "text/event-stream",
-        }
+        # Sign request with SigV4 (REQUIRED for InvokeAgentRuntime API)
+        # FIX: Previous code used plain headers without SigV4 auth, causing 403 Forbidden
+        headers = self._sign_request("POST", agent_url, a2a_request)
 
+        # Override Accept header for streaming
+        headers["Accept"] = "text/event-stream"
+
+        # Add session ID if provided (after signing - not included in signature)
         if session_id:
             headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] = session_id
 
