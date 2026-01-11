@@ -180,3 +180,82 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## Turn Log — 2026-01-11 20:01:24 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-11 20:13:09 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-11 20:20:04 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-11 20:23:21 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-11 20:34:42 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-11 20:35:05 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-11 20:37:57 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-11 20:38:56 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+
+---
+
+## 2026-01-11 21:15:00 UTC
+
+**User asked:** Investigate 403 Forbidden error on NEXO import agent A2A invocation
+
+**Assistant did:**
+- Diagnosed root cause: SSM agent registry stored URLs with short runtime ID instead of full ARN
+- Fixed `terraform/main/agentcore_runtimes.tf` lines 355 and 377
+- Changed to use `urlencode(agent_runtime_arn)` + `?qualifier=DEFAULT`
+- Committed: 8292258 fix(a2a): use full ARN in SSM agent URLs
+- Pushed to main branch
+
+**Key Learning:** AWS InvokeAgentRuntime API requires full ARN (URL-encoded) in the path, not just runtime ID
