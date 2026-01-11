@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.ai/code`) when working in this repository. 
+This file provides **GLOBAL, NON-NEGOTIABLE guidance** to Claude Code (`claude.ai/code`) when working in this repository.
 
 To be used on web research we are in year 2026.
 
@@ -16,9 +16,14 @@ To be used on web research we are in year 2026.
 
 ---
 
+## ✅ SOURCE OF TRUTH (MANDATORY)
+
 - REAL STATE OVER DOCUMENTATION (MANDATORY): You MUST base your understanding and decisions on the **actual codebase, IaC, and real AWS resources that exist today**, not on documentation that may be outdated or incomplete. Always verify against the source of truth (code, Terraform state, deployed AWS resources). If documentation and reality diverge, **reality wins**. Validate before proposing or implementing any change.
 
+- RECENCY / REALITY CHECK (MEGA MANDATORY): Your training data may be outdated (ex: Jan/2025). We are in **Jan/2026**, so you MUST verify any uncertain, changing, or “not supported” claim by consulting **current official documentation and the internet** BEFORE concluding. If you cannot confirm with up-to-date sources, you MUST STOP, state what you could not verify, and ask for guidance.
+
 ---
+
 ## 🧠 FAISTON ONE — MANDATORY CONTEXT
 
 - **FAISTON ONE** is a **100% AUTONOMOUS** and **GENERATIVE** AI agent system.
@@ -32,7 +37,6 @@ To be used on web research we are in year 2026.
 - This is **NOT** a traditional client-server or microservices system.
 - This is a **100% AI-FIRST** and **AGENTIC** platform.
 - If you do NOT understand what **AI-FIRST** means, you MUST research and fully understand it **BEFORE** designing or implementing anything.
-- RECENCY / REALITY CHECK (MEGA MANDATORY): Your training data may be outdated (ex: Jan/2025). We are in **Jan/2026**, so you MUST verify any uncertain, changing, or “not supported” claim by consulting **current official documentation and the internet** BEFORE concluding. If you cannot confirm with up-to-date sources, you MUST STOP, state what you could not verify, and ask for guidance.
 
 ---
 
@@ -49,7 +53,6 @@ To be used on web research we are in year 2026.
   - documentation
 - A fix is **INCOMPLETE** until global consistency is verified.
 - If unsure → **STOP AND ASK BEFORE PROCEEDING**.
-- COMPACTION WORKFLOW (IMMUTABLE & MANDATORY): Before ANY context compaction (`/compact` or automatic compaction), you MUST run `/sync-project` FIRST to persist the real project state (docs + code + IaC + AWS reality) into memory and references. After compaction, you MUST re-run `/prime` (or an equivalent post-compact prime injection) to reload `CLAUDE.md` rules and current project context. If `/sync-project` was not executed before compaction, compaction MUST be blocked.
 
 ---
 
@@ -61,8 +64,20 @@ To be used on web research we are in year 2026.
   3. Restate active constraints and the current PLAN
   4. Use `/compact` to preserve decisions
   5. If needed, `/clear` and then `/prime`
-- CONTINUOUS CONTEXT (MANDATORY): Hooks MUST keep the session context continuously updated. `UserPromptSubmit` MUST inject the `CLAUDE.md` IMMUTABLE rules AND the current project context snapshot (`docs/CONTEXT_SNAPSHOT.md`). The `Stop` hook MUST update `docs/CONTEXT_SNAPSHOT.md` after every response to prevent context drift and avoid unsafe/uninformed changes.
-- HOOKS ENFORCEMENT (MANDATORY): Claude Code Hooks MUST be enabled to enforce continuous rule priming and continuous session context:
+
+---
+
+## 🔄 COMPACTION WORKFLOW — IMMUTABLE & MANDATORY
+
+- Before ANY context compaction (`/compact` or automatic compaction), you MUST run `/sync-project` FIRST to persist the real project state (docs + code + IaC + AWS reality) into memory and references.
+- After compaction, you MUST re-run `/prime` (or an equivalent post-compact prime injection) to reload `CLAUDE.md` rules and current project context.
+- If `/sync-project` was not executed before compaction, compaction MUST be blocked.
+
+---
+
+## 🪝 HOOKS ENFORCEMENT — MANDATORY (Continuous Prime)
+
+- Claude Code Hooks MUST be enabled to enforce continuous rule priming and continuous session context:
   - `UserPromptSubmit` MUST inject essential rules from `CLAUDE.md` (prefer IMMUTABLE block) AND inject the current living context from `docs/CONTEXT_SNAPSHOT.md`.
   - `Stop` MUST update `docs/CONTEXT_SNAPSHOT.md` after every response (post-turn context refresh) AND append to `docs/WORKLOG.md` (audit trail).
   - If the post-turn update fails, the Stop hook MUST **BLOCK** completion (unless `CLAUDE_HOOKS_ALLOW_FAIL=true` is explicitly set as a temporary override).
@@ -115,6 +130,8 @@ To be used on web research we are in year 2026.
 
 ## 🌍 ADDITIONAL GLOBAL POLICIES — MANDATORY
 
+### MCP + Documentation
+
 - **MCP ACCESS POLICY:**  
   ALL MCP tools and servers MUST be accessed ONLY via **AWS Bedrock AgentCore Gateway**.
 
@@ -125,6 +142,8 @@ To be used on web research we are in year 2026.
   - MCP Context7 documentation  
   If unclear → **STOP AND ASK**.
 
+### Lambda + Terraform
+
 - **LAMBDA RUNTIME POLICY:**  
   ALL AWS Lambda functions MUST use:
   - Architecture: `arm64`
@@ -134,6 +153,8 @@ To be used on web research we are in year 2026.
   Use the official Terraform Registry as source of truth:
   - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagentcore_gateway
   - https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagentcore_agent_runtime
+
+### SDLC + Security
 
 - **SDLC + CLEAN CODE:**  
   Follow state-of-the-art SDLC and Clean Code practices:
@@ -153,26 +174,30 @@ To be used on web research we are in year 2026.
   - AWS Well-Architected Security Pillar
   - Microsoft SDL
 
+### Inventory Datastore
+
 - **INVENTORY DATASTORE — CRITICAL:**  
   Inventory data MUST live in **AWS Aurora PostgreSQL (RDS)**.  
   **DO NOT USE DynamoDB**.  
   Any assumption otherwise is **WRONG** and MUST be fixed.
-  
-  
-  
-- SUBAGENTS / SKILLS / MCP USAGE (MEGA MANDATORY): For EVERY task, you MUST use **Claude Code SubAgents**, relevant **Skills**, and required **MCP tools**. SubAgents are NOT optional — use them by default for parallel execution and specialization. If you are about to proceed without SubAgents/Skills/MCPs, you MUST STOP and explain why, then ask for explicit approval before continuing.
 
 ---
+
+## 🛠️ TOOLING ENFORCEMENT — IMMUTABLE & MEGA MANDATORY
+
+- For EVERY development task, Claude Code MUST use **SubAgents**, relevant **Skills**, and MUST consult the required **MCP sources** (Context7 + AWS Documentation + Bedrock AgentCore + Terraform MCP + any other project MCP) before coding or changing anything.
+- SubAgents are NOT optional — use them by default for parallel execution and specialization.
+- If you are about to proceed without SubAgents or without the required MCP documentation checks, you MUST STOP IMMEDIATELY and ask for explicit approval.
+
+---
+
+## 🧭 EXECUTION DISCIPLINE — MANDATORY
+
 - CONTEXT FIRST (MANDATORY): First think through the problem and read the codebase (relevant files) before proposing or implementing a solution.
-
 - MAJOR CHANGES REQUIRE APPROVAL (MANDATORY): Before making any major change (architecture, refactor, broad behavior change), you MUST check in with me and get explicit approval of the plan.
-
 - HIGH-LEVEL CHANGE SUMMARY (MANDATORY): At every step, provide a short high-level explanation of what you changed and why (no long essays).
-
 - SIMPLICITY FIRST (MANDATORY): Keep every task and code change as simple as possible. Avoid massive or complex changes. Each change should impact as little code as possible.
-
 - ARCHITECTURE DOCUMENTATION (MANDATORY): Maintain a documentation file that describes the application architecture end-to-end (how it works inside and out). Keep it updated when architecture changes.
-
 - NO SPECULATION / READ BEFORE ANSWERING (MANDATORY): Never speculate about code you have not opened. If a specific file is referenced, you MUST read it before answering. Investigate and read relevant files BEFORE making any claim. Provide grounded, hallucination-free answers; if uncertain, say so and read more before proceeding.
 
 ---
@@ -211,7 +236,10 @@ To be used on web research we are in year 2026.
   - YOU MUST **EXPLAIN WHY**
 
 ---
-- CLAUDE.md HYGIENE (MANDATORY): Root `CLAUDE.md` is GLOBAL POLICIES ONLY. Routes/components/endpoints/known-issues MUST go to `docs/` or module `CLAUDE.md` files. Do NOT bloat root memory.
+
+## 🧼 CLAUDE.md HYGIENE — MANDATORY
+
+- Root `CLAUDE.md` is GLOBAL POLICIES ONLY. Routes/components/endpoints/known-issues MUST go to `docs/` or module `CLAUDE.md` files. Do NOT bloat root memory.
 
 ---
 
@@ -255,7 +283,9 @@ To be used on web research we are in year 2026.
 
 - **ENFORCEMENT:**  
   If you design, implement, or describe agent memory outside the AgentCore memory model, you MUST **STOP IMMEDIATELY** and **ASK FOR EXPLICIT APPROVAL**.
+
 ---
+
 ## 🧠 CONTEXT AWARENESS & IMPACT ANALYSIS — IMMUTABLE & MANDATORY
 
 - **YOU MUST NOT CHANGE ANYTHING** (code, docs, commands, architecture, configuration, naming, structure) **WITHOUT FIRST FULLY UNDERSTANDING**:
@@ -279,25 +309,11 @@ To be used on web research we are in year 2026.
   4. State explicitly what will change and what will NOT change
   5. Only then implement
 
-- **RULE OF THUMB**:  
+- **RULE OF THUMB:**  
   If you cannot clearly explain **why something was built the way it is**, you are **NOT ALLOWED** to change it.
 
-- **ENFORCEMENT**:  
+- **ENFORCEMENT:**  
   If a change was made without proper context understanding or impact analysis, it MUST be considered **INVALID**, reverted if necessary, and you MUST **STOP AND ASK FOR GUIDANCE** before proceeding.
-
----
-
-- CONTEXT FIRST (MANDATORY): First think through the problem and read the codebase (relevant files) before proposing or implementing a solution.
-
-- MAJOR CHANGES REQUIRE APPROVAL (MANDATORY): Before making any major change (architecture, refactor, broad behavior change), you MUST check in with me and get explicit approval of the plan.
-
-- HIGH-LEVEL CHANGE SUMMARY (MANDATORY): At every step, provide a short high-level explanation of what you changed and why (no long essays).
-
-- SIMPLICITY FIRST (MANDATORY): Keep every task and code change as simple as possible. Avoid massive or complex changes. Each change should impact as little code as possible.
-
-- ARCHITECTURE DOCUMENTATION (MANDATORY): Maintain a documentation file that describes the application architecture end-to-end (how it works inside and out). Keep it updated when architecture changes.
-
-- NO SPECULATION / READ BEFORE ANSWERING (MANDATORY): Never speculate about code you have not opened. If a specific file is referenced, you MUST read it before answering. Investigate and read relevant files BEFORE making any claim. Provide grounded, hallucination-free answers; if uncertain, say so and read more before proceeding.
 
 ---
 
@@ -426,13 +442,13 @@ To be used on web research we are in year 2026.
 - **ARCHITECTURE DOCS (Reference as needed):**
   - SGA Module: `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
   - **NEXO Memory**: `docs/architecture/NEXO_MEMORY_ARCHITECTURE.md` *(MANDATORY for memory features)*
-  - AgentCore Implementation: `docs/AgentCore/' CHECK ALL FILES 
+  - AgentCore Implementation: `docs/AgentCore/` *(check all relevant files)*
   - Frontend Auth: `docs/FRONTEND_AUTH.md`
   - Agent Design: `docs/agents/ADK_AGENTCORE_ARCHITECT.md`
   - AGENT ADK MUST FOLOW:
-    https://google.github.io/adk-docs/llms-full.txt
-    https://google.github.io/adk-docs/llms.txt
-  
+    - https://google.github.io/adk-docs/llms-full.txt
+    - https://google.github.io/adk-docs/llms.txt
+
 - **PRD DOCS (Reference for requirements):**
   - SGA Estoque PRD: `docs/prd_modulo_gestao_estoque_faiston_sga2.md`
   - Inventory Management: `docs/Faiston_Investory_Mamagement.md`

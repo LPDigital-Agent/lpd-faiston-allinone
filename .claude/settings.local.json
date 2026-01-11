@@ -336,7 +336,21 @@
       "Bash(PYTHONPATH=\"$PWD:$PYTHONPATH\" python3 -m pytest:*)",
       "Bash(PYTHONPATH=\"$PWD:$PYTHONPATH\" python3:*)",
       "Bash(python -m pytest:*)",
-      "Bash(git diff-tree:*)"
+      "Bash(git diff-tree:*)",
+      "WebFetch(domain:www.luxisdesign.io)",
+      "WebFetch(domain:www.aufaitux.com)",
+      "WebFetch(domain:www.everydayux.net)",
+      "WebFetch(domain:www.uxdesigninstitute.com)",
+      "WebFetch(domain:blog.maximeheckel.com)",
+      "WebFetch(domain:www.uinkits.com)",
+      "WebFetch(domain:www.aubergine.co)",
+      "WebFetch(domain:mobbin.com)",
+      "WebFetch(domain:www.syncfusion.com)",
+      "WebFetch(domain:www.uxpin.com)",
+      "WebFetch(domain:bricxlabs.com)",
+      "Bash(cd /Users/fabio.santos/LPD\\\\ Repos/lpd-faiston-allinone && gh pr checks:*)",
+      "Bash(gh pr close:*)",
+      "Bash(git cherry-pick:*)"
     ],
     "deny": [],
     "ask": []
