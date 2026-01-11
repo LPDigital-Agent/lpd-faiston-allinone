@@ -414,7 +414,11 @@ data "aws_iam_policy_document" "sga_agentcore_a2a" {
       # 1. Only runtimes in this account can be invoked
       # 2. Only this execution role can invoke them
       # 3. The role is only used by SGA agents
-      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:agent-runtime/*"
+      # FIX: AWS Service Authorization Reference specifies resource type as "runtime" NOT "agent-runtime"
+      # See: https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonbedrockagentcore.html
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:runtime/*",
+      # Runtime endpoint resource (also required by InvokeAgentRuntime per AWS docs)
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:runtime/*/runtime-endpoint/*"
     ]
     # REMOVED: Tag-based condition was causing 403 Forbidden
     # ABAC (tags in policies) only partially supported in AgentCore
@@ -429,7 +433,8 @@ data "aws_iam_policy_document" "sga_agentcore_a2a" {
       "bedrock-agentcore:ListAgentRuntimes"
     ]
     resources = [
-      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:agent-runtime/*"
+      # FIX: AWS Service Authorization Reference specifies resource type as "runtime" NOT "agent-runtime"
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:runtime/*"
     ]
   }
 
