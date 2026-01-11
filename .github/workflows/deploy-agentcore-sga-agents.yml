@@ -97,7 +97,9 @@ jobs:
   # ===========================================================================
   package:
     name: Package ${{ matrix.agent }}
-    runs-on: ubuntu-latest
+    # CRITICAL: Must use ARM64 runner because AgentCore Runtime uses AWS Graviton (ARM64)
+    # Using x86_64 runner causes "binary files incompatible with Linux ARM64" error
+    runs-on: ubuntu-24.04-arm64
     needs: validate
     if: ${{ github.event.inputs.action != 'status' }}
 
