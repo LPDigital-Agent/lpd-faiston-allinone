@@ -623,6 +623,27 @@ export async function executeImport(params: {
 }
 
 /**
+ * Execute NEXO import: Insert into pending_entry_items (not movements).
+ *
+ * FIX (January 2026): NEXO Import was incorrectly using executeImport which
+ * creates movements directly (requiring valid part_numbers). NEXO should
+ * insert into pending_entry_items for operator review first.
+ */
+export async function executeNexoImport(params: {
+  session_state: Record<string, unknown>;  // Full session state for STATELESS architecture
+  s3_key: string;
+  filename: string;
+  column_mappings: Array<{ file_column: string; target_field: string }>;
+  project_id?: string;
+  destination_location_id?: string;
+}): Promise<AgentCoreResponse<SGAImportExecuteResponse>> {
+  return invokeSGAAgentCore<SGAImportExecuteResponse>({
+    action: 'nexo_execute_import',
+    ...params,
+  });
+}
+
+/**
  * Validate a part number mapping suggestion.
  * Used by operator to confirm or override AI suggestions.
  */

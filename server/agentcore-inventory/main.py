@@ -133,6 +133,7 @@ TRACKED_ACTIONS = {
     "nexo_get_questions": ("nexo_import", "Preparando perguntas..."),
     "nexo_submit_answers": ("nexo_import", "Processando respostas..."),
     "nexo_prepare_processing": ("nexo_import", "Preparando importação..."),
+    "nexo_execute_import": ("nexo_import", "Executando importação..."),
     "nexo_learn_from_import": ("learning", "Aprendendo com a importação..."),
     # NF Processing (IntakeAgent)
     "process_nf_upload": ("intake", "Processando nota fiscal..."),
@@ -453,6 +454,9 @@ def invoke(payload: dict, context) -> dict:
 
         elif action == "nexo_prepare_processing":
             return asyncio.run(_nexo_prepare_processing(payload, session_id))
+
+        elif action == "nexo_execute_import":
+            return asyncio.run(_nexo_execute_import(payload, user_id, session_id))
 
         elif action == "nexo_get_prior_knowledge":
             return asyncio.run(_nexo_get_prior_knowledge(payload, user_id))
@@ -3215,6 +3219,214 @@ async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
     )
 
     return result
+
+
+async def _nexo_execute_import(payload: dict, user_id: str, session_id: str) -> dict:
+    """
+    Execute NEXO import: Insert rows into pending_entry_items (ACT phase) - STATELESS.
+
+    This is the CORRECT action for NEXO Import flow. Unlike execute_import which
+    creates movements directly, this action inserts into pending_entry_items table
+    for items that still need validation/approval before becoming movements.
+
+    FIX (January 2026): NEXO was incorrectly calling execute_import which tried
+    to create movements (requiring valid part_numbers). NEXO should insert into
+    pending_entry_items for operator review.
+
+    Payload:
+        session_state: Full session state from frontend (STATELESS architecture)
+        column_mappings: Array of {file_column, target_field} mappings
+        s3_key: S3 key of the file to import
+        filename: Original filename
+        project_id: Optional project to assign items
+        destination_location_id: Optional destination location
+
+    Returns:
+        Import result with created_count and failed_rows
+    """
+    import logging
+    import uuid
+    logger = logging.getLogger(__name__)
+
+    session_state = payload.get("session_state")
+    column_mappings = payload.get("column_mappings", [])
+    s3_key = payload.get("s3_key", "")
+    filename = payload.get("filename", "import.csv")
+    project_id = payload.get("project_id")
+    destination_location_id = payload.get("destination_location_id")
+
+    logger.info(f"[nexo_execute_import] Starting import for {filename}")
+    logger.info(f"[nexo_execute_import] s3_key={s3_key}, column_mappings={len(column_mappings)}")
+
+    # Validate required fields
+    if not s3_key:
+        return {"success": False, "error": "s3_key is required"}
+
+    if not column_mappings:
+        return {"success": False, "error": "column_mappings is required"}
+
+    # Agent Room: emit start event
+    from tools.agent_room_service import emit_agent_event
+    emit_agent_event(
+        agent_id="nexo_import",
+        status="trabalhando",
+        message=f"Iniciando importação de {filename}...",
+        details={"filename": filename, "s3_key": s3_key},
+    )
+
+    # Download file from S3
+    from tools.s3_client import SGAS3Client
+    s3_client = SGAS3Client()
+    try:
+        file_content = s3_client.download_file(s3_key)
+        logger.info(f"[nexo_execute_import] Downloaded from S3: {len(file_content) if file_content else 0} bytes")
+    except Exception as e:
+        logger.error(f"[nexo_execute_import] S3 download failed: {e}")
+        return {"success": False, "error": f"Failed to download file from S3: {e}"}
+
+    if not file_content:
+        return {"success": False, "error": "Failed to get file content"}
+
+    # Parse file using csv_parser with NEXO mappings
+    from tools.csv_parser import extract_all_rows
+
+    try:
+        all_rows = extract_all_rows(file_content, filename, column_mappings)
+        logger.info(f"[nexo_execute_import] Parsed {len(all_rows)} rows from file")
+    except Exception as e:
+        logger.error(f"[nexo_execute_import] File parsing failed: {e}")
+        return {"success": False, "error": f"Failed to parse file: {e}"}
+
+    if not all_rows:
+        return {"success": False, "error": "No valid rows found in file"}
+
+    # Initialize PostgreSQL client
+    from tools.postgres_client import SGAPostgresClient
+
+    try:
+        pg_client = SGAPostgresClient()
+        logger.info("[nexo_execute_import] PostgreSQL client initialized")
+    except Exception as e:
+        logger.error(f"[nexo_execute_import] PostgreSQL connection failed: {e}")
+        return {"success": False, "error": f"Database connection failed: {e}"}
+
+    # =================================================================
+    # STEP 1: Create parent pending_entries record (BULK_IMPORT source)
+    # =================================================================
+    entry_id = str(uuid.uuid4())
+    try:
+        create_entry_sql = """
+            INSERT INTO sga.pending_entries (
+                entry_id, source_type, nf_number, supplier_name,
+                total_items, status, s3_document_key, created_by
+            ) VALUES (
+                %s::uuid, 'BULK_IMPORT'::sga.entry_source, %s, %s,
+                %s, 'PENDING', %s, %s
+            )
+            RETURNING entry_id
+        """
+        pg_client.execute_sql(
+            create_entry_sql,
+            (entry_id, session_id, f"NEXO Import: {filename}", len(all_rows), s3_key, user_id)
+        )
+        logger.info(f"[nexo_execute_import] Created pending_entries record: {entry_id}")
+    except Exception as e:
+        logger.error(f"[nexo_execute_import] Failed to create pending_entries: {e}")
+        return {"success": False, "error": f"Failed to create entry record: {e}"}
+
+    # =================================================================
+    # STEP 2: Insert rows into pending_entry_items
+    # =================================================================
+    created_count = 0
+    failed_rows = []
+
+    for i, row_data in enumerate(all_rows):
+        row_number = i + 2  # 1-based + header
+        line_number = i + 1
+
+        try:
+            # Extract mapped data
+            part_number = row_data.get("part_number", "").strip() if row_data.get("part_number") else ""
+            description = row_data.get("description", "").strip() if row_data.get("description") else ""
+            qty_str = str(row_data.get("quantity", "1")).strip()
+            serial = row_data.get("serial", "").strip() if row_data.get("serial") else ""
+
+            # Skip completely empty rows
+            if not part_number and not description and not qty_str:
+                continue
+
+            # Parse quantity (default to 1)
+            try:
+                quantity = int(float(qty_str.replace(",", "."))) if qty_str else 1
+                if quantity <= 0:
+                    quantity = 1
+            except (ValueError, TypeError):
+                quantity = 1
+
+            # Build serial_numbers array
+            serial_numbers = [serial] if serial else None
+
+            # Insert into pending_entry_items
+            insert_sql = """
+                INSERT INTO sga.pending_entry_items (
+                    entry_id, line_number, part_number, description,
+                    quantity, serial_numbers, is_processed
+                ) VALUES (
+                    %s::uuid, %s, %s, %s, %s, %s, FALSE
+                )
+                RETURNING entry_item_id
+            """
+            result = pg_client.execute_sql(
+                insert_sql,
+                (entry_id, line_number, part_number or None, description or None, quantity, serial_numbers)
+            )
+
+            created_count += 1
+            if created_count % 100 == 0:
+                logger.info(f"[nexo_execute_import] Inserted {created_count} rows...")
+
+        except Exception as row_error:
+            logger.error(f"[nexo_execute_import] Row {row_number} error: {row_error}")
+            failed_rows.append({
+                "row_number": row_number,
+                "reason": str(row_error),
+                "data": row_data,
+            })
+
+    # =================================================================
+    # STEP 3: Update parent entry with actual counts
+    # =================================================================
+    try:
+        update_sql = """
+            UPDATE sga.pending_entries
+            SET total_items = %s, status = CASE WHEN %s > 0 THEN 'PENDING' ELSE 'ERROR' END
+            WHERE entry_id = %s::uuid
+        """
+        pg_client.execute_sql(update_sql, (created_count, created_count, entry_id))
+    except Exception as e:
+        logger.warning(f"[nexo_execute_import] Failed to update entry counts: {e}")
+
+    # Agent Room: emit completion
+    emit_agent_event(
+        agent_id="nexo_import",
+        status="concluído",
+        message=f"Importação concluída: {created_count} itens criados",
+        details={
+            "entry_id": entry_id,
+            "created_count": created_count,
+            "failed_count": len(failed_rows),
+        },
+    )
+
+    logger.info(f"[nexo_execute_import] Completed: {created_count} created, {len(failed_rows)} failed")
+
+    return {
+        "success": True,
+        "entry_id": entry_id,
+        "created_count": created_count,
+        "failed_rows": failed_rows[:20] if failed_rows else [],  # Limit to first 20 failures
+        "total_rows": len(all_rows),
+    }
 
 
 async def _nexo_get_prior_knowledge(payload: dict, user_id: str) -> dict:

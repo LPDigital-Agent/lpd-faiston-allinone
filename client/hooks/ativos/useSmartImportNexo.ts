@@ -26,6 +26,7 @@ import {
   nexoGetAdaptiveThreshold,
   getNFUploadUrl,
   executeImport,
+  executeNexoImport as executeNexoImportService,  // FIX: Renamed to avoid conflict with hook function
   clearSGASession,
   type NexoAnalyzeFileResponse,
   type NexoQuestion,
@@ -893,9 +894,12 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     updateProgress('importing', 92, 'Executando importação...', 'act');
 
     try {
-      const result = await executeImport({
-        import_id: state.sessionState.session_id,  // STATELESS: Use session_id from state
-        s3_key: state.sessionState.s3_key,         // NEXO flow: file already in S3
+      // FIX (January 2026): Use executeNexoImportService which inserts into pending_entry_items
+      // The old executeImport was trying to create movements (requiring valid part_numbers)
+      // which always failed for bulk imports. NEXO should create pending items first.
+      const result = await executeNexoImportService({
+        session_state: state.sessionState as unknown as Record<string, unknown>,
+        s3_key: state.sessionState.s3_key,
         filename: state.sessionState.filename,
         column_mappings: config.column_mappings,
         project_id: projectId,
