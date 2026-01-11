@@ -356,7 +356,8 @@
       "Bash(do echo '=== $agent ===' ls /Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore-inventory/agents/$agent/)",
       "mcp__bedrock-agentcore-mcp-server__search_agentcore_docs",
       "mcp__bedrock-agentcore-mcp-server__fetch_agentcore_doc",
-      "Bash(unzip:*)"
+      "Bash(unzip:*)",
+      "Bash(Linux ARM64\" errors because pip downloaded x86_64 wheels.\n\nChanged runs-on from ubuntu-latest to ubuntu-24.04-arm64 to ensure\nnative ARM64 wheel downloads compatible with AgentCore Runtime.\n\nRoot cause: Architecture mismatch \\(x86_64 → ARM64\\)\nFix: Native ARM64 compilation on GitHub ARM64 runner\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ],
     "deny": [],
     "ask": []

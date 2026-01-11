@@ -353,6 +353,120 @@ export const WORKFLOW_STEP_ICONS: Record<string, string> = {
 };
 
 // =============================================================================
+// Agent Technical Metadata (AgentCore + ADK Info)
+// =============================================================================
+
+/**
+ * Technical metadata for each agent in the AgentCore system.
+ * Shows framework, model, and special capabilities.
+ */
+export interface AgentTechnicalMetadata {
+  framework: 'Google ADK' | 'Native';
+  model: 'Gemini 3.0 Pro' | 'Gemini 3.0 Flash';
+  hasThinking: boolean;
+  capabilities: string[];
+}
+
+export const AGENT_TECHNICAL_METADATA: Record<string, AgentTechnicalMetadata> = {
+  nexo_import: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Pro',
+    hasThinking: true,
+    capabilities: ['A2A Orchestrator', 'File Analysis', 'Schema Understanding'],
+  },
+  intake: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Pro',
+    hasThinking: true,
+    capabilities: ['Vision AI', 'NF Parsing', 'Document OCR'],
+  },
+  import: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Pro',
+    hasThinking: true,
+    capabilities: ['CSV/Excel Processing', 'Data Mapping'],
+  },
+  learning: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Pro',
+    hasThinking: true,
+    capabilities: ['Episodic Memory', 'Pattern Recognition', 'Reflection'],
+  },
+  schema_evolution: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Pro',
+    hasThinking: true,
+    capabilities: ['MCP Gateway', 'SQL Generation', 'Schema Analysis'],
+  },
+  compliance: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Pro',
+    hasThinking: false,
+    capabilities: ['Policy Validation', 'Audit Trail', 'Approval Hierarchy'],
+  },
+  equipment_research: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['Google Search Grounding', 'Documentation Research'],
+  },
+  observation: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['Real-time Monitoring', 'Pattern Detection'],
+  },
+  reconciliacao: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['HIL Matrix', 'Counting Campaigns', 'Divergence Analysis'],
+  },
+  expedition: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['Outbound Processing', 'SAP Integration'],
+  },
+  carrier: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['External APIs', 'Quote Management', 'Tracking'],
+  },
+  reverse: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['Return Processing', 'Condition Evaluation'],
+  },
+  estoque_control: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['Inventory Operations', 'Movement Tracking'],
+  },
+  stock_control: {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['Inventory Operations', 'Movement Tracking'],
+  },
+};
+
+/**
+ * Get technical metadata for an agent with fallback defaults.
+ */
+export function getAgentTechnicalMetadata(agentKey: string): AgentTechnicalMetadata {
+  return AGENT_TECHNICAL_METADATA[agentKey] || {
+    framework: 'Google ADK',
+    model: 'Gemini 3.0 Flash',
+    hasThinking: false,
+    capabilities: ['Standard Operations'],
+  };
+}
+
+// =============================================================================
 // NOTE: Mock data removed - PRODUCTION system uses real data only
 // Empty states are handled by UI components when no data is available
 // =============================================================================

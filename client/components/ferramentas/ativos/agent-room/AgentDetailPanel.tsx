@@ -13,7 +13,7 @@ import { X, Activity } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { AgentFriendlyStatus } from '@/lib/ativos/agentRoomTypes';
 import { StatusIndicator } from './StatusIndicator';
-import { AGENT_COLORS } from '@/lib/ativos/agentRoomConstants';
+import { AGENT_COLORS, getAgentTechnicalMetadata } from '@/lib/ativos/agentRoomConstants';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -33,6 +33,7 @@ interface AgentDetailPanelProps {
 export function AgentDetailPanel({ agent, onClose }: AgentDetailPanelProps) {
   const colorClasses = AGENT_COLORS[agent.color] || AGENT_COLORS.zinc;
   const Icon = agent.icon;
+  const techMeta = getAgentTechnicalMetadata(agent.key);
 
   // Close on ESC key
   useEffect(() => {
@@ -172,13 +173,34 @@ export function AgentDetailPanel({ agent, onClose }: AgentDetailPanelProps) {
 
                 {/* Technical Info */}
                 <div className="pt-4 border-t border-white/10">
-                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-3">
                     Informações Técnicas
                   </h4>
-                  <div className="space-y-1.5 text-xs">
+                  <div className="space-y-2 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="text-text-muted">Agent ID</span>
                       <code className="font-mono text-text-secondary">{agent.key}</code>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted">Framework</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                        <code className="font-mono text-green-400">{techMeta.framework}</code>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted">Modelo</span>
+                      <code className="font-mono text-text-secondary">{techMeta.model}</code>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted">Thinking</span>
+                      {techMeta.hasThinking ? (
+                        <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-medium">
+                          Ativo
+                        </span>
+                      ) : (
+                        <span className="text-text-muted">—</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-text-muted">Runtime</span>
@@ -189,6 +211,25 @@ export function AgentDetailPanel({ agent, onClose }: AgentDetailPanelProps) {
                       <code className="font-mono text-text-secondary">us-east-2</code>
                     </div>
                   </div>
+
+                  {/* Special Capabilities */}
+                  {techMeta.capabilities.length > 0 && (
+                    <div className="mt-4">
+                      <h5 className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+                        Capacidades Especiais
+                      </h5>
+                      <div className="flex flex-wrap gap-1.5">
+                        {techMeta.capabilities.map((cap) => (
+                          <span
+                            key={cap}
+                            className="px-2 py-0.5 rounded-full text-[10px] bg-white/5 text-text-secondary border border-white/10"
+                          >
+                            {cap}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </ScrollArea>
