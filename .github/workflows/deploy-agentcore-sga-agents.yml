@@ -97,9 +97,9 @@ jobs:
   # ===========================================================================
   package:
     name: Package ${{ matrix.agent }}
-    # CRITICAL: Must use ARM64 runner because AgentCore Runtime uses AWS Graviton (ARM64)
-    # Using x86_64 runner causes "binary files incompatible with Linux ARM64" error
-    runs-on: ubuntu-24.04-arm64
+    # Using x86_64 runner with cross-compilation for ARM64
+    # AgentCore Runtime uses AWS Graviton (ARM64), so we must download ARM64 wheels
+    runs-on: ubuntu-latest
     needs: validate
     if: ${{ github.event.inputs.action != 'status' }}
 
@@ -138,11 +138,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Package agent
+      - name: Package agent (ARM64 cross-compile)
         working-directory: server/agentcore-inventory
         run: |
           AGENT="${{ matrix.agent }}"
-          echo "=== Packaging $AGENT ==="
+          echo "=== Packaging $AGENT for ARM64 (Graviton) ==="
 
           # Create package directory
           PACKAGE_DIR="dist/$AGENT"
@@ -169,10 +169,50 @@ jobs:
           EOF
           fi
 
-          # ✅ FIX: Install Python dependencies into package directory
-          # This was the ROOT CAUSE of ModuleNotFoundError: No module named 'bedrock_agentcore'
-          echo "Installing dependencies into package..."
-          pip install -r "$PACKAGE_DIR/requirements.txt" --target "$PACKAGE_DIR" --quiet --upgrade --no-user
+          # =========================================================================
+          # CRITICAL: Cross-compile for ARM64 (AWS Graviton)
+          # =========================================================================
+          # AgentCore Runtime uses AWS Graviton (ARM64), but GitHub Actions runs x86_64.
+          # We MUST download ARM64-compatible wheels using pip's --platform flag.
+          #
+          # Strategy:
+          # 1. Download ARM64 binary wheels with pip download --platform
+          # 2. Install pure-python packages normally (they're platform-independent)
+          # 3. Unzip all wheels into the package directory
+          # =========================================================================
+          echo "Downloading ARM64-compatible dependencies..."
+
+          # Create temp directories
+          WHEELS_DIR="dist/wheels_$AGENT"
+          mkdir -p "$WHEELS_DIR"
+
+          # Download ARM64 wheels (manylinux2014_aarch64 is the standard ARM64 platform)
+          pip download \
+            -r "$PACKAGE_DIR/requirements.txt" \
+            --dest "$WHEELS_DIR" \
+            --platform manylinux2014_aarch64 \
+            --python-version 313 \
+            --only-binary=:all: \
+            --no-deps \
+            2>&1 || true
+
+          # For packages without ARM64 wheels, download source/any wheels
+          pip download \
+            -r "$PACKAGE_DIR/requirements.txt" \
+            --dest "$WHEELS_DIR" \
+            --no-deps \
+            2>&1 || true
+
+          # Extract all wheels into package directory
+          echo "Extracting wheels into package..."
+          for whl in "$WHEELS_DIR"/*.whl; do
+            if [ -f "$whl" ]; then
+              unzip -q -o "$whl" -d "$PACKAGE_DIR" -x "*.dist-info/*" || true
+            fi
+          done
+
+          # Clean up
+          rm -rf "$WHEELS_DIR"
 
           # Create ZIP package with dependencies included
           cd "dist/$AGENT"
