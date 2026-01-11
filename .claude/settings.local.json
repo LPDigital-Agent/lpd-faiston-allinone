@@ -327,7 +327,15 @@
       "Bash(du:*)",
       "Bash(/tmp/hook_monitor.sh:*)",
       "Bash(export CLAUDE_HOOKS_ALLOW_FAIL=true)",
-      "Bash(ln:*)"
+      "Bash(ln:*)",
+      "Bash(npm install)",
+      "Bash(npm install:*)",
+      "Bash(npm test:*)",
+      "Bash(pnpm test:*)",
+      "Bash(git branch:*)",
+      "Bash(PYTHONPATH=\"$PWD:$PYTHONPATH\" python3 -m pytest:*)",
+      "Bash(PYTHONPATH=\"$PWD:$PYTHONPATH\" python3:*)",
+      "Bash(python -m pytest:*)"
     ],
     "deny": [],
     "ask": []
@@ -337,7 +345,25 @@
     "memory"
   ],
   "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/precompact_enforce.sh\""
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/postcompact_prime_inject.sh\""
+          }
+        ]
+      },
       {
         "hooks": [
           {

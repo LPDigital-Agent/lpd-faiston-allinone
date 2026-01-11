@@ -2,6 +2,10 @@
 name: sync-project
 description: Sync and update all project documentation, memory, and reference files to reflect current project state
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, TodoRead, TodoWrite
+hooks:
+  Stop:
+    - type: command
+      command: bash "$CLAUDE_PROJECT_DIR/.claude/hooks/mark_sync_done.sh"
 ---
 
 # Sync Project — Complete Project State Update
