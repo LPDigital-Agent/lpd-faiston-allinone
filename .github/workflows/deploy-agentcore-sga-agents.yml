@@ -170,49 +170,26 @@ jobs:
           fi
 
           # =========================================================================
-          # CRITICAL: Cross-compile for ARM64 (AWS Graviton)
+          # CRITICAL: Install dependencies for ARM64 (AWS Graviton)
           # =========================================================================
           # AgentCore Runtime uses AWS Graviton (ARM64), but GitHub Actions runs x86_64.
-          # We MUST download ARM64-compatible wheels using pip's --platform flag.
-          #
-          # Strategy:
-          # 1. Download ARM64 binary wheels with pip download --platform
-          # 2. Install pure-python packages normally (they're platform-independent)
-          # 3. Unzip all wheels into the package directory
+          # Strategy: Use Docker with QEMU emulation to install ARM64 packages natively.
+          # This ensures all binary extensions (pydantic-core, etc.) are ARM64-compatible.
           # =========================================================================
-          echo "Downloading ARM64-compatible dependencies..."
+          echo "Installing dependencies for ARM64 using Docker QEMU emulation..."
 
-          # Create temp directories
-          WHEELS_DIR="dist/wheels_$AGENT"
-          mkdir -p "$WHEELS_DIR"
+          # Setup QEMU for ARM64 emulation
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes 2>/dev/null || true
 
-          # Download ARM64 wheels (manylinux2014_aarch64 is the standard ARM64 platform)
-          pip download \
-            -r "$PACKAGE_DIR/requirements.txt" \
-            --dest "$WHEELS_DIR" \
-            --platform manylinux2014_aarch64 \
-            --python-version 313 \
-            --only-binary=:all: \
-            --no-deps \
-            2>&1 || true
+          # Install dependencies inside ARM64 container
+          docker run --rm --platform linux/arm64 \
+            -v "$(pwd)/$PACKAGE_DIR:/deps" \
+            -w /deps \
+            python:3.13-slim \
+            bash -c "pip install -r requirements.txt --target . --quiet --upgrade && rm -rf *.dist-info *.egg-info __pycache__"
 
-          # For packages without ARM64 wheels, download source/any wheels
-          pip download \
-            -r "$PACKAGE_DIR/requirements.txt" \
-            --dest "$WHEELS_DIR" \
-            --no-deps \
-            2>&1 || true
-
-          # Extract all wheels into package directory
-          echo "Extracting wheels into package..."
-          for whl in "$WHEELS_DIR"/*.whl; do
-            if [ -f "$whl" ]; then
-              unzip -q -o "$whl" -d "$PACKAGE_DIR" -x "*.dist-info/*" || true
-            fi
-          done
-
-          # Clean up
-          rm -rf "$WHEELS_DIR"
+          echo "Dependencies installed for ARM64"
+          ls -la "$PACKAGE_DIR" | head -20
 
           # Create ZIP package with dependencies included
           cd "dist/$AGENT"
