@@ -89,9 +89,18 @@ export function AgentDetailPanel({ agent, onClose }: AgentDetailPanelProps) {
                   >
                     <Icon className={`w-12 h-12 ${colorClasses.text}`} />
                   </div>
-                  <h3 className="text-xl font-bold text-text-primary mb-2">
+                  <h3 className="text-xl font-bold text-text-primary mb-1">
                     {agent.friendlyName}
                   </h3>
+                  {/* Technical AgentCore ID */}
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider">
+                      AgentCore
+                    </span>
+                    <code className="px-2 py-0.5 text-xs font-mono bg-white/10 text-cyan-400 rounded border border-white/10">
+                      {agent.key}
+                    </code>
+                  </div>
                   <p className="text-sm text-text-muted leading-relaxed max-w-sm">
                     {agent.description}
                   </p>
@@ -161,11 +170,25 @@ export function AgentDetailPanel({ agent, onClose }: AgentDetailPanelProps) {
                   </div>
                 </div>
 
-                {/* Agent ID (for debugging) */}
-                <div className="text-center pt-4 border-t border-white/10">
-                  <p className="text-xs text-text-muted font-mono">
-                    ID: {agent.key}
-                  </p>
+                {/* Technical Info */}
+                <div className="pt-4 border-t border-white/10">
+                  <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
+                    Informações Técnicas
+                  </h4>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted">Agent ID</span>
+                      <code className="font-mono text-text-secondary">{agent.key}</code>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted">Runtime</span>
+                      <code className="font-mono text-text-secondary">AgentCore</code>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted">Região</span>
+                      <code className="font-mono text-text-secondary">us-east-2</code>
+                    </div>
+                  </div>
                 </div>
               </div>
             </ScrollArea>
