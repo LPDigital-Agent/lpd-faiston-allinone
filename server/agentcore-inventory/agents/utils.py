@@ -27,8 +27,97 @@ APP_NAME = "faiston-sga-inventory"
 # Agent version for tracking
 AGENT_VERSION = "2026.01.04.v1"
 
-# Model ID - All agents use Gemini 3.0 Pro (MANDATORY per CLAUDE.md)
-MODEL_GEMINI = "gemini-3-pro-preview"
+# =============================================================================
+# Gemini 3.0 Model Configuration (MANDATORY - per CLAUDE.md)
+# =============================================================================
+# Model selection based on agent type:
+# - Pro + Thinking: Import/analysis agents (complex file understanding)
+# - Pro: Complex reasoning agents (compliance, audit)
+# - Flash: Operational agents (speed-critical, simple tasks)
+#
+# Reference: https://ai.google.dev/gemini-api/docs/thinking
+# =============================================================================
+
+# Gemini 3.0 Model Family
+MODEL_GEMINI_FLASH = "gemini-3.0-flash"  # Fast, cost-effective (simple tasks)
+MODEL_GEMINI_PRO = "gemini-3.0-pro"      # Complex reasoning + Thinking support
+
+# Legacy constant (for backwards compatibility)
+MODEL_GEMINI = MODEL_GEMINI_PRO
+
+# Agents that require Pro + Thinking (file analysis, schema understanding)
+PRO_THINKING_AGENTS = {
+    "nexo_import",      # Main orchestrator - file analysis with schema
+    "intake",           # Document intake - NF parsing with Vision
+    "import",           # Data import - file structure understanding
+    "learning",         # Memory extraction - pattern recognition
+    "schema_evolution", # Schema analysis - SQL generation
+}
+
+# Agents that require Pro (complex reasoning but no thinking needed)
+PRO_AGENTS = {
+    "compliance",       # Audit, regulatory analysis
+}
+
+
+def get_model(agent_type: str = "default") -> str:
+    """
+    Get appropriate Gemini 3.0 model for agent type.
+
+    Model selection:
+    - PRO_THINKING_AGENTS and PRO_AGENTS → gemini-3.0-pro
+    - All others → gemini-3.0-flash
+
+    Args:
+        agent_type: Agent identifier (e.g., "nexo_import", "observation")
+
+    Returns:
+        Model ID string
+    """
+    if agent_type in PRO_THINKING_AGENTS or agent_type in PRO_AGENTS:
+        return os.environ.get("GEMINI_MODEL_PRO", MODEL_GEMINI_PRO)
+    return os.environ.get("GEMINI_MODEL", MODEL_GEMINI_FLASH)
+
+
+def get_thinking_config(agent_type: str = "default"):
+    """
+    Get thinking configuration for agents requiring deep reasoning.
+
+    Per Google Gemini 3.0 docs (https://ai.google.dev/gemini-api/docs/thinking):
+    - thinking_level="high": Maximizes reasoning depth (default for Pro)
+    - thinking_level="medium": Balanced (Flash only)
+    - thinking_level="low": Simple tasks, minimizes latency
+
+    IMPORTANT: This returns a dict for use with generate_content() calls.
+    Google ADK Agent class doesn't directly accept thinkingConfig, but tools
+    that call generate_content() can use this configuration.
+
+    Args:
+        agent_type: Agent identifier
+
+    Returns:
+        Dict with thinking config for Pro+Thinking agents, None otherwise
+    """
+    if agent_type in PRO_THINKING_AGENTS:
+        return {
+            "thinking_config": {
+                "thinking_level": "high"  # Maximize reasoning for file analysis
+            }
+        }
+    return None
+
+
+def requires_thinking(agent_type: str) -> bool:
+    """
+    Check if agent requires thinking mode.
+
+    Args:
+        agent_type: Agent identifier
+
+    Returns:
+        True if agent requires thinking mode
+    """
+    return agent_type in PRO_THINKING_AGENTS
 
 # Environment variables
 INVENTORY_TABLE = os.environ.get("INVENTORY_TABLE", "faiston-one-sga-inventory-prod")

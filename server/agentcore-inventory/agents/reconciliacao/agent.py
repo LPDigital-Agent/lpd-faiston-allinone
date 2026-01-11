@@ -12,6 +12,9 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Flash)
+from agents.utils import get_model
+
 from tools.campaign import (
     start_campaign_tool,
     get_campaign_tool,
@@ -25,7 +28,7 @@ from tools.adjustment import propose_adjustment_tool
 # Agent identifiers
 AGENT_ID = "reconciliacao"
 AGENT_NAME = "ReconciliacaoAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 # =============================================================================
 # Agent System Instruction

@@ -14,9 +14,13 @@ from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
+from agents.utils import get_model
+
 logger = logging.getLogger(__name__)
 
 AGENT_ID = "intake"
+MODEL = get_model(AGENT_ID)  # gemini-3.0-pro (import tool with Thinking)
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
@@ -367,7 +371,7 @@ Responda APENAS com JSON válido no formato:
 """
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=MODEL,  # gemini-3.0-pro (import tool with Thinking)
             contents=[
                 types.Part.from_bytes(data=file_data, mime_type=mime_type),
                 types.Part.from_text(prompt),

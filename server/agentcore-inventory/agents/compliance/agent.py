@@ -4,9 +4,12 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Pro)
+from agents.utils import get_model
+
 AGENT_ID = "compliance"
 AGENT_NAME = "ComplianceAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-pro (complex reasoning, no Thinking)
 
 COMPLIANCE_INSTRUCTION = """Você é o ComplianceAgent, responsável pela validação de conformidade no sistema Faiston SGA.
 

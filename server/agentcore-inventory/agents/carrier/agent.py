@@ -9,6 +9,9 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Flash)
+from agents.utils import get_model
+
 from tools.quotes import get_quotes_tool
 from tools.recommendation import recommend_carrier_tool
 from tools.tracking import track_shipment_tool
@@ -16,7 +19,7 @@ from tools.tracking import track_shipment_tool
 # Agent identifiers
 AGENT_ID = "carrier"
 AGENT_NAME = "CarrierAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 # =============================================================================
 # Agent System Instruction

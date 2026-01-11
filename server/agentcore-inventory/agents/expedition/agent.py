@@ -13,6 +13,9 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Flash)
+from agents.utils import get_model
+
 from tools.process_expedition import process_expedition_tool, get_expedition_tool
 from tools.verify_stock import verify_stock_tool
 from tools.sap_export import generate_sap_data_tool
@@ -22,7 +25,7 @@ from tools.complete_expedition import complete_expedition_tool
 # Agent identifiers
 AGENT_ID = "expedition"
 AGENT_NAME = "ExpeditionAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 # =============================================================================
 # SAP Export Formats

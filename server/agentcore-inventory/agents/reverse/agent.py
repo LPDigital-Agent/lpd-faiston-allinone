@@ -12,6 +12,9 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Flash)
+from agents.utils import get_model
+
 from tools.process_return import process_return_tool
 from tools.validate_origin import validate_origin_tool
 from tools.evaluate_condition import evaluate_condition_tool
@@ -19,7 +22,7 @@ from tools.evaluate_condition import evaluate_condition_tool
 # Agent identifiers
 AGENT_ID = "reverse"
 AGENT_NAME = "ReverseAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 # =============================================================================
 # Depot Mapping

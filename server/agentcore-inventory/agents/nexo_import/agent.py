@@ -12,8 +12,10 @@
 # - https://github.com/awslabs/amazon-bedrock-agentcore-samples/tree/main/03-integrations/agentic-frameworks/adk
 # =============================================================================
 
-import os
 from google.adk.agents import Agent
+
+# Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
+from agents.utils import get_model
 
 # Import tools
 from agents.nexo_import.tools import (
@@ -32,7 +34,7 @@ from agents.nexo_import.tools import (
 
 AGENT_ID = "nexo_import"
 AGENT_NAME = "NexoImportAgent"
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL = get_model(AGENT_ID)  # gemini-3.0-pro (import agent with Thinking)
 
 
 # =============================================================================

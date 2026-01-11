@@ -10,15 +10,17 @@
 #
 # Architecture:
 # - Framework: Google ADK (Agent Development Kit)
-# - Model: Gemini 2.0 Flash (fast, cost-effective)
+# - Model: Gemini 3.0 Pro (complex reasoning with Thinking enabled)
 # - Tools: create_episode, retrieve_prior_knowledge, generate_reflection
 #
 # Reference:
 # - https://github.com/awslabs/amazon-bedrock-agentcore-samples/tree/main/03-integrations/agentic-frameworks/adk
 # =============================================================================
 
-import os
 from google.adk.agents import Agent
+
+# Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
+from agents.utils import get_model
 
 # Import tools
 from agents.learning.tools import (
@@ -35,7 +37,7 @@ from agents.learning.tools import (
 
 AGENT_ID = "learning"
 AGENT_NAME = "LearningAgent"
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL = get_model(AGENT_ID)  # gemini-3.0-pro (import agent with Thinking)
 
 
 # =============================================================================
@@ -125,7 +127,7 @@ def create_learning_agent() -> Agent:
     Create the LearningAgent using Google ADK.
 
     The agent is configured with:
-    - Gemini 2.0 Flash model (fast, cost-effective)
+    - Gemini 3.0 Pro model (complex reasoning with Thinking enabled)
     - 4 specialized tools for memory operations
     - Detailed instructions in Portuguese
 

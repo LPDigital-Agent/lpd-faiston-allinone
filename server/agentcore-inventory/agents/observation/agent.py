@@ -12,12 +12,15 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Flash)
+from agents.utils import get_model
+
 from tools.analyze_import import analyze_import_tool
 
 # Agent identifiers
 AGENT_ID = "observation"
 AGENT_NAME = "ObservationAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 # =============================================================================
 # Risk Levels

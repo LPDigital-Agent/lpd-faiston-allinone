@@ -187,13 +187,13 @@ async def _learn_answer_immediately(
     Grava imediatamente cada resposta do usuário na memória.
     Simula consolidação de memória humana - cada experiência é armazenada.
 
-    Usa Short-Term Memory do AgentCore para acesso rápido.
+    PADRÃO: Delega ao LearningAgent via A2A (JSON-RPC 2.0).
+    LearningAgent usa MemoryClient.create_event() internamente.
     """
-    from agents.learning_agent import create_learning_agent
+    # A2A delegation to LearningAgent (single point of memory management)
+    from shared.a2a_client import a2a_invoke
 
-    learning_agent = create_learning_agent()
-
-    episode = {
+    episode_data = {
         "type": "answer_decision",
         "question_type": question_type,
         "file_column": file_column,
@@ -207,9 +207,18 @@ async def _learn_answer_immediately(
         },
     }
 
-    await learning_agent.store_short_term(
-        session_id=session.session_id,
-        episode=episode,
+    # Delegate to LearningAgent via A2A
+    await a2a_invoke(
+        agent="learning",
+        tool="create_episode_tool",
+        params={
+            "user_id": session.user_id,
+            "filename": session.filename,
+            "file_analysis": session.file_analysis,
+            "column_mappings": {file_column: answer},
+            "user_corrections": {},
+            "import_result": {"session_id": session.session_id, "success": True},
+        },
     )
 ```
 
@@ -221,62 +230,143 @@ async def _recall_similar_answer(
     file_column: str,
     file_type: str,
     user_id: str,
+    file_analysis: Dict[str, Any],
 ) -> Optional[Dict[str, Any]]:
     """
     Consulta memória por respostas similares anteriores.
     Simula memória episódica humana - lembrar de experiências passadas.
+
+    PADRÃO: Delega ao LearningAgent via A2A (JSON-RPC 2.0).
+    LearningAgent usa MemoryClient.query() + agregação customizada.
     """
-    from agents.learning_agent import create_learning_agent
+    # A2A delegation to LearningAgent (single point of memory management)
+    from shared.a2a_client import a2a_invoke
 
-    learning_agent = create_learning_agent()
-
-    result = await learning_agent.retrieve_similar(
-        query={
-            "question_type": "column_creation",
-            "file_column": file_column,
-            "file_type": file_type,
+    result = await a2a_invoke(
+        agent="learning",
+        tool="retrieve_prior_knowledge_tool",
+        params={
             "user_id": user_id,
+            "filename": f"query_{file_column}_{file_type}",
+            "file_analysis": file_analysis,
+            "target_table": "pending_entry_items",
         },
-        limit=5,
     )
 
-    if result and result.get("matches"):
-        best_match = result["matches"][0]
-        return {
-            "answer": best_match["answer"],
-            "confidence": best_match["similarity_score"],
-            "source_episode": best_match["episode_id"],
-        }
+    if result and result.get("suggested_mappings"):
+        mappings = result["suggested_mappings"]
+        if file_column in mappings:
+            mapping = mappings[file_column]
+            return {
+                "answer": mapping["field"],
+                "confidence": mapping["confidence"],
+                "source_episode": mapping.get("source_episode", "aggregated"),
+            }
 
     return None
 ```
 
 ### 3.3 Integração com AgentCore Memory
 
-NEXO utiliza as APIs de memória do AWS Bedrock AgentCore:
+NEXO utiliza as APIs **oficiais** do AWS Bedrock AgentCore Memory SDK:
 
 ```python
-# Short-Term Memory (STM) - Decisões recentes
-await agentcore.memory.store_short_term(
-    session_id=session_id,
-    content=episode,
-    ttl_hours=24,  # Expira após 24h
+from bedrock_agentcore.memory import MemoryClient
+
+# Initialize client with memory ID
+memory_client = MemoryClient(memory_id="nexo_agent_mem-Z5uQr8CDGf")
+
+# =============================================================================
+# CreateEvent - A ÚNICA API para armazenar memória
+# =============================================================================
+# CRITICAL: NÃO EXISTEM APIs store_short_term() ou store_long_term()!
+# O CreateEvent armazena em STM automaticamente. A estratégia configurada
+# (built-in ou self-managed) determina como os eventos são consolidados em LTM.
+
+await memory_client.create_event(
+    event_type="import_completed",          # Tipo do evento
+    data=episode_data,                       # Dados do episódio
+    namespace="/strategy/import/company",   # GLOBAL namespace!
+    role="TOOL",                             # Quem criou (USER, AGENT, TOOL)
 )
 
-# Long-Term Memory (LTM) - Conhecimento permanente
-await agentcore.memory.store_long_term(
-    user_id=user_id,
-    memory_type="episodic",
-    content=consolidated_knowledge,
+# =============================================================================
+# Query - Busca semântica na memória
+# =============================================================================
+results = await memory_client.query(
+    query="import file similar to inventory_report",  # Natural language
+    namespace="/strategy/import/company",
+    top_k=20,                                          # Máximo de resultados
 )
 
-# RAG Retrieval - Busca semântica
-results = await agentcore.memory.retrieve(
-    query=semantic_query,
-    memory_type="semantic",
-    limit=10,
+# Iterar sobre resultados
+for result in results:
+    data = result.data        # Dados do evento
+    score = result.score      # Similaridade semântica
+
+# =============================================================================
+# GetReflections - Recuperar padrões consolidados (LTM)
+# =============================================================================
+reflections = await memory_client.get_reflections(
+    namespace="/strategy/import/company",
+    query="column mapping patterns",
 )
+
+for ref in reflections:
+    pattern = ref.text              # Padrão identificado
+    confidence = ref.confidence     # Confiança do padrão
 ```
+
+### 3.4 Arquitetura de Memória: Self-Managed Strategy
+
+NEXO implementa um **self-managed strategy pattern** para controle total sobre a consolidação de memória:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SELF-MANAGED STRATEGY                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐     ┌──────────────────┐     ┌──────────────┐│
+│  │  CreateEvent │────►│  AgentCore STM   │────►│  Raw Events  ││
+│  │  (Tool)      │     │  (Automatic)     │     │  Storage     ││
+│  └──────────────┘     └──────────────────┘     └──────────────┘│
+│                                                       │         │
+│                              CUSTOM EXTRACTION        │         │
+│                              (generate_reflection)    ▼         │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              LearningAgent Tools (Custom)                 │  │
+│  │  • create_episode_tool: Captura experiências completas   │  │
+│  │  • retrieve_prior_knowledge_tool: Busca + agregação      │  │
+│  │  • generate_reflection_tool: Consolida padrões           │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  ✅ Benefits:                                                    │
+│  • Full control over what gets extracted to LTM                 │
+│  • Custom similarity scoring with file signatures               │
+│  • Schema-aware validation (filter stale mappings)              │
+│  • Voting-based aggregation for confidence calculation          │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Por que Self-Managed?**
+
+| Aspecto | Built-in Strategy | Self-Managed (NEXO) |
+|---------|-------------------|---------------------|
+| Extração | Automática (LLM genérico) | **Custom** (ImportEpisode schema) |
+| Consolidação | Período fixo | **On-demand** (após cada import) |
+| Validação | Nenhuma | **Schema-aware** (filtra mappings obsoletos) |
+| Similaridade | Embeddings genéricos | **File signature + pattern matching** |
+
+**Namespace Strategy: GLOBAL**
+
+```python
+MEMORY_NAMESPACE = "/strategy/import/company"  # GLOBAL!
+```
+
+- **Design Intencional**: Aprendizado coletivo da empresa
+- O que João aprende, Maria pode usar automaticamente
+- Decisão documentada em: `docs/architecture/ADR-001-global-namespace.md`
 
 ---
 
@@ -430,11 +520,21 @@ Ao criar novos agentes ou features que usam memória:
 
 ### 6.3 Implementation Files
 
-- **NexoImportAgent**: `server/agentcore-inventory/agents/nexo_import_agent.py`
-- **LearningAgent**: `server/agentcore-inventory/agents/learning_agent.py`
-- **Memory Tools**: `server/agentcore-inventory/tools/memory_tools.py`
+- **NexoImportAgent**: `server/agentcore-inventory/agents/nexo_import/agent.py`
+- **LearningAgent**: `server/agentcore-inventory/agents/learning/agent.py`
+- **LearningAgent Entry**: `server/agentcore-inventory/agents/learning/main.py`
+- **Create Episode Tool**: `server/agentcore-inventory/agents/learning/tools/create_episode.py`
+- **Retrieve Prior Knowledge**: `server/agentcore-inventory/agents/learning/tools/retrieve_prior_knowledge.py`
+- **Generate Reflection Tool**: `server/agentcore-inventory/agents/learning/tools/generate_reflection.py`
+
+### 6.4 Architecture Decision Records (ADRs)
+
+- **ADR-001**: [GLOBAL Namespace Design](./ADR-001-global-namespace.md)
+- **ADR-002**: [Self-Managed Strategy Pattern](./ADR-002-self-managed-strategy.md)
+- **ADR-003**: [Gemini 3.0 Model Selection + Thinking](./ADR-003-gemini-model-selection.md)
 
 ---
 
 *Last updated: January 2026*
 *Author: Claude Code with prompt-engineer optimization*
+*Reviewed: Memory Architecture Audit (January 2026)*

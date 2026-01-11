@@ -8,8 +8,10 @@
 # - SchemaEvolutionAgent: Before column creation
 # =============================================================================
 
-import os
 from google.adk.agents import Agent
+
+# Centralized model configuration (MANDATORY - Gemini 3.0 Flash)
+from agents.utils import get_model
 
 # Import tools
 from agents.validation.tools import (
@@ -25,7 +27,7 @@ from agents.validation.tools import (
 
 AGENT_ID = "validation"
 AGENT_NAME = "ValidationAgent"
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 
 # =============================================================================

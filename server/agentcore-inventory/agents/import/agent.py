@@ -7,10 +7,13 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
+from agents.utils import get_model
+
 # Agent Configuration
 AGENT_ID = "import"
 AGENT_NAME = "ImportAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-pro (import agent with Thinking)
 
 # Agent Instruction (System Prompt)
 IMPORT_INSTRUCTION = """You are the Import Agent for SGA Inventory (Sistema de Gestão de Ativos).

@@ -12,13 +12,16 @@
 
 from google.adk.agents import Agent
 
+# Centralized model configuration (MANDATORY - Gemini 3.0 Flash)
+from agents.utils import get_model
+
 from tools.research_equipment import research_equipment_tool
 from tools.generate_queries import generate_queries_tool
 
 # Agent identifiers
 AGENT_ID = "equipment_research"
 AGENT_NAME = "EquipmentResearchAgent"
-AGENT_MODEL = "gemini-2.0-flash"
+AGENT_MODEL = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 # =============================================================================
 # Constants

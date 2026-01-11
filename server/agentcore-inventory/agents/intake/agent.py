@@ -11,8 +11,10 @@
 # - HIL routing for low-confidence items
 # =============================================================================
 
-import os
 from google.adk.agents import Agent
+
+# Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
+from agents.utils import get_model
 
 # Import tools
 from agents.intake.tools import (
@@ -29,7 +31,7 @@ from agents.intake.tools import (
 
 AGENT_ID = "intake"
 AGENT_NAME = "IntakeAgent"
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+MODEL = get_model(AGENT_ID)  # gemini-3.0-pro (import agent with Thinking)
 
 
 # =============================================================================
