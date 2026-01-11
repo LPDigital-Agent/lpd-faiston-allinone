@@ -64,6 +64,11 @@ To be used on web research we are in year 2026.
   3. Restate active constraints and the current PLAN
   4. Use `/compact` to preserve decisions
   5. If needed, `/clear` and then `/prime`
+- HOOKS ENFORCEMENT (MANDATORY): Claude Code Hooks MUST be enabled for this repository to enforce continuous rule priming and post-turn memory updates:
+  - `UserPromptSubmit` MUST inject essential rules from `CLAUDE.md` (prefer IMMUTABLE block).
+  - `Stop` MUST write/update `docs/WORKLOG.md` after every response (post-turn memory sync).
+  - If the post-turn update fails, the Stop hook MUST **BLOCK** completion (unless `CLAUDE_HOOKS_ALLOW_FAIL=true` is explicitly set as a temporary override).
+  - Hook implementation details live in `docs/Claude Code/HOOKS.md`.
 
 ---
 
