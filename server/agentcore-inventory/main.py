@@ -857,9 +857,12 @@ async def _get_nf_upload_url(payload: dict, session_id: str = "default") -> dict
         Dict with upload_url, s3_key, and expires_in
 
     Architecture:
-    - Invokes IntakeAgent in dedicated runtime via A2A Protocol
+    - DIRECT implementation (no A2A delegation)
+    - Presigned URL generation is a stateless utility operation
+    - Does not require AI agent orchestration
 
-    Note: This function delegates to IntakeAgent's get_upload_url action.
+    Note: Previously delegated to IntakeAgent, but changed to direct call
+    since the per-agent runtimes are not yet deployed (2026-01-11).
     """
     filename = payload.get("filename", "")
     content_type = payload.get("content_type", "application/octet-stream")
@@ -867,19 +870,26 @@ async def _get_nf_upload_url(payload: dict, session_id: str = "default") -> dict
     if not filename:
         return {"success": False, "error": "filename is required"}
 
-    result = await _invoke_agent_a2a(
-        agent_id="intake",
-        action="get_upload_url",
-        payload={
-            "filename": filename,
-            "content_type": content_type,
-        },
-        session_id=session_id,
-    )
-    # Map 'key' to 's3_key' for frontend compatibility
-    if isinstance(result, dict) and result.get("success") and "key" in result:
-        result["s3_key"] = result.pop("key")
-    return result
+    try:
+        from tools.s3_client import SGAS3Client
+
+        s3 = SGAS3Client()
+        key = s3.get_temp_path(filename)
+        url_info = s3.generate_upload_url(
+            key=key,
+            content_type=content_type,
+            expires_in=3600,
+        )
+
+        # Map 'key' to 's3_key' for frontend compatibility
+        if url_info.get("success") and "key" in url_info:
+            url_info["s3_key"] = url_info.pop("key")
+
+        return url_info
+
+    except Exception as e:
+        print(f"[SGA] _get_nf_upload_url error: {e}")
+        return {"success": False, "error": str(e)}
 
 
 async def _process_nf_upload(payload: dict, user_id: str, session_id: str = "default") -> dict:
