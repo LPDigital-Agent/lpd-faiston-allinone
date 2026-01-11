@@ -351,7 +351,8 @@ resource "aws_ssm_parameter" "sga_agent_urls" {
   name        = "/${var.project_name}/sga/agents/${each.key}/url"
   description = "AgentCore Runtime URL for ${each.value.name}"
   type        = "String"
-  value       = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_id}/invocations/"
+  # FIX: Use full ARN (URL-encoded) instead of runtime ID - required by InvokeAgentRuntime API
+  value       = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
 
   tags = merge(local.common_tags, {
     Name      = "${local.name_prefix}-sga-${each.key}-url"
@@ -372,8 +373,10 @@ resource "aws_ssm_parameter" "sga_agent_registry" {
     for agent_id, agent_config in local.sga_agents : agent_id => {
       name        = agent_config.name
       description = agent_config.description
-      url         = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_id}/invocations/"
+      # FIX: Use full ARN (URL-encoded) instead of runtime ID - required by InvokeAgentRuntime API
+      url         = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
       runtime_id  = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_id
+      runtime_arn = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
       skills      = agent_config.skills
       memory_access = agent_config.memory_access
       is_orchestrator = agent_config.is_orchestrator
