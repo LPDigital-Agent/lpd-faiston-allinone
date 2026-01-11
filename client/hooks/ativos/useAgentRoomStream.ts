@@ -200,6 +200,11 @@ export function useAgentRoomStream(
       // PRODUCTION: Always fetch real data from backend
       try {
         const response = await getAgentRoomData();
+        console.log('[Agent Room] Data fetched:', {
+          success: response.data?.success,
+          liveFeedCount: response.data?.liveFeed?.length ?? 0,
+          agentsCount: response.data?.agents?.length ?? 0,
+        });
         return response.data;
       } catch (err) {
         console.error('[Agent Room] Failed to fetch data:', err);
@@ -210,8 +215,12 @@ export function useAgentRoomStream(
     refetchInterval: isPaused ? false : refetchInterval,
     refetchIntervalInBackground: false,
     staleTime: refetchInterval / 2,
-    retry: 2,
-    retryDelay: 1000,
+    // Increased retry for network resilience - Agent Room should keep trying
+    retry: 5,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+    // Keep polling even after errors - Agent Room is critical for visibility
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   // =============================================================================
