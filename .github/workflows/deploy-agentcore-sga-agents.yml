@@ -1,0 +1,359 @@
+# =============================================================================
+# AgentCore Deployment Workflow - 14 SGA Agents (100% Agentic Architecture)
+# =============================================================================
+# Deploys all 14 SGA agents to their dedicated AgentCore Runtimes.
+# Each agent runs in its own runtime for A2A communication.
+#
+# Architecture:
+# - 14 separate AgentCore Runtimes (one per agent)
+# - A2A Protocol (JSON-RPC 2.0) for inter-agent communication
+# - Google ADK framework with Gemini models
+# - AgentCore Memory (global namespace)
+#
+# Deployment Strategy:
+# 1. Package each agent with shared modules
+# 2. Upload ZIP artifacts to S3
+# 3. Terraform manages the runtimes
+#
+# Reference: terraform/main/agentcore_runtimes.tf
+# =============================================================================
+
+name: Deploy SGA Agents (14 Runtimes)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/agentcore-inventory/agents/**'
+      - 'server/agentcore-inventory/shared/**'
+      - '.github/workflows/deploy-agentcore-sga-agents.yml'
+  workflow_dispatch:
+    inputs:
+      agents:
+        description: 'Agents to deploy (comma-separated or "all")'
+        required: false
+        default: 'all'
+        type: string
+      action:
+        description: 'Deployment action'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - validate
+          - status
+
+env:
+  AWS_REGION: us-east-2
+  AWS_ACCOUNT_ID: '377311924364'
+  PYTHON_VERSION: '3.13'
+  S3_BUCKET: faiston-one-sga-documents-prod
+  S3_PREFIX: agentcore/agents
+
+jobs:
+  # ===========================================================================
+  # Job 1: Validate Agent Structure
+  # ===========================================================================
+  validate:
+    name: Validate Agents
+    runs-on: ubuntu-latest
+
+    outputs:
+      agents_to_deploy: ${{ steps.detect.outputs.agents }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run validation script
+        working-directory: server/agentcore-inventory
+        run: |
+          python scripts/validate_agents.py
+          if [ $? -ne 0 ]; then
+            echo "::error::Agent validation failed"
+            exit 1
+          fi
+
+      - name: Detect agents to deploy
+        id: detect
+        run: |
+          if [ "${{ github.event.inputs.agents }}" = "all" ] || [ -z "${{ github.event.inputs.agents }}" ]; then
+            AGENTS="learning,validation,schema_evolution,nexo_import,intake,import,estoque_control,compliance,reconciliacao,expedition,carrier,reverse,observation,equipment_research"
+          else
+            AGENTS="${{ github.event.inputs.agents }}"
+          fi
+          echo "agents=$AGENTS" >> $GITHUB_OUTPUT
+          echo "Agents to deploy: $AGENTS"
+
+  # ===========================================================================
+  # Job 2: Package and Upload Agents
+  # ===========================================================================
+  package:
+    name: Package ${{ matrix.agent }}
+    runs-on: ubuntu-latest
+    needs: validate
+    if: ${{ github.event.inputs.action != 'status' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        agent:
+          - learning
+          - validation
+          - schema_evolution
+          - nexo_import
+          - intake
+          - import
+          - estoque_control
+          - compliance
+          - reconciliacao
+          - expedition
+          - carrier
+          - reverse
+          - observation
+          - equipment_research
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Package agent
+        working-directory: server/agentcore-inventory
+        run: |
+          AGENT="${{ matrix.agent }}"
+          echo "=== Packaging $AGENT ==="
+
+          # Create package directory
+          PACKAGE_DIR="dist/$AGENT"
+          mkdir -p "$PACKAGE_DIR"
+
+          # Copy agent code
+          cp -r "agents/$AGENT"/* "$PACKAGE_DIR/"
+
+          # Copy shared modules
+          mkdir -p "$PACKAGE_DIR/shared"
+          cp -r shared/* "$PACKAGE_DIR/shared/"
+
+          # Copy requirements if not exists (use agent's own or create from shared)
+          if [ ! -f "$PACKAGE_DIR/requirements.txt" ]; then
+            echo "Creating default requirements.txt"
+            cat > "$PACKAGE_DIR/requirements.txt" << 'EOF'
+          bedrock-agentcore>=0.1.0
+          google-adk>=0.3.0
+          boto3>=1.35.0
+          httpx>=0.27.0
+          aws-xray-sdk>=2.14.0
+          anyio>=4.0.0
+          EOF
+          fi
+
+          # Create ZIP package
+          cd "dist/$AGENT"
+          zip -r "../$AGENT.zip" . -x "*.pyc" -x "__pycache__/*"
+          cd ../..
+
+          echo "Package created: dist/$AGENT.zip"
+          ls -la dist/
+
+      - name: Upload to S3
+        working-directory: server/agentcore-inventory
+        run: |
+          AGENT="${{ matrix.agent }}"
+          S3_KEY="${{ env.S3_PREFIX }}/$AGENT/agent.zip"
+
+          echo "=== Uploading $AGENT to S3 ==="
+          echo "Bucket: ${{ env.S3_BUCKET }}"
+          echo "Key: $S3_KEY"
+
+          aws s3 cp "dist/$AGENT.zip" "s3://${{ env.S3_BUCKET }}/$S3_KEY" \
+            --metadata "agent=$AGENT,commit=${{ github.sha }},deployed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          echo "✅ Uploaded successfully"
+
+      - name: Verify upload
+        run: |
+          AGENT="${{ matrix.agent }}"
+          S3_KEY="${{ env.S3_PREFIX }}/$AGENT/agent.zip"
+
+          aws s3 ls "s3://${{ env.S3_BUCKET }}/$S3_KEY" || {
+            echo "::error::Failed to verify upload for $AGENT"
+            exit 1
+          }
+
+  # ===========================================================================
+  # Job 3: Update Runtimes
+  # ===========================================================================
+  update-runtimes:
+    name: Update AgentCore Runtimes
+    runs-on: ubuntu-latest
+    needs: package
+    if: ${{ github.event.inputs.action != 'validate' && github.event.inputs.action != 'status' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Trigger runtime updates
+        run: |
+          pip install boto3 --quiet
+
+          python3 << 'PYTHON_SCRIPT'
+          import boto3
+          import os
+          import json
+
+          REGION = os.environ.get("AWS_REGION", "us-east-2")
+          NAME_PREFIX = "faiston-one"
+
+          # List of all agents
+          AGENTS = [
+              "learning", "validation", "schema_evolution", "nexo_import",
+              "intake", "import", "estoque_control", "compliance",
+              "reconciliacao", "expedition", "carrier", "reverse",
+              "observation", "equipment_research"
+          ]
+
+          client = boto3.client("bedrock-agentcore-control", region_name=REGION)
+
+          print("=== Checking AgentCore Runtime Status ===")
+          print()
+
+          # Get list of runtimes
+          try:
+              response = client.list_agent_runtimes()
+              runtimes = {r["agentRuntimeName"]: r for r in response.get("agentRuntimes", [])}
+
+              for agent in AGENTS:
+                  runtime_name = f"{NAME_PREFIX}-sga-{agent}"
+
+                  if runtime_name in runtimes:
+                      runtime = runtimes[runtime_name]
+                      status = runtime.get("status", "UNKNOWN")
+                      runtime_id = runtime.get("agentRuntimeId", "")
+                      print(f"✅ {agent}: {status} (ID: {runtime_id})")
+                  else:
+                      print(f"⚠️  {agent}: NOT FOUND (needs Terraform apply)")
+
+          except Exception as e:
+              print(f"ERROR: {e}")
+              # Not a fatal error - Terraform will create runtimes
+              print("Note: Runtimes may need to be created via 'terraform apply'")
+          PYTHON_SCRIPT
+
+      - name: Summary
+        run: |
+          echo "## SGA Agents Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployed Agents (14)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent | Description | S3 Key |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| learning | Episodic memory | agentcore/agents/learning/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| validation | Schema validation | agentcore/agents/validation/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| schema_evolution | Dynamic schema | agentcore/agents/schema_evolution/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| nexo_import | Orchestrator | agentcore/agents/nexo_import/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| intake | NF reader | agentcore/agents/intake/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| import | Bulk import | agentcore/agents/import/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| estoque_control | Stock control | agentcore/agents/estoque_control/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| compliance | Policy validation | agentcore/agents/compliance/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| reconciliacao | Inventory counting | agentcore/agents/reconciliacao/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| expedition | Outbound shipments | agentcore/agents/expedition/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| carrier | Shipping quotes | agentcore/agents/carrier/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| reverse | Returns | agentcore/agents/reverse/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| observation | Import analysis | agentcore/agents/observation/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| equipment_research | Doc discovery | agentcore/agents/equipment_research/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Run \`terraform plan\` to verify runtime configuration" >> $GITHUB_STEP_SUMMARY
+          echo "2. Run \`terraform apply\` to create/update runtimes" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify agent health via A2A protocol" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Job 4: Status Check
+  # ===========================================================================
+  status:
+    name: Check Runtime Status
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'status' }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check all runtimes
+        run: |
+          pip install boto3 --quiet
+
+          python3 << 'PYTHON_SCRIPT'
+          import boto3
+
+          REGION = "us-east-2"
+          NAME_PREFIX = "faiston-one"
+
+          client = boto3.client("bedrock-agentcore-control", region_name=REGION)
+
+          print("=" * 60)
+          print("SGA AgentCore Runtime Status")
+          print("=" * 60)
+          print()
+
+          try:
+              response = client.list_agent_runtimes()
+
+              sga_runtimes = [
+                  r for r in response.get("agentRuntimes", [])
+                  if r["agentRuntimeName"].startswith(f"{NAME_PREFIX}-sga-")
+              ]
+
+              if not sga_runtimes:
+                  print("No SGA runtimes found. Run 'terraform apply' first.")
+              else:
+                  for runtime in sorted(sga_runtimes, key=lambda x: x["agentRuntimeName"]):
+                      name = runtime["agentRuntimeName"]
+                      status = runtime.get("status", "UNKNOWN")
+                      runtime_id = runtime.get("agentRuntimeId", "")
+
+                      # Extract agent name
+                      agent = name.replace(f"{NAME_PREFIX}-sga-", "")
+
+                      emoji = "✅" if status == "ACTIVE" else "⚠️" if status == "CREATING" else "❌"
+                      print(f"{emoji} {agent:25} | {status:10} | {runtime_id}")
+
+          except Exception as e:
+              print(f"ERROR: {e}")
+          PYTHON_SCRIPT

@@ -36,6 +36,7 @@ To be used on web research we are in year 2026.
 - This is **NOT** a traditional client-server or microservices system.
 - This is a **100% AI-FIRST** and **AGENTIC** platform.
 - If you do NOT understand what **AI-FIRST** means, you MUST research and fully understand it **BEFORE** designing or implementing anything.
+- RECENCY / REALITY CHECK (MEGA MANDATORY): Your training data may be outdated (ex: Jan/2025). We are in **Jan/2026**, so you MUST verify any uncertain, changing, or “not supported” claim by consulting **current official documentation and the internet** BEFORE concluding. If you cannot confirm with up-to-date sources, you MUST STOP, state what you could not verify, and ask for guidance.
 
 ---
 

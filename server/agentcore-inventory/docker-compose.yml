@@ -1,0 +1,343 @@
+# =============================================================================
+# Docker Compose - Local Development for 14 AgentCore Runtimes
+# =============================================================================
+# Usage:
+#   docker-compose up -d           # Start all agents
+#   docker-compose up learning     # Start specific agent
+#   docker-compose logs -f         # View logs
+#   docker-compose down            # Stop all agents
+# =============================================================================
+
+version: '3.8'
+
+x-common-env: &common-env
+  AWS_REGION: us-east-2
+  AWS_DEFAULT_REGION: us-east-2
+  PYTHONUNBUFFERED: "1"
+  LOG_LEVEL: INFO
+
+x-common-build: &common-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  # ==========================================================================
+  # Agent 1: Learning Agent (Memory/Episodic)
+  # ==========================================================================
+  learning:
+    build:
+      <<: *common-build
+      dockerfile: agents/learning/Dockerfile
+    ports:
+      - "9001:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: learning
+      MEMORY_ID: ${MEMORY_ID:-nexo_agent_mem-Z5uQr8CDGf}
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 2: Validation Agent
+  # ==========================================================================
+  validation:
+    build:
+      <<: *common-build
+      dockerfile: agents/validation/Dockerfile
+    ports:
+      - "9002:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: validation
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 3: Schema Evolution Agent
+  # ==========================================================================
+  schema_evolution:
+    build:
+      <<: *common-build
+      dockerfile: agents/schema_evolution/Dockerfile
+    ports:
+      - "9003:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: schema_evolution
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 4: NEXO Import Agent (Orchestrator)
+  # ==========================================================================
+  nexo_import:
+    build:
+      <<: *common-build
+      dockerfile: agents/nexo_import/Dockerfile
+    ports:
+      - "9004:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: nexo_import
+      LEARNING_AGENT_URL: http://learning:9000
+      VALIDATION_AGENT_URL: http://validation:9000
+      SCHEMA_EVOLUTION_AGENT_URL: http://schema_evolution:9000
+    volumes:
+      - ./shared:/app/shared:ro
+    depends_on:
+      - learning
+      - validation
+      - schema_evolution
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 5: Intake Agent (NF Reader)
+  # ==========================================================================
+  intake:
+    build:
+      <<: *common-build
+      dockerfile: agents/intake/Dockerfile
+    ports:
+      - "9005:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: intake
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 6: Import Agent (Bulk CSV/Excel)
+  # ==========================================================================
+  import:
+    build:
+      <<: *common-build
+      dockerfile: agents/import/Dockerfile
+    ports:
+      - "9006:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: import
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 7: Estoque Control Agent
+  # ==========================================================================
+  estoque_control:
+    build:
+      <<: *common-build
+      dockerfile: agents/estoque_control/Dockerfile
+    ports:
+      - "9007:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: estoque_control
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 8: Compliance Agent
+  # ==========================================================================
+  compliance:
+    build:
+      <<: *common-build
+      dockerfile: agents/compliance/Dockerfile
+    ports:
+      - "9008:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: compliance
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 9: Reconciliacao Agent (Inventory Counting)
+  # ==========================================================================
+  reconciliacao:
+    build:
+      <<: *common-build
+      dockerfile: agents/reconciliacao/Dockerfile
+    ports:
+      - "9009:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: reconciliacao
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 10: Expedition Agent (Outbound)
+  # ==========================================================================
+  expedition:
+    build:
+      <<: *common-build
+      dockerfile: agents/expedition/Dockerfile
+    ports:
+      - "9010:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: expedition
+      CARRIER_AGENT_URL: http://carrier:9000
+    volumes:
+      - ./shared:/app/shared:ro
+    depends_on:
+      - carrier
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 11: Carrier Agent (Shipping)
+  # ==========================================================================
+  carrier:
+    build:
+      <<: *common-build
+      dockerfile: agents/carrier/Dockerfile
+    ports:
+      - "9011:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: carrier
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 12: Reverse Agent (Returns)
+  # ==========================================================================
+  reverse:
+    build:
+      <<: *common-build
+      dockerfile: agents/reverse/Dockerfile
+    ports:
+      - "9012:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: reverse
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 13: Observation Agent
+  # ==========================================================================
+  observation:
+    build:
+      <<: *common-build
+      dockerfile: agents/observation/Dockerfile
+    ports:
+      - "9013:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: observation
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # Agent 14: Equipment Research Agent
+  # ==========================================================================
+  equipment_research:
+    build:
+      <<: *common-build
+      dockerfile: agents/equipment_research/Dockerfile
+    ports:
+      - "9014:9000"
+    environment:
+      <<: *common-env
+      AGENT_ID: equipment_research
+      EQUIPMENT_DOCS_BUCKET: ${EQUIPMENT_DOCS_BUCKET:-faiston-one-sga-equipment-docs-prod}
+    volumes:
+      - ./shared:/app/shared:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  default:
+    name: agentcore-network
+    driver: bridge
+
+# =============================================================================
+# Port Mapping Summary
+# =============================================================================
+# Agent                 | Local Port | Container Port
+# ----------------------|------------|---------------
+# learning              | 9001       | 9000
+# validation            | 9002       | 9000
+# schema_evolution      | 9003       | 9000
+# nexo_import           | 9004       | 9000
+# intake                | 9005       | 9000
+# import                | 9006       | 9000
+# estoque_control       | 9007       | 9000
+# compliance            | 9008       | 9000
+# reconciliacao         | 9009       | 9000
+# expedition            | 9010       | 9000
+# carrier               | 9011       | 9000
+# reverse               | 9012       | 9000
+# observation           | 9013       | 9000
+# equipment_research    | 9014       | 9000
+# =============================================================================

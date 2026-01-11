@@ -1,0 +1,17 @@
+# =============================================================================
+# SchemaEvolutionAgent - Python Dependencies
+# =============================================================================
+# MINIMAL dependencies for cold start optimization (<30s).
+# =============================================================================
+
+# Google ADK (Agent Development Kit)
+google-adk>=0.2.0
+
+# AWS Bedrock AgentCore SDK
+bedrock-agentcore>=0.1.0
+
+# X-Ray tracing (optional)
+aws-xray-sdk>=2.14.0
+
+# Pydantic for data validation
+pydantic>=2.0.0

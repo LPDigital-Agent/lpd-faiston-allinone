@@ -1,0 +1,28 @@
+# =============================================================================
+# EstoqueControlAgent Dependencies
+# =============================================================================
+# CRITICAL: Keep dependencies MINIMAL for <30s cold start
+# =============================================================================
+
+# AWS Bedrock AgentCore Runtime
+bedrock-agentcore>=0.1.0
+
+# Google ADK (Agent Development Kit)
+google-adk>=0.3.0
+
+# AWS SDK (lazy-loaded)
+boto3>=1.35.0
+
+# HTTP client for A2A protocol
+httpx>=0.27.0
+
+# X-Ray tracing
+aws-xray-sdk>=2.14.0
+
+# Async utilities
+anyio>=4.0.0
+
+# NOTE: Avoid heavy dependencies that increase cold start time:
+# - NO pandas
+# - NO numpy
+# - Keep it lean for fast cold starts

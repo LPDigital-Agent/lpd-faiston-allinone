@@ -390,6 +390,130 @@ resource "aws_iam_role_policy" "sga_agentcore_ssm" {
 }
 
 # =============================================================================
+# A2A Cross-Runtime Invocation Policy
+# =============================================================================
+# Allows agents to invoke other agent runtimes via A2A protocol (JSON-RPC 2.0)
+# Required for: NexoImportAgent → LearningAgent, ValidationAgent, etc.
+
+data "aws_iam_policy_document" "sga_agentcore_a2a" {
+  # Statement 1: Invoke other agent runtimes
+  statement {
+    sid    = "A2ACrossRuntimeInvocation"
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:InvokeAgentRuntime",
+      "bedrock-agentcore:InvokeAgentRuntimeWithStreaming"
+    ]
+    resources = [
+      # Allow invoking any SGA agent runtime in this account/region
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:agent-runtime/*"
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Module"
+      values   = ["SGA"]
+    }
+  }
+
+  # Statement 2: Describe runtimes for discovery
+  statement {
+    sid    = "A2ARuntimeDiscovery"
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:GetAgentRuntime",
+      "bedrock-agentcore:ListAgentRuntimes"
+    ]
+    resources = [
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:agent-runtime/*"
+    ]
+  }
+
+  # Statement 3: Access agent registry SSM parameters
+  statement {
+    sid    = "A2AAgentRegistryAccess"
+    effect = "Allow"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath"
+    ]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/sga/agents/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "sga_agentcore_a2a" {
+  name   = "${var.project_name}-sga-a2a-policy"
+  role   = aws_iam_role.sga_agentcore_execution.id
+  policy = data.aws_iam_policy_document.sga_agentcore_a2a.json
+}
+
+# =============================================================================
+# AgentCore Identity Policy
+# =============================================================================
+# Allows agents to manage and verify workload identities for cross-agent auth
+
+data "aws_iam_policy_document" "sga_agentcore_identity" {
+  # Statement 1: Get workload identity for self
+  statement {
+    sid    = "AgentCoreIdentitySelf"
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:GetWorkloadIdentity"
+    ]
+    resources = [
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:workload-identity/*"
+    ]
+  }
+
+  # Statement 2: Verify other agent identities
+  statement {
+    sid    = "AgentCoreIdentityVerify"
+    effect = "Allow"
+    actions = [
+      "bedrock-agentcore:VerifyWorkloadIdentity",
+      "bedrock-agentcore:GetWorkloadIdentityToken"
+    ]
+    resources = [
+      "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:workload-identity/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "sga_agentcore_identity" {
+  name   = "${var.project_name}-sga-identity-policy"
+  role   = aws_iam_role.sga_agentcore_execution.id
+  policy = data.aws_iam_policy_document.sga_agentcore_identity.json
+}
+
+# =============================================================================
+# X-Ray Tracing Policy
+# =============================================================================
+# Allows agents to send traces to X-Ray for distributed A2A tracing
+
+data "aws_iam_policy_document" "sga_agentcore_xray" {
+  statement {
+    sid    = "XRayTracingAccess"
+    effect = "Allow"
+    actions = [
+      "xray:PutTraceSegments",
+      "xray:PutTelemetryRecords",
+      "xray:GetSamplingRules",
+      "xray:GetSamplingTargets",
+      "xray:GetSamplingStatisticSummaries"
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "sga_agentcore_xray" {
+  name   = "${var.project_name}-sga-xray-policy"
+  role   = aws_iam_role.sga_agentcore_execution.id
+  policy = data.aws_iam_policy_document.sga_agentcore_xray.json
+}
+
+# =============================================================================
 # Outputs
 # =============================================================================
 

@@ -1,0 +1,22 @@
+# =============================================================================
+# ReverseAgent Dependencies
+# Minimal footprint for <30s cold start
+# =============================================================================
+
+# AWS Bedrock AgentCore
+bedrock-agentcore>=0.1.0
+
+# Google ADK Framework
+google-adk>=0.3.0
+
+# AWS SDK
+boto3>=1.35.0
+
+# HTTP Client for A2A
+httpx>=0.27.0
+
+# X-Ray Tracing
+aws-xray-sdk>=2.14.0
+
+# Async Support
+anyio>=4.0.0
