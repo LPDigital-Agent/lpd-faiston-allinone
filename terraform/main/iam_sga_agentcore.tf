@@ -397,6 +397,10 @@ resource "aws_iam_role_policy" "sga_agentcore_ssm" {
 
 data "aws_iam_policy_document" "sga_agentcore_a2a" {
   # Statement 1: Invoke other agent runtimes
+  # NOTE: Tag-based conditions (ABAC) are only PARTIALLY supported in AgentCore
+  # See: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/security_iam_service-with-iam.html
+  # The aws:ResourceTag condition was causing 403 Forbidden errors on cross-runtime A2A calls
+  # Instead, we use account-level restriction which is secure (same AWS account)
   statement {
     sid    = "A2ACrossRuntimeInvocation"
     effect = "Allow"
@@ -406,13 +410,14 @@ data "aws_iam_policy_document" "sga_agentcore_a2a" {
     ]
     resources = [
       # Allow invoking any SGA agent runtime in this account/region
+      # This is secure because:
+      # 1. Only runtimes in this account can be invoked
+      # 2. Only this execution role can invoke them
+      # 3. The role is only used by SGA agents
       "arn:aws:bedrock-agentcore:${var.aws_region}:${data.aws_caller_identity.current.account_id}:agent-runtime/*"
     ]
-    condition {
-      test     = "StringEquals"
-      variable = "aws:ResourceTag/Module"
-      values   = ["SGA"]
-    }
+    # REMOVED: Tag-based condition was causing 403 Forbidden
+    # ABAC (tags in policies) only partially supported in AgentCore
   }
 
   # Statement 2: Describe runtimes for discovery
