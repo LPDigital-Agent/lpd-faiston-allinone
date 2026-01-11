@@ -7,7 +7,8 @@
  * "Nossa Equipe de IA" - humanized agent profiles.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { motion, type Variants } from 'framer-motion';
 import {
   GlassCard,
   GlassCardHeader,
@@ -16,6 +17,7 @@ import {
 } from '@/components/shared/glass-card';
 import { Users, RefreshCw } from 'lucide-react';
 import { AgentCard } from './AgentCard';
+import { AgentDetailPanel } from './AgentDetailPanel';
 import { useAgentProfiles } from '@/hooks/ativos';
 import { AGENT_PROFILES } from '@/lib/ativos/agentRoomConstants';
 import type { AgentFriendlyStatus } from '@/lib/ativos/agentRoomTypes';
@@ -63,12 +65,25 @@ const DEFAULT_STATUSES: Record<string, { status: AgentFriendlyStatus; lastActivi
   equipment_research: { status: 'disponivel', lastActivity: 'Pesquisando equipamentos' },
 };
 
+// Animation variants
+const containerVariants: Variants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.1,
+    },
+  },
+};
+
 // =============================================================================
 // Main Component
 // =============================================================================
 
 export function AgentTeam() {
   const { agents, isConnected, error } = useAgentProfiles();
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
 
   // Merge real-time agent data with static profiles
   const agentCards = useMemo(() => {
@@ -115,25 +130,40 @@ export function AgentTeam() {
       </GlassCardHeader>
 
       <GlassCardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-          {agentCards.map((agent) => agent && (
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"
+        >
+          {agentCards.map((agent, index) => agent && (
             <AgentCard
               key={agent.key}
+              index={index}
               friendlyName={agent.friendlyName}
               description={agent.description}
               icon={agent.icon}
               color={agent.color}
               status={agent.status}
               lastActivity={agent.lastActivity}
+              onClick={() => setSelectedAgent(agent.key)}
             />
           ))}
-        </div>
+        </motion.div>
 
         {/* Footer hint */}
         <p className="text-xs text-text-muted text-center mt-4">
-          Passe o mouse sobre um agente para ver sua última atividade
+          Clique em um agente para ver detalhes e atividades recentes
         </p>
       </GlassCardContent>
+
+      {/* Agent Detail Panel */}
+      {selectedAgent && agentCards.find(a => a?.key === selectedAgent) && (
+        <AgentDetailPanel
+          agent={agentCards.find(a => a?.key === selectedAgent)!}
+          onClose={() => setSelectedAgent(null)}
+        />
+      )}
     </GlassCard>
   );
 }

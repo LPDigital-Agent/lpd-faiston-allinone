@@ -7,16 +7,15 @@
  * Part of the Agent Team panel in the Agent Room.
  */
 
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
 import type { AgentFriendlyStatus } from '@/lib/ativos/agentRoomTypes';
-import {
-  STATUS_DOT_COLORS,
-  STATUS_LABELS,
-  AGENT_COLORS,
-} from '@/lib/ativos/agentRoomConstants';
+import { StatusIndicator } from './StatusIndicator';
+import { AGENT_COLORS } from '@/lib/ativos/agentRoomConstants';
 
 interface AgentCardProps {
+  /** Animation index for stagger effect */
+  index: number;
   /** Human-friendly agent name */
   friendlyName: string;
   /** Agent description */
@@ -29,61 +28,80 @@ interface AgentCardProps {
   status: AgentFriendlyStatus;
   /** Last activity description */
   lastActivity?: string;
+  /** Click handler to open detail panel */
+  onClick: () => void;
 }
 
+// Animation variants
+const cardVariants: Variants = {
+  hidden: { opacity: 0, y: 20, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring" as const,
+      stiffness: 100,
+      damping: 12,
+    },
+  },
+  hover: {
+    y: -8,
+    boxShadow: "0 20px 40px rgba(253, 17, 164, 0.15)",
+    transition: { type: "spring" as const, stiffness: 300, damping: 20 },
+  },
+  tap: { scale: 0.98 },
+};
+
 export function AgentCard({
+  index,
   friendlyName,
   description,
   icon: Icon,
   color,
   status,
   lastActivity,
+  onClick,
 }: AgentCardProps) {
   const colorClasses = AGENT_COLORS[color] || AGENT_COLORS.zinc;
-  const statusDotColor = STATUS_DOT_COLORS[status];
-  const statusLabel = STATUS_LABELS[status];
 
   return (
     <motion.div
-      whileHover={{ scale: 1.02 }}
-      className="relative flex flex-col items-center p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all cursor-pointer group"
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+      whileHover="hover"
+      whileTap="tap"
+      onClick={onClick}
+      className="relative flex flex-col items-center p-5 rounded-xl bg-white/5 border border-white/10 hover:border-magenta-mid/50 transition-colors cursor-pointer"
     >
-      {/* Status Dot */}
-      <div className="absolute top-2 right-2">
-        <div className={`w-2.5 h-2.5 rounded-full ${statusDotColor}`} />
+      {/* Status Indicator */}
+      <div className="absolute top-3 right-3">
+        <StatusIndicator status={status} />
       </div>
 
       {/* Agent Avatar */}
       <div
-        className={`w-14 h-14 rounded-full flex items-center justify-center ${colorClasses.bg} ${colorClasses.border} border mb-3`}
+        className={`w-16 h-16 rounded-full flex items-center justify-center ${colorClasses.bg} ${colorClasses.border} border-2 mb-3 transition-transform group-hover:scale-110`}
       >
-        <Icon className={`w-7 h-7 ${colorClasses.text}`} />
+        <Icon className={`w-8 h-8 ${colorClasses.text}`} />
       </div>
 
       {/* Agent Name */}
-      <h3 className="text-sm font-medium text-text-primary text-center">
+      <h3 className="text-sm font-semibold text-text-primary text-center">
         {friendlyName}
       </h3>
 
       {/* Description */}
-      <p className="text-xs text-text-muted text-center mt-1 line-clamp-2">
+      <p className="text-xs text-text-muted text-center mt-1.5 line-clamp-2 leading-relaxed">
         {description}
       </p>
 
-      {/* Status Label */}
-      <div className="mt-2 px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
-        <span className="text-xs text-text-muted">{statusLabel}</span>
-      </div>
-
-      {/* Last Activity (on hover) */}
+      {/* Last Activity Hint */}
       {lastActivity && (
-        <motion.div
-          initial={{ opacity: 0, y: 5 }}
-          whileHover={{ opacity: 1, y: 0 }}
-          className="absolute inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm rounded-xl opacity-0 group-hover:opacity-100 transition-opacity p-3"
-        >
-          <p className="text-xs text-text-muted text-center">{lastActivity}</p>
-        </motion.div>
+        <p className="text-xs text-magenta-mid/60 text-center mt-2 line-clamp-1">
+          {lastActivity}
+        </p>
       )}
     </motion.div>
   );

@@ -11,6 +11,8 @@ export { LiveFeed } from './LiveFeed';
 export { LearningStories } from './LearningStories';
 export { WorkflowTimeline } from './WorkflowTimeline';
 export { PendingDecisions } from './PendingDecisions';
+export { StatusIndicator } from './StatusIndicator';
+export { AgentDetailPanel } from './AgentDetailPanel';
 
 // Skeleton Components
 export {

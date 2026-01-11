@@ -119,13 +119,36 @@ export function LearningStories() {
       <GlassCardContent>
         {stories.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <Lightbulb className="w-12 h-12 text-text-muted mb-3" />
-            <p className="text-sm text-text-muted">
+            <motion.div
+              animate={{
+                scale: [1, 1.05, 1],
+                opacity: [0.5, 0.8, 0.5],
+              }}
+              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+              className="relative mb-4"
+            >
+              <Lightbulb className="w-14 h-14 text-purple-400" />
+              <motion.div
+                animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                className="absolute inset-0 rounded-full border-2 border-purple-400/50"
+              />
+            </motion.div>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-sm text-text-muted"
+            >
               Ainda estamos aprendendo...
-            </p>
-            <p className="text-xs text-text-muted mt-1">
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-xs text-text-muted/60 mt-1"
+            >
               Os aprendizados aparecerão aqui conforme usamos o sistema
-            </p>
+            </motion.p>
           </div>
         ) : (
           <ScrollArea className="h-[200px]">

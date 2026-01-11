@@ -82,9 +82,11 @@ function LiveMessageItem({ message }: LiveMessageItemProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 20 }}
+      initial={{ opacity: 0, x: -20, height: 0 }}
+      animate={{ opacity: 1, x: 0, height: "auto" }}
+      exit={{ opacity: 0, x: 20, height: 0 }}
+      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      layout
       className={`flex gap-3 p-3 rounded-lg border-l-2 ${bgColor}`}
     >
       <div className="shrink-0 mt-0.5">
