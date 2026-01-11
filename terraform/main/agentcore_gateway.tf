@@ -3,26 +3,45 @@
 # =============================================================================
 # AgentCore Gateway provides a unified MCP endpoint for AI agents.
 #
-# NOTE: As of January 2026, AgentCore Gateway Terraform resources may require
-# AWS provider version >= 5.90. If resources are not available, use AWS CLI:
-#
-# aws bedrock-agentcore create-gateway \
-#   --name "faiston-sga-gateway" \
-#   --authorization-configuration '{...}' \
-#   --semantic-search-configuration '{"semanticSearchEnabled": true}'
-#
-# Architecture:
+# AUTHENTICATION ARCHITECTURE (AgentCore Identity Compliance):
 # ┌─────────────────────────────────────────────────────────────────────┐
-# │                    AgentCore Gateway                                 │
-# │  - Inbound: JWT auth via Cognito                                    │
-# │  - Semantic search enabled                                          │
-# │  - Routes to Lambda MCP targets                                     │
+# │ FRONTEND (React/Next.js)                                            │
+# │ └─ JWT Bearer Token (Cognito Access Token)                          │
+# └──────────────────────────────┬──────────────────────────────────────┘
+#                                │
+#                                ▼ Authorization: Bearer {JWT}
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ AgentCore RUNTIME (faiston_asset_management-uSuLPsFQNH)             │
+# │ └─ JWT Authorizer ENABLED (customJWTAuthorizer)                     │
+# │    - discoveryUrl: cognito-idp.../openid-configuration              │
+# │    - allowedClients: [7ovjm09dr94e52mpejvbu9v1cg]                   │
+# │    - context.identity populated with JWT claims                     │
+# └──────────────────────────────┬──────────────────────────────────────┘
+#                                │
+#                                ▼ SigV4 (IAM credentials)
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ AgentCore GATEWAY (faiston-one-sga-gateway-prod-qbnlm3ao63)         │
+# │ └─ AWS_IAM auth (CORRECT - accessed by Runtime, not users)          │
+# │    - Semantic search enabled                                        │
+# │    - Routes to Lambda MCP targets                                   │
+# └──────────────────────────────┬──────────────────────────────────────┘
+#                                │
+#                                ▼ IAM invoke
+# ┌─────────────────────────────────────────────────────────────────────┐
+# │ Lambda MCP Target (SGAPostgresTools)                                │
 # └─────────────────────────────────────────────────────────────────────┘
 #
-# Features:
-# - JWT authentication (Cognito)
-# - Semantic search for tool discovery
-# - MCP protocol support (tools/list, tools/call)
+# KEY POINTS:
+# - JWT validation happens at RUNTIME level, NOT Gateway
+# - Gateway uses AWS_IAM because it's backend-to-backend (Runtime → Gateway)
+# - JWT Authorizer is configured via GitHub workflow (deploy-agentcore-inventory.yml)
+# - Agents extract user identity from context.identity (JWT validated)
+#
+# Reference:
+# - JWT config: .github/workflows/deploy-agentcore-inventory.yml:164-252
+# - Identity utils: server/agentcore-inventory/shared/identity_utils.py
+# - Cognito Pool: us-east-2_lkBXr4kjy
+# - Cognito Client: 7ovjm09dr94e52mpejvbu9v1cg
 # =============================================================================
 
 # =============================================================================
@@ -82,22 +101,18 @@ resource "aws_iam_role_policy" "sga_agentcore_gateway_lambda" {
 }
 
 # =============================================================================
-# AgentCore Gateway (Configuration via AWS CLI)
+# AgentCore Gateway (Created via boto3 API)
 # =============================================================================
-# NOTE: If aws_bedrockagentcore_gateway resource is not available,
-# create via AWS CLI:
+# NOTE: Gateway was created via boto3 API because Terraform resources were
+# not available at deployment time. If recreating, use AWS CLI:
 #
 # aws bedrock-agentcore create-gateway \
 #   --name "faiston-one-sga-gateway-prod" \
-#   --authorization-configuration '{
-#     "authorizationType": "JWT",
-#     "jwtAuthorization": {
-#       "allowedAudiences": ["<COGNITO_CLIENT_ID>"],
-#       "allowedIssuers": ["https://cognito-idp.us-east-2.amazonaws.com/<USER_POOL_ID>"]
-#     }
-#   }' \
+#   --authorization-configuration '{"authorizationType": "AWS_IAM"}' \
 #   --semantic-search-configuration '{"semanticSearchEnabled": true}' \
 #   --tags Module=SGA,Feature=AgentCore
+#
+# NOTE: AWS_IAM is correct for Gateway - JWT auth is on the Runtime!
 
 # =============================================================================
 # Gateway Configuration (Created via boto3 - January 2026)

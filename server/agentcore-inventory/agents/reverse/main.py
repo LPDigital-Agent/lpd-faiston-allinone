@@ -22,6 +22,7 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
 from agent import create_reverse_agent, AGENT_ID
 from shared.audit_emitter import AgentAuditEmitter
+from shared.identity_utils import extract_user_identity, log_identity_context
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +57,14 @@ async def _invoke_agent_async(payload: Dict[str, Any], context) -> Dict[str, Any
 
     try:
         action = payload.get("action", "")
-        user_id = payload.get("user_id", "system")
+
+        # Extract user identity from AgentCore context (JWT validated) or payload (fallback)
+        # COMPLIANCE: AgentCore Identity v1.0
+        user = extract_user_identity(context, payload)
+        user_id = user.user_id
+
+        # Log identity context for security monitoring
+        log_identity_context(user, AGENT_ID, action, session_id)
 
         # Route to appropriate handler
         if action == "process_return":

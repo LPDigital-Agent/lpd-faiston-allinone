@@ -53,6 +53,22 @@ AGENTCORE_GATEWAY_ID = os.environ.get("AGENTCORE_GATEWAY_ID", "")
 # Cached A2A client instance (lazy initialized)
 _a2a_client = None
 
+# Cached identity utils (lazy initialized for cold start optimization)
+_identity_utils = None
+
+
+def _get_identity_utils():
+    """
+    Lazy-load identity utilities for AgentCore Identity compliance.
+
+    Returns tuple of (extract_user_identity, log_identity_context) functions.
+    """
+    global _identity_utils
+    if _identity_utils is None:
+        from shared.identity_utils import extract_user_identity, log_identity_context
+        _identity_utils = (extract_user_identity, log_identity_context)
+    return _identity_utils
+
 
 def _get_a2a_client():
     """
@@ -292,12 +308,20 @@ def invoke(payload: dict, context) -> dict:
         Agent response as dict
     """
     action = payload.get("action", "health_check")
-    user_id = payload.get("user_id", "anonymous")
     # Try context session_id first, then payload, then default
     session_id = getattr(context, "session_id", None) or payload.get("session_id", "default-session")
 
+    # Extract user identity from AgentCore context (JWT validated) or payload (fallback)
+    # COMPLIANCE: AgentCore Identity v1.0
+    extract_user_identity, log_identity_context = _get_identity_utils()
+    user = extract_user_identity(context, payload)
+    user_id = user.user_id
+
+    # Log identity context for security monitoring
+    log_identity_context(user, "SGA-MainRouter", action, session_id)
+
     # Debug logging to trace action routing
-    print(f"[SGA Invoke] action={action}, user_id={user_id}, session_id={session_id}")
+    print(f"[SGA Invoke] action={action}, user_id={user_id}, identity_source={user.source}, session_id={session_id}")
 
     # =================================================================
     # Agent Room Event Emission (Sala de Transparência)
@@ -3380,6 +3404,11 @@ async def _nexo_learn_from_import(payload: dict, session_id: str) -> dict:
     session_state = payload.get("session_state")
     import_result = payload.get("import_result", {})
     user_corrections = payload.get("user_corrections", {})
+    # Note: user_id here is passed through to the downstream agent.
+    # Identity validation happens at:
+    # 1. Main entrypoint (invoke_sga_inventory) via extract_user_identity()
+    # 2. Target agent (nexo_import) via its own extract_user_identity()
+    # COMPLIANCE: AgentCore Identity v1.0 - validated at entrypoint
     user_id = payload.get("user_id", "anonymous")
 
     if not session_state:

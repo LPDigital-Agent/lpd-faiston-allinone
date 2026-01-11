@@ -41,6 +41,7 @@ from shared.a2a_client import (
     delegate_to_schema_evolution,
 )
 from shared.xray_tracer import init_xray_tracing, trace_subsegment, trace_a2a_call
+from shared.identity_utils import extract_user_identity, log_identity_context
 
 # Agent definition
 from agents.nexo_import.agent import create_nexo_import_agent, AGENT_ID
@@ -141,8 +142,15 @@ async def _invoke_agent_async(payload: Dict[str, Any], context) -> Dict[str, Any
         Response dict for A2A protocol
     """
     session_id = getattr(context, "session_id", None) or "default"
-    user_id = payload.get("user_id", "system")
     action = payload.get("action", "process")
+
+    # Extract user identity from AgentCore context (JWT validated) or payload (fallback)
+    # COMPLIANCE: AgentCore Identity v1.0
+    user = extract_user_identity(context, payload)
+    user_id = user.user_id
+
+    # Log identity context for security monitoring
+    log_identity_context(user, AGENT_NAME, action, session_id)
 
     # Emit START event for Agent Room
     audit.started(

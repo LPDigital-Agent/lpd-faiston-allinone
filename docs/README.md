@@ -168,7 +168,7 @@ Educational platform with AI-powered learning features:
 
 ### SGA Inventory (Gestao de Estoque)
 
-Asset/inventory management system with AI-First architecture:
+Asset/inventory management system with **100% A2A Agentic Architecture**:
 - **NEXO Intelligent Import**: TRUE agentic import with ReAct pattern (OBSERVE → THINK → ASK → LEARN → ACT)
 - **Schema-Aware Import**: Dynamic column matching via PostgreSQL introspection
 - Multi-source entry (NF, OCR, SAP, Manual)
@@ -179,7 +179,14 @@ Asset/inventory management system with AI-First architecture:
 - Analytics dashboard
 - **Agent Room**: Transparency window for AI visibility (see below)
 
-**Backend**: 14 agents, 20 tools (PostgreSQL, schema validation, S3, HIL)
+**Architecture (A2A Protocol)**:
+- **14 AgentCore Runtimes** (one per agent, JSON-RPC 2.0 over HTTP)
+- **Communication**: A2A Protocol (port 9000) - no Python imports between agents
+- **Memory**: AgentCore Memory (global namespace `/strategy/import/company`)
+- **Warm-Up**: EventBridge pings critical agents every 10 minutes to prevent cold starts
+- **Key Agents**: nexo_import (orchestrator), learning, validation, intake, estoque_control
+
+**Backend**: 14 dedicated runtimes, 20 tools (PostgreSQL, schema validation, S3, HIL)
 **Frontend**: 6 contexts, 29 hooks, 25+ pages
 
 **Location**: `/ferramentas/ativos/estoque/`

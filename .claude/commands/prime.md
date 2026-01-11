@@ -69,15 +69,24 @@ ls -la
 | `docs/`        | Documentation                            |
 | `.claude/`     | Claude Code commands and skills          |
 
-### AgentCore Runtimes (22 Total Agents)
+### AgentCore Runtimes (100% A2A Architecture)
 
-| Runtime                | ID                                      | Agents     | Purpose                   |
-| ---------------------- | --------------------------------------- | ---------- | ------------------------- |
-| `agentcore-inventory`  | `faiston_asset_management-uSuLPsFQNH`   | 14 agents  | SGA - Inventory Management |
-| `agentcore-academy`    | `faiston_academy_agents-ODNvP6HxCD`     | 6 agents   | Learning Platform          |
-| `agentcore-portal`     | `faiston_portal_agents-PENDING`         | 2 agents   | NEXO Orchestrator          |
+**SGA Module**: 14 dedicated AgentCore Runtimes (one per agent, A2A Protocol)
 
-> **Key Docs:** `docs/AGENT_CATALOG.md` for full agent inventory, `docs/TROUBLESHOOTING.md` for HTTP 424 cold start issues.
+| Agent | Runtime ID | Purpose |
+| ----- | ---------- | ------- |
+| `nexo_import` | `faiston_sga_nexo_import` | Main orchestrator (ReAct pattern) |
+| `learning` | `faiston_sga_learning` | Episodic memory & pattern learning |
+| `validation` | `faiston_sga_validation` | Schema validation |
+| `intake` | `faiston_sga_intake` | NF XML/PDF parsing |
+| `estoque_control` | `faiston_sga_estoque_control` | Inventory operations |
+| *+ 9 more* | `faiston_sga_{agent}` | See `docs/AGENT_CATALOG.md` |
+
+**Communication**: JSON-RPC 2.0 over HTTP (A2A Protocol, port 9000)
+**Memory**: AgentCore Memory (global namespace `/strategy/import/company`)
+**Warm-Up**: EventBridge pings critical agents every 10 minutes
+
+> **Key Docs:** `docs/AGENT_CATALOG.md` for full inventory, `docs/TROUBLESHOOTING.md` for HTTP 424.
 
 ### Minimal Tree (2 levels max)
 
@@ -104,10 +113,11 @@ This defines what is currently in progress.
 ```text
 Frontend (Next.js 16 + React 19)
   └── AWS Cognito (NO Amplify)
-        └── AWS Bedrock AgentCore
-              ├── Runtime (Google ADK agents: 14 inventory, 6 academy, 2 portal)
-              ├── Memory (STM + LTM)
-              └── Gateway (MCP tools)
+        └── AWS Bedrock AgentCore Gateway
+              └── 14 AgentCore Runtimes (SGA)
+                    ├── A2A Protocol (JSON-RPC 2.0)
+                    ├── AgentCore Memory (STM + LTM)
+                    └── MCP Gateway Tools (PostgreSQL, S3, etc.)
 ```
 
 Detailed diagrams live in `docs/architecture/`.
