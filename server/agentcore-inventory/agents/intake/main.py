@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
 from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gemini_model
@@ -62,6 +63,43 @@ Features:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-pro (with Thinking)
+
+# =============================================================================
+# Agent Skills (A2A Agent Card Discovery)
+# =============================================================================
+
+AGENT_SKILLS = [
+    AgentSkill(
+        id="parse_nf",
+        name="Parse Nota Fiscal",
+        description="Parse NF (Nota Fiscal) from various formats (XML, PDF, Image). Supports NFe SEFAZ XML, PDF text extraction with AI, and Gemini Vision OCR for scanned DANFE documents.",
+        tags=["intake", "nf", "parsing", "xml", "pdf", "ocr", "danfe", "vision"],
+    ),
+    AgentSkill(
+        id="match_items",
+        name="Match NF Items to Part Numbers",
+        description="Match NF items to existing part numbers using multiple strategies: supplier code (cProd) exact match, description similarity with AI, and NCM code fallback grouping. Returns confidence scores per item.",
+        tags=["intake", "nf", "matching", "part-number", "ai", "confidence"],
+    ),
+    AgentSkill(
+        id="process_entry",
+        name="Process NF Entry",
+        description="Create pending entry from NF extraction with confidence-based routing. Automatically routes to HIL for items with confidence < 80% or high value (> R$ 5000). Detects serial numbers (SN, IMEI, MAC) in descriptions.",
+        tags=["intake", "nf", "entry", "confidence", "hil", "routing", "serial-detection"],
+    ),
+    AgentSkill(
+        id="confirm_entry",
+        name="Confirm NF Entry",
+        description="Confirm entry and create inventory movements after HIL approval. Applies manual part number mappings, delegates movement creation to EstoqueControlAgent via A2A, and stores successful patterns in LearningAgent.",
+        tags=["intake", "nf", "confirmation", "movement", "hil", "a2a", "learning"],
+    ),
+    AgentSkill(
+        id="health_check",
+        name="Health Check",
+        description="Health check endpoint for monitoring. Returns agent status, version, model, protocol, and specialty information.",
+        tags=["intake", "monitoring", "health", "status"],
+    ),
+]
 
 # =============================================================================
 # System Prompt (ReAct Pattern - NF Specialist)
@@ -452,16 +490,21 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SPECIALIST (NF Parsing)")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"  - {skill.name} ({skill.id})")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with version and skills for Agent Card discovery
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

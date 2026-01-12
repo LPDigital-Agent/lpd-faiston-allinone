@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -62,6 +63,31 @@ Features:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
+
+# =============================================================================
+# Agent Skills (A2A Agent Card Discovery)
+# =============================================================================
+
+AGENT_SKILLS = [
+    AgentSkill(
+        id="log_event",
+        name="Log Event to Audit Trail",
+        description="Records operational events from any agent to the centralized audit trail with full context tracking (event_type, agent_id, session_id, user_id, details).",
+        tags=["observation", "audit", "logging", "compliance", "tracking"],
+    ),
+    AgentSkill(
+        id="analyze_import",
+        name="Analyze Import Data Quality",
+        description="Performs intelligent analysis of import preview data following the OBSERVE -> LEARN -> ACT pattern. Generates confidence scores, risk assessments, and actionable recommendations.",
+        tags=["observation", "import", "analysis", "quality", "risk-assessment", "data-validation"],
+    ),
+    AgentSkill(
+        id="health_check",
+        name="Health Check",
+        description="Returns agent health status, version, model, and operational metrics for monitoring and service discovery.",
+        tags=["observation", "health", "monitoring", "diagnostics"],
+    ),
+]
 
 # =============================================================================
 # System Prompt (Observation Specialist)
@@ -278,16 +304,21 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Audit Trail)")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.id}: {skill.name}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with version and skills for Agent Card discovery
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

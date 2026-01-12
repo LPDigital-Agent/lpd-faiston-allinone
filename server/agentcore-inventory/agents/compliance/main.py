@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro for complex reasoning)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -58,6 +59,40 @@ Features:
 - Regulatory compliance checks
 - Audit trail verification
 """
+
+# Agent Skills (for A2A Agent Card discovery)
+AGENT_SKILLS = [
+    AgentSkill(
+        name="validate_operation",
+        description="Validate operation against compliance rules (value limits, operation type restrictions, location/project restrictions)",
+        tags=["compliance", "validation", "authorization"],
+    ),
+    AgentSkill(
+        name="check_approval_status",
+        description="Check approval status for an operation (pending approvers, approval workflow state)",
+        tags=["compliance", "approval", "workflow"],
+    ),
+    AgentSkill(
+        name="audit_compliance",
+        description="Verify audit trail completeness for an entity (events, timestamps, responsible parties)",
+        tags=["compliance", "audit", "verification"],
+    ),
+    AgentSkill(
+        name="flag_violation",
+        description="Flag a compliance violation (unauthorized operations, limit exceeded, procedure not followed)",
+        tags=["compliance", "violation", "enforcement"],
+    ),
+    AgentSkill(
+        name="get_approval_requirements",
+        description="Get approval requirements for an operation (required approvers, authorization levels, deadlines)",
+        tags=["compliance", "approval", "requirements"],
+    ),
+    AgentSkill(
+        name="health_check",
+        description="Health check endpoint for monitoring agent status",
+        tags=["monitoring", "health"],
+    ),
+]
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-pro (complex reasoning)
@@ -448,16 +483,21 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Compliance)")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} tools registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.name}: {skill.description}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with Agent Card support
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,  # Agent version for A2A Agent Card
+        skills=AGENT_SKILLS,  # Skills for A2A Agent Card discovery
     )
 
     # Start server

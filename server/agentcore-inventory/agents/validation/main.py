@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -60,6 +61,86 @@ Features:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
+
+# =============================================================================
+# Agent Skills (A2A Discovery)
+# =============================================================================
+
+AGENT_SKILLS = [
+    AgentSkill(
+        name="validate_schema",
+        description="Validate column mappings against PostgreSQL schema. Checks if target fields exist, no duplicate mappings, required fields are mapped, and auto-generated fields are not mapped.",
+        parameters={
+            "column_mappings": {
+                "type": "object",
+                "description": "Proposed mappings from source columns to target fields",
+                "required": True,
+            },
+            "target_table": {
+                "type": "string",
+                "description": "Target table for validation",
+                "default": "pending_entry_items",
+            },
+            "session_id": {
+                "type": "string",
+                "description": "Optional session ID for audit",
+                "required": False,
+            },
+        },
+    ),
+    AgentSkill(
+        name="validate_data",
+        description="Validate data rows against schema constraints. Checks required fields, type matching, length limits, and allowed patterns.",
+        parameters={
+            "rows": {
+                "type": "array",
+                "description": "Data rows to validate",
+                "required": True,
+            },
+            "column_mappings": {
+                "type": "object",
+                "description": "Column mappings to apply",
+                "required": True,
+            },
+            "target_table": {
+                "type": "string",
+                "description": "Target table for schema reference",
+                "default": "pending_entry_items",
+            },
+            "session_id": {
+                "type": "string",
+                "description": "Optional session ID for audit",
+                "required": False,
+            },
+        },
+    ),
+    AgentSkill(
+        name="check_constraints",
+        description="Check database constraints for data rows. Validates foreign key references, unique constraints, and check constraints.",
+        parameters={
+            "rows": {
+                "type": "array",
+                "description": "Data rows to check",
+                "required": True,
+            },
+            "target_table": {
+                "type": "string",
+                "description": "Target table for constraint reference",
+                "default": "pending_entry_items",
+            },
+            "session_id": {
+                "type": "string",
+                "description": "Optional session ID for audit",
+                "required": False,
+            },
+        },
+    ),
+    AgentSkill(
+        name="health_check",
+        description="Health check endpoint for monitoring. Returns health status with agent info.",
+        parameters={},
+    ),
+]
 
 # =============================================================================
 # System Prompt (Validation Specialist)
@@ -349,16 +430,21 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Validation)")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.name}: {skill.description[:60]}...")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with Agent Card discovery
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

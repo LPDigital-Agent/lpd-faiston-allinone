@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
 from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gemini_model
@@ -59,6 +60,40 @@ Features:
 - Part number fuzzy matching (≥80% similarity)
 - Memory integration for learning patterns
 """
+
+# Agent Skills for A2A Discovery
+AGENT_SKILLS = [
+    AgentSkill(
+        id="preview_import",
+        name="Preview Import File",
+        description="Analyze file structure before import: detect format (CSV/XLSX/XLS), identify delimiters and encoding, suggest column mappings, calculate preview statistics. OBSERVE phase of ReAct pattern.",
+        tags=["import", "spreadsheet", "preview", "csv", "excel", "observe"],
+    ),
+    AgentSkill(
+        id="detect_columns",
+        name="Detect Column Purposes",
+        description="Detect column purposes using AI and prior learning: map source columns to target fields (part_number, description, quantity, serial_number, location, project_id, unit_price). THINK phase of ReAct pattern.",
+        tags=["import", "spreadsheet", "column-mapping", "ai", "think"],
+    ),
+    AgentSkill(
+        id="match_rows_to_pn",
+        name="Match Rows to Part Numbers",
+        description="Match import rows to existing part numbers: exact match by code, fuzzy match by description (≥80% similarity), return matched and unmatched rows with confidence scores. MATCH phase of ReAct pattern.",
+        tags=["import", "spreadsheet", "matching", "part-number", "fuzzy-match"],
+    ),
+    AgentSkill(
+        id="execute_import",
+        name="Execute Validated Import",
+        description="Execute validated import: process file, create inventory entries, handle serialized items, update balances, generate statistics, learn successful patterns. ACT phase of ReAct pattern.",
+        tags=["import", "spreadsheet", "execute", "inventory", "act"],
+    ),
+    AgentSkill(
+        id="health_check",
+        name="Health Check",
+        description="Health check endpoint for monitoring agent status, version, model, protocol, and specialty.",
+        tags=["import", "health", "monitoring", "status"],
+    ),
+]
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-pro (with Thinking)
@@ -479,16 +514,21 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SPECIALIST (Spreadsheet Import)")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.id}: {skill.name}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with version and skills
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

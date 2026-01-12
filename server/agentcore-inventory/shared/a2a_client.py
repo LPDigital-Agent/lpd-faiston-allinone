@@ -34,6 +34,7 @@ import uuid
 import asyncio
 import random
 import logging
+import time
 from typing import Dict, Any, Optional, List, Set
 from dataclasses import dataclass, field
 
@@ -139,43 +140,66 @@ class A2AClient:
     """
     Client for A2A (Agent-to-Agent) protocol communication.
 
-    Handles:
-    - Agent discovery via SSM Parameter Store
-    - JSON-RPC 2.0 message formatting
+    100% A2A Architecture Implementation:
+    - Agent Card Discovery via /.well-known/agent-card.json (A2A Protocol)
+    - JSON-RPC 2.0 message formatting (message/send method)
     - SigV4 authentication for AgentCore Runtime
+    - Fallback to SSM Parameter Store for bootstrap URLs
     - X-Ray tracing integration
+
+    Discovery Flow (A2A Protocol Compliant):
+    1. Get bootstrap URL from SSM (one-time for each agent)
+    2. Fetch Agent Card from /.well-known/agent-card.json
+    3. Cache Agent Card with TTL for subsequent calls
+    4. Use authoritative URL from Agent Card for invocations
 
     Example:
         client = A2AClient()
 
-        # Simple invocation
+        # Discover agent capabilities (A2A Protocol)
+        card = await client.discover_agent("learning")
+        if card:
+            print(f"Skills: {[s['name'] for s in card.skills]}")
+
+        # Invoke with discovery (recommended)
         result = await client.invoke_agent("learning", {
             "action": "retrieve_prior_knowledge",
             "filename": "EXPEDIÇÃO_JAN_2026.csv"
-        })
+        }, use_discovery=True)
 
-        # With session context
+        # Legacy invocation (SSM-only, no discovery)
         result = await client.invoke_agent(
             "validation",
             {"action": "validate_schema", "columns": ["PN", "QTD"]},
-            session_id="session-123"
+            session_id="session-123",
+            use_discovery=False
         )
+
+    Reference: https://a2a-protocol.org/latest/specification/
     """
 
     # SSM parameter path for agent registry
     REGISTRY_PARAM = "/{project}/sga/agents/registry"
 
-    def __init__(self, project_name: Optional[str] = None):
+    # Agent Card cache TTL in seconds (5 minutes)
+    CARD_CACHE_TTL = 300
+
+    def __init__(self, project_name: Optional[str] = None, use_discovery: bool = True):
         """
-        Initialize A2A client.
+        Initialize A2A client with Agent Card discovery support.
 
         Args:
             project_name: Project name for SSM parameters (default: from env)
+            use_discovery: Enable Agent Card discovery by default (100% A2A Architecture)
         """
         self.project_name = project_name or os.environ.get("PROJECT_NAME", "faiston-one")
         self.region = os.environ.get("AWS_REGION", "us-east-2")
         self._agent_registry: Optional[Dict] = None
         self._ssm_client = None
+        self.use_discovery = use_discovery
+
+        # Agent Card cache: {agent_id: {"card": AgentCard, "timestamp": float}}
+        self._agent_cards: Dict[str, Dict] = {}
 
     @property
     def ssm_client(self):
@@ -378,6 +402,91 @@ class A2AClient:
         card = await self.get_agent_card(agent_id, timeout)
         return card is not None
 
+    def _is_card_cache_valid(self, agent_id: str) -> bool:
+        """
+        Check if cached Agent Card is still valid (within TTL).
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            True if cache entry exists and is within TTL
+        """
+        if agent_id not in self._agent_cards:
+            return False
+
+        cached = self._agent_cards[agent_id]
+        age = time.time() - cached.get("timestamp", 0)
+        return age < self.CARD_CACHE_TTL
+
+    async def discover_agent(
+        self,
+        agent_id: str,
+        force_refresh: bool = False,
+        timeout: float = 10.0
+    ) -> Optional[AgentCard]:
+        """
+        Discover agent via A2A Agent Card protocol with caching.
+
+        This is the A2A-compliant way to discover agent capabilities
+        before invoking them. Implements caching to avoid repeated
+        network requests for frequently-used agents.
+
+        100% A2A Architecture: This method should be the primary way
+        to discover agents, replacing static SSM lookups.
+
+        Args:
+            agent_id: Agent identifier (e.g., "learning", "validation")
+            force_refresh: Bypass cache and fetch fresh Agent Card
+            timeout: Request timeout in seconds
+
+        Returns:
+            AgentCard with agent metadata and skills, or None if discovery fails
+
+        Example:
+            card = await client.discover_agent("learning")
+            if card:
+                print(f"Agent: {card.name} v{card.version}")
+                print(f"Skills: {[s.get('name') for s in card.skills]}")
+
+        Reference: https://a2a-protocol.org/latest/specification/
+        """
+        # Check cache first (unless force refresh)
+        if not force_refresh and self._is_card_cache_valid(agent_id):
+            cached = self._agent_cards[agent_id]
+            logger.debug(f"[A2A] Using cached Agent Card for '{agent_id}'")
+            return cached["card"]
+
+        # Fetch fresh Agent Card
+        card = await self.get_agent_card(agent_id, timeout)
+
+        if card:
+            # Cache the card
+            self._agent_cards[agent_id] = {
+                "card": card,
+                "timestamp": time.time(),
+            }
+            logger.info(
+                f"[A2A] Discovered agent '{agent_id}': {card.name} v{card.version} "
+                f"({len(card.skills)} skills)"
+            )
+
+        return card
+
+    def clear_card_cache(self, agent_id: Optional[str] = None) -> None:
+        """
+        Clear Agent Card cache.
+
+        Args:
+            agent_id: Specific agent to clear, or None to clear all
+        """
+        if agent_id:
+            self._agent_cards.pop(agent_id, None)
+            logger.debug(f"[A2A] Cleared cache for agent '{agent_id}'")
+        else:
+            self._agent_cards.clear()
+            logger.debug("[A2A] Cleared all Agent Card cache")
+
     def _normalize_url(self, url: str) -> str:
         """
         Normalize agent URL for AgentCore Runtime invocation.
@@ -498,30 +607,44 @@ class A2AClient:
         payload: Dict[str, Any],
         session_id: Optional[str] = None,
         timeout: float = 30.0,
+        use_discovery: Optional[bool] = None,
     ) -> A2AResponse:
         """
-        Invoke another agent via A2A protocol.
+        Invoke another agent via A2A protocol with optional Agent Card discovery.
 
         This is the main method for cross-agent communication.
+
+        100% A2A Architecture: When use_discovery=True (default), performs Agent
+        Card discovery first to validate the target agent exists and has required
+        capabilities. Uses the authoritative URL from the Agent Card.
 
         Args:
             agent_id: ID of the agent to invoke (e.g., "learning", "validation")
             payload: Payload to send (will be JSON-serialized)
             session_id: Optional session ID for context continuity
             timeout: Request timeout in seconds
+            use_discovery: If True, performs Agent Card discovery first (A2A compliant).
+                          If None, uses instance default (self.use_discovery).
+                          If False, uses SSM lookup only (legacy mode).
 
         Returns:
             A2AResponse with success status and response text
 
         Example:
+            # With discovery (recommended - 100% A2A Architecture)
             result = await client.invoke_agent("learning", {
                 "action": "retrieve_prior_knowledge",
                 "filename_pattern": "EXPEDIÇÃO_*.csv",
                 "columns": ["PN", "QTD", "DESCRICAO"]
-            })
+            }, use_discovery=True)
+
+            # Legacy mode (SSM only)
+            result = await client.invoke_agent("validation", payload, use_discovery=False)
 
             if result.success:
                 prior_knowledge = json.loads(result.response)
+
+        Reference: https://a2a-protocol.org/latest/specification/
         """
         # Import audit emitter for event emission
         from shared.audit_emitter import AgentAuditEmitter
@@ -530,15 +653,40 @@ class A2AClient:
         current_agent = os.environ.get("AGENT_ID", "unknown")
         audit = AgentAuditEmitter(current_agent)
 
-        # Get target agent URL and normalize for A2A protocol
-        agent_url = await self.get_agent_url(agent_id)
+        # Determine discovery mode
+        should_discover = use_discovery if use_discovery is not None else self.use_discovery
+
+        # =================================================================
+        # 100% A2A Architecture: Agent Card Discovery (when enabled)
+        # =================================================================
+        agent_url = None
+        agent_card = None
+
+        if should_discover:
+            # A2A Protocol Compliant: Discover agent via Agent Card first
+            agent_card = await self.discover_agent(agent_id)
+            if agent_card:
+                # Use authoritative URL from Agent Card
+                agent_url = agent_card.url
+                logger.debug(f"[A2A] Using URL from Agent Card: {agent_url}")
+            else:
+                # Discovery failed - fall back to SSM lookup
+                logger.warning(
+                    f"[A2A] Agent Card discovery failed for '{agent_id}', "
+                    f"falling back to SSM lookup"
+                )
+
+        # Fall back to SSM registry if discovery disabled or failed
+        if not agent_url:
+            agent_url = await self.get_agent_url(agent_id)
+
         if not agent_url:
             return A2AResponse(
                 success=False,
                 response="",
                 agent_id=agent_id,
                 message_id="",
-                error=f"Agent '{agent_id}' not found in registry",
+                error=f"Agent '{agent_id}' not found (discovery={should_discover})",
             )
 
         # Normalize URL for A2A protocol (handles legacy /invocations URLs)

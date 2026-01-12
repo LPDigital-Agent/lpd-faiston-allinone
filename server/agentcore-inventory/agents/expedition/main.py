@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -59,6 +60,75 @@ Features:
 - SAP integration
 - Barcode scanning support
 """
+
+# Agent Skills (A2A Agent Card)
+AGENT_SKILLS = [
+    AgentSkill(
+        name="process_expedition",
+        description="Create and process expeditions - validates items and quantities, verifies availability, generates output movement",
+        parameters={
+            "items": "List of items with part_number_id, quantity, and serial_numbers",
+            "destination": "Destination address",
+            "project_id": "Project/client ID",
+            "recipient_name": "Optional recipient name",
+            "notes": "Optional expedition notes",
+            "session_id": "Session ID for context",
+            "user_id": "User ID for audit",
+        },
+    ),
+    AgentSkill(
+        name="get_expedition",
+        description="Get expedition details including status, items, and event history",
+        parameters={
+            "expedition_id": "Expedition ID to query",
+            "session_id": "Session ID for context",
+        },
+    ),
+    AgentSkill(
+        name="verify_stock",
+        description="Verify stock availability for expedition - checks available balance, existing reservations, and item locations",
+        parameters={
+            "items": "List of items with part_number_id and quantity",
+            "location_id": "Optional location to check",
+            "session_id": "Session ID for context",
+        },
+    ),
+    AgentSkill(
+        name="generate_sap_data",
+        description="Generate SAP export data for expedition in MM or SD format",
+        parameters={
+            "expedition_id": "Expedition ID to export",
+            "format_type": "SAP format (MM, SD)",
+            "session_id": "Session ID for context",
+        },
+    ),
+    AgentSkill(
+        name="confirm_separation",
+        description="Confirm item separation for expedition with barcode scanning and serial validation",
+        parameters={
+            "expedition_id": "Expedition ID",
+            "scanned_items": "List of scanned items with serial_number and part_number_id",
+            "session_id": "Session ID for context",
+            "user_id": "User ID for audit",
+        },
+    ),
+    AgentSkill(
+        name="complete_expedition",
+        description="Complete expedition and generate output NF - updates stock and notifies carrier",
+        parameters={
+            "expedition_id": "Expedition ID to complete",
+            "carrier_id": "Optional carrier ID",
+            "tracking_code": "Optional tracking code",
+            "session_id": "Session ID for context",
+            "user_id": "User ID for audit",
+        },
+    ),
+    AgentSkill(
+        name="health_check",
+        description="Health check endpoint for monitoring - returns agent status and configuration",
+        parameters={},
+    ),
+]
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
@@ -474,16 +544,21 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Expedition)")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} skills registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.name}: {skill.description}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with Agent Card discovery
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

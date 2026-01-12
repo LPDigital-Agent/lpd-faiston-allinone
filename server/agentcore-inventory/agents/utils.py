@@ -13,12 +13,15 @@
 
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 import os
 
 # Strands Model Provider for Gemini (per CLAUDE.md - Gemini 3.0 Family ONLY)
 from strands.models.gemini import GeminiModel
+
+# A2A Protocol Types for Agent Card Discovery (100% A2A Architecture)
+from a2a.types import AgentSkill
 
 # =============================================================================
 # Constants
@@ -258,6 +261,49 @@ def create_gemini_model(agent_type: str = "default") -> LazyGeminiModel:
         LazyGeminiModel wrapper that initializes on first use
     """
     return LazyGeminiModel(agent_type=agent_type)
+
+
+# =============================================================================
+# A2A Agent Skills Helper (100% A2A Architecture)
+# =============================================================================
+
+
+def create_agent_skill(
+    skill_id: str,
+    name: str,
+    description: str,
+    agent_id: str,
+    extra_tags: Optional[List[str]] = None,
+) -> AgentSkill:
+    """
+    Create an AgentSkill for A2A Agent Card discovery.
+
+    This helper ensures consistent skill creation across all agents,
+    following the A2A Protocol specification.
+
+    Args:
+        skill_id: Unique identifier for the skill (e.g., "analyze_file")
+        name: Human-readable skill name (e.g., "Analyze File")
+        description: Detailed description of what the skill does
+        agent_id: Agent identifier for tagging (e.g., "nexo_import")
+        extra_tags: Additional tags for categorization
+
+    Returns:
+        AgentSkill instance ready for A2AServer configuration
+
+    Reference: https://a2a-protocol.org/latest/specification/
+    """
+    base_tags = [agent_id, "sga", "inventory"]
+    if extra_tags:
+        base_tags.extend(extra_tags)
+
+    return AgentSkill(
+        id=skill_id,
+        name=name,
+        description=description,
+        tags=base_tags,
+    )
+
 
 # Environment variables
 INVENTORY_TABLE = os.environ.get("INVENTORY_TABLE", "faiston-one-sga-inventory-prod")

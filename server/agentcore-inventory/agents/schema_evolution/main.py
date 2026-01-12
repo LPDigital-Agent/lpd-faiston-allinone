@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro with Thinking)
 from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gemini_model
@@ -66,6 +67,32 @@ Features:
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-pro (with Thinking)
 USE_THINKING = requires_thinking(AGENT_ID)  # True
+
+# Agent Skills (for Agent Card discovery)
+AGENT_SKILLS = [
+    AgentSkill(
+        name="create_column",
+        description="Create a new column dynamically in a database table via MCP Gateway. "
+                    "Handles validation, sanitization, type inference, advisory locking, and JSONB fallback.",
+    ),
+    AgentSkill(
+        name="validate_column_request",
+        description="Validate a column creation request. Checks name validity, type support, and existing columns.",
+    ),
+    AgentSkill(
+        name="infer_column_type",
+        description="Infer PostgreSQL column type from sample values with confidence scoring.",
+    ),
+    AgentSkill(
+        name="sanitize_column_name",
+        description="Sanitize column name for PostgreSQL by removing invalid characters, "
+                    "converting to snake_case, and avoiding reserved words.",
+    ),
+    AgentSkill(
+        name="health_check",
+        description="Health check endpoint for monitoring agent status and configuration.",
+    ),
+]
 
 # =============================================================================
 # System Prompt (Schema Evolution Specialist)
@@ -404,16 +431,19 @@ def main():
     logger.info(f"[{AGENT_NAME}] Uses Thinking: {USE_THINKING}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Schema Evolution)")
+    logger.info(f"[{AGENT_NAME}] Skills: {[skill.name for skill in AGENT_SKILLS]}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with version and skills for Agent Card discovery
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

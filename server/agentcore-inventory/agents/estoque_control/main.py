@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -62,6 +63,195 @@ Features:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (fast, operational)
+
+# Agent Skills (for A2A Agent Card discovery)
+AGENT_SKILLS = [
+    AgentSkill(
+        id="create_reservation",
+        name="Create Asset Reservation",
+        description="Create asset reservation for a project/call. Blocks inventory balance for specific items. Supports TTL-based auto-expiry and cross-project validation with HIL routing.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "part_number_id": {"type": "string", "description": "Part number to reserve"},
+                "quantity": {"type": "integer", "description": "Quantity to reserve"},
+                "project_id": {"type": "string", "description": "Project/client to reserve for"},
+                "call_id": {"type": "string", "description": "Optional call/ticket ID"},
+                "serial_numbers": {"type": "array", "items": {"type": "string"}, "description": "Optional specific serials to reserve"},
+                "ttl_hours": {"type": "integer", "description": "Reservation expiry time (default 72h)"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["part_number_id", "quantity", "project_id"],
+        },
+    ),
+    AgentSkill(
+        id="cancel_reservation",
+        name="Cancel Reservation",
+        description="Cancel an existing reservation and release blocked inventory balance.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "reservation_id": {"type": "string", "description": "Reservation to cancel"},
+                "reason": {"type": "string", "description": "Optional cancellation reason"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["reservation_id"],
+        },
+    ),
+    AgentSkill(
+        id="process_expedition",
+        name="Process Material Expedition",
+        description="Process material expedition (exit). Creates exit movement for items being sent to customer/technician. Can consume existing reservations.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "part_number_id": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                            "serial_numbers": {"type": "array", "items": {"type": "string"}},
+                        },
+                    },
+                    "description": "List of items to expedite",
+                },
+                "destination": {"type": "string", "description": "Destination address/location"},
+                "project_id": {"type": "string", "description": "Project/client for expedition"},
+                "recipient_name": {"type": "string", "description": "Optional recipient name"},
+                "reservation_id": {"type": "string", "description": "Optional reservation to consume"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["items", "destination", "project_id"],
+        },
+    ),
+    AgentSkill(
+        id="create_transfer",
+        name="Create Inventory Transfer",
+        description="Create inventory transfer between storage locations. Routes to HIL if destination is a restricted location.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "part_number_id": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                            "serial_numbers": {"type": "array", "items": {"type": "string"}},
+                        },
+                    },
+                    "description": "List of items to transfer",
+                },
+                "from_location": {"type": "string", "description": "Source location"},
+                "to_location": {"type": "string", "description": "Destination location"},
+                "reason": {"type": "string", "description": "Optional transfer reason"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["items", "from_location", "to_location"],
+        },
+    ),
+    AgentSkill(
+        id="process_return",
+        name="Process Material Return",
+        description="Process material return (reverse logistics). Handles returns from field/customer with condition tracking (good, damaged, defective).",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "part_number_id": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                            "serial_numbers": {"type": "array", "items": {"type": "string"}},
+                        },
+                    },
+                    "description": "List of items to return",
+                },
+                "from_location": {"type": "string", "description": "Where material is returning from"},
+                "project_id": {"type": "string", "description": "Original project"},
+                "return_reason": {"type": "string", "description": "Reason for return"},
+                "condition": {"type": "string", "enum": ["good", "damaged", "defective"], "description": "Material condition"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["items", "from_location", "project_id", "return_reason"],
+        },
+    ),
+    AgentSkill(
+        id="query_balance",
+        name="Query Inventory Balance",
+        description="Query inventory balance for a part number. Returns total, available, and reserved quantities. Supports filtering by location and project.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "part_number_id": {"type": "string", "description": "Part number to query"},
+                "location_id": {"type": "string", "description": "Optional specific location"},
+                "project_id": {"type": "string", "description": "Optional specific project"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+            },
+            "required": ["part_number_id"],
+        },
+    ),
+    AgentSkill(
+        id="query_asset_location",
+        name="Query Asset Location",
+        description="Query asset location by serial number or part number. Returns current location and status information.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "serial_number": {"type": "string", "description": "Specific serial to locate"},
+                "part_number_id": {"type": "string", "description": "Part number to find locations for"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+            },
+            "required": [],
+        },
+    ),
+    AgentSkill(
+        id="create_entry_movement",
+        name="Create Entry Movement",
+        description="Create entry movement from confirmed NF entry. Called by IntakeAgent after NF confirmation to register incoming inventory.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "entry_id": {"type": "string", "description": "Entry ID from IntakeAgent"},
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "part_number_id": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                            "serial_numbers": {"type": "array", "items": {"type": "string"}},
+                        },
+                    },
+                    "description": "List of items with part numbers and quantities",
+                },
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["entry_id", "items"],
+        },
+    ),
+    AgentSkill(
+        id="health_check",
+        name="Health Check",
+        description="Health check endpoint for monitoring. Returns agent status, version, and configuration.",
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    ),
+]
 
 # =============================================================================
 # System Prompt (ReAct Pattern - Estoque Specialist)
@@ -650,15 +840,22 @@ def main():
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SPECIALIST (Inventory Control)")
 
+    # Log registered skills
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.id}: {skill.name}")
+
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with Agent Card discovery support
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,  # A2A Agent Card version
+        skills=AGENT_SKILLS,  # A2A Agent Card skills for discovery
     )
 
     # Start server

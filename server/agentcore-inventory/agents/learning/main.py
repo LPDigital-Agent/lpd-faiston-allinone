@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
 from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gemini_model
@@ -69,6 +70,61 @@ MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-pro (with Thinking)
 
 # Memory namespace for AgentCore Memory
 MEMORY_NAMESPACE = "/strategy/import/company"
+
+# =============================================================================
+# Agent Skills (A2A Agent Card Discovery)
+# =============================================================================
+
+AGENT_SKILLS = [
+    AgentSkill(
+        id="create_episode",
+        name="Create Learning Episode",
+        description="Record successful import patterns for future use. Stores file analysis, column mappings, user corrections, and results.",
+        tags=["learning", "memory", "episodic", "import"],
+    ),
+    AgentSkill(
+        id="retrieve_prior_knowledge",
+        name="Retrieve Prior Knowledge",
+        description="Fetch relevant historical patterns and mappings from previous imports for similarity matching.",
+        tags=["learning", "memory", "retrieval", "import"],
+    ),
+    AgentSkill(
+        id="generate_reflection",
+        name="Generate Reflection",
+        description="Analyze recent episodes to identify patterns, issues, and improvement recommendations.",
+        tags=["learning", "meta-learning", "analysis", "improvement"],
+    ),
+    AgentSkill(
+        id="get_adaptive_threshold",
+        name="Get Adaptive Threshold",
+        description="Calculate adaptive HIL confidence threshold based on historical success rates and recent corrections.",
+        tags=["learning", "adaptive", "hil", "threshold"],
+    ),
+    AgentSkill(
+        id="store_pattern",
+        name="Store Generic Pattern",
+        description="Store learned patterns from any agent (column mappings, NF confirmations, orchestration patterns).",
+        tags=["learning", "pattern", "storage", "generic"],
+    ),
+    AgentSkill(
+        id="retrieve_column_mappings",
+        name="Retrieve Column Mappings",
+        description="Simplified interface to retrieve prior column mappings for specific columns.",
+        tags=["learning", "mapping", "retrieval", "import"],
+    ),
+    AgentSkill(
+        id="record_low_confidence_event",
+        name="Record Low Confidence Event",
+        description="Flag low-confidence events that may need improvement analysis.",
+        tags=["learning", "confidence", "analysis", "improvement"],
+    ),
+    AgentSkill(
+        id="health_check",
+        name="Health Check",
+        description="Monitor agent health status and configuration.",
+        tags=["learning", "monitoring", "health"],
+    ),
+]
 
 # =============================================================================
 # System Prompt (ReAct Pattern - Learning Specialist)
@@ -584,15 +640,20 @@ def main():
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SPECIALIST (Learning & Memory)")
     logger.info(f"[{AGENT_NAME}] Memory Namespace: {MEMORY_NAMESPACE}")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.id}: {skill.name}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with Agent Card discovery support
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
     )
 

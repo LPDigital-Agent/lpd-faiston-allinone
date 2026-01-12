@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -60,6 +61,85 @@ Features:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
+
+# Agent Skills for A2A Agent Card Discovery
+AGENT_SKILLS = [
+    AgentSkill(
+        name="process_return",
+        description="Process material return with origin validation, condition assessment, and reintegration workflow",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "description": "List of items to return [{part_number_id, quantity, serial_numbers}]",
+                    "items": {"type": "object"}
+                },
+                "from_location": {"type": "string", "description": "Origin location of return"},
+                "project_id": {"type": "string", "description": "Project/client ID"},
+                "return_reason": {"type": "string", "description": "Reason for return"},
+                "return_type": {
+                    "type": "string",
+                    "description": "Type of return",
+                    "enum": ["UNUSED", "REPLACED", "DEFECTIVE", "DAMAGED", "OBSOLETE"],
+                    "default": "UNUSED"
+                },
+                "notes": {"type": "string", "description": "Optional return notes"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["items", "from_location", "project_id", "return_reason"],
+        },
+    ),
+    AgentSkill(
+        name="validate_origin",
+        description="Validate return origin by verifying if material originated from this inventory, confirming project/client, and validating serial numbers",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "serial_number": {"type": "string", "description": "Serial number to validate"},
+                "part_number_id": {"type": "string", "description": "Part number ID"},
+                "project_id": {"type": "string", "description": "Expected project ID"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+            },
+            "required": [],
+        },
+    ),
+    AgentSkill(
+        name="evaluate_condition",
+        description="Evaluate material condition for return and recommend action (GOOD=reintegrate, REPAIRABLE=send to repair, SCRAP=discard)",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "serial_number": {"type": "string", "description": "Serial number to evaluate"},
+                "part_number_id": {"type": "string", "description": "Part number ID"},
+                "visual_assessment": {
+                    "type": "string",
+                    "description": "Visual condition",
+                    "enum": ["good", "scratched", "damaged", "broken"]
+                },
+                "functional_test": {
+                    "type": "string",
+                    "description": "Functional test result",
+                    "enum": ["passed", "failed", "not_tested"]
+                },
+                "notes": {"type": "string", "description": "Additional evaluation notes"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": [],
+        },
+    ),
+    AgentSkill(
+        name="health_check",
+        description="Health check endpoint for monitoring and agent discovery",
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    ),
+]
 
 # =============================================================================
 # System Prompt (Reverse Logistics Specialist)
@@ -358,16 +438,19 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Reverse Logistics)")
+    logger.info(f"[{AGENT_NAME}] Skills: {[skill.name for skill in AGENT_SKILLS]}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with Agent Card discovery
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

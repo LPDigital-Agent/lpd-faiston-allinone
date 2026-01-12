@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -60,6 +61,33 @@ Features:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
+
+# =============================================================================
+# Agent Skills (A2A Discovery)
+# =============================================================================
+
+AGENT_SKILLS = [
+    AgentSkill(
+        name="get_quotes",
+        description="Get shipping quotes from multiple carriers based on origin, destination, weight, and dimensions. Returns quotes with pricing, delivery time, and carrier details.",
+        tags=["shipping", "quotes", "pricing", "carriers"],
+    ),
+    AgentSkill(
+        name="recommend_carrier",
+        description="Recommend the best carrier for a shipment based on priority (cost, speed, balanced), delivery constraints, and cost limits. Provides reasoning for the recommendation.",
+        tags=["shipping", "recommendation", "optimization", "carriers"],
+    ),
+    AgentSkill(
+        name="track_shipment",
+        description="Track shipment status in real-time using tracking code. Auto-detects carrier if not provided. Returns current status, movement history, and delivery estimation.",
+        tags=["tracking", "shipment", "status", "delivery"],
+    ),
+    AgentSkill(
+        name="health_check",
+        description="Check agent health status and retrieve agent metadata including version, model, protocol, and specialty.",
+        tags=["monitoring", "health", "status"],
+    ),
+]
 
 # =============================================================================
 # System Prompt (Carrier Management Specialist)
@@ -337,16 +365,21 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Carrier Management)")
+    logger.info(f"[{AGENT_NAME}] Skills registered: {len(AGENT_SKILLS)}")
+    for skill in AGENT_SKILLS:
+        logger.info(f"  - {skill.name}: {skill.description}")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with version and skills for Agent Card discovery
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

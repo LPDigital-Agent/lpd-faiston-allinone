@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from a2a.types import AgentSkill
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -61,6 +62,91 @@ Features:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
+
+# Agent Skills (A2A Agent Card)
+AGENT_SKILLS = [
+    AgentSkill(
+        name="start_campaign",
+        description="Start a counting campaign with defined scope, cycles, and blind counting support",
+        parameters={
+            "campaign_type": "Type of campaign (FULL, CYCLE, SPOT, PERPETUAL)",
+            "scope": "Campaign scope {location_id, project_id, categories}",
+            "cycles": "Number of counting cycles (default 2)",
+            "blind_count": "Whether to use blind counting (default True)",
+            "assigned_counters": "List of assigned counter user IDs",
+            "session_id": "Session ID for context",
+            "user_id": "User ID for audit"
+        }
+    ),
+    AgentSkill(
+        name="get_campaign",
+        description="Get campaign details with status and progress",
+        parameters={
+            "campaign_id": "Campaign ID to query",
+            "session_id": "Session ID for context"
+        }
+    ),
+    AgentSkill(
+        name="get_campaign_items",
+        description="Get items for counting campaign with optional status filter",
+        parameters={
+            "campaign_id": "Campaign ID",
+            "status": "Optional filter by status (PENDING, COUNTED, DIVERGENT)",
+            "session_id": "Session ID for context"
+        }
+    ),
+    AgentSkill(
+        name="submit_count",
+        description="Submit a count for an item with physical quantity and optional serial numbers",
+        parameters={
+            "campaign_id": "Campaign ID",
+            "part_number_id": "Part number being counted",
+            "physical_quantity": "Physical quantity counted",
+            "serial_numbers": "Optional list of serial numbers found",
+            "location_id": "Optional location of count",
+            "notes": "Optional counting notes",
+            "session_id": "Session ID for context",
+            "user_id": "Counter user ID"
+        }
+    ),
+    AgentSkill(
+        name="analyze_divergences",
+        description="Analyze divergences in campaign with causes and recommendations",
+        parameters={
+            "campaign_id": "Campaign ID to analyze",
+            "threshold_percent": "Divergence threshold percentage (default 5%)",
+            "session_id": "Session ID for context"
+        }
+    ),
+    AgentSkill(
+        name="propose_adjustment",
+        description="Propose inventory adjustment with type, quantity, and justification",
+        parameters={
+            "campaign_id": "Campaign ID",
+            "part_number_id": "Part number to adjust",
+            "adjustment_type": "Type of adjustment (GAIN, LOSS, CORRECTION)",
+            "quantity": "Adjustment quantity (positive for gain, negative for loss)",
+            "justification": "Adjustment justification",
+            "session_id": "Session ID for context",
+            "user_id": "User proposing adjustment"
+        }
+    ),
+    AgentSkill(
+        name="complete_campaign",
+        description="Complete counting campaign with optional adjustment application",
+        parameters={
+            "campaign_id": "Campaign ID to complete",
+            "apply_adjustments": "Whether to apply approved adjustments",
+            "session_id": "Session ID for context",
+            "user_id": "User completing campaign"
+        }
+    ),
+    AgentSkill(
+        name="health_check",
+        description="Health check endpoint for monitoring agent status",
+        parameters={}
+    ),
+]
 
 # =============================================================================
 # System Prompt (Reconciliation Specialist)
@@ -540,6 +626,9 @@ def main():
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
     logger.info(f"[{AGENT_NAME}] Role: SUPPORT (Reconciliation)")
+    logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
+    for skill in AGENT_SKILLS:
+        logger.info(f"[{AGENT_NAME}]   - {skill.name}: {skill.description}")
 
     # Create agent
     agent = create_agent()
@@ -550,6 +639,8 @@ def main():
         host="0.0.0.0",
         port=9000,
         serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,
+        skills=AGENT_SKILLS,
     )
 
     # Start server

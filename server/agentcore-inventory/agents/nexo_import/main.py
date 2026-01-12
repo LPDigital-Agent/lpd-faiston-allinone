@@ -25,6 +25,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
 
+# A2A Protocol Types for Agent Card Discovery (100% A2A Architecture)
+from a2a.types import AgentSkill
+
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
 from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gemini_model
 
@@ -62,6 +65,58 @@ Specialists available via A2A:
 
 # Model configuration
 MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-pro (with Thinking)
+
+# =============================================================================
+# A2A Agent Skills (100% A2A Architecture - Agent Card Discovery)
+# =============================================================================
+# These skills are exposed in the Agent Card at /.well-known/agent-card.json
+# enabling dynamic discovery per A2A Protocol specification.
+# Reference: https://a2a-protocol.org/latest/specification/
+
+AGENT_SKILLS = [
+    AgentSkill(
+        id="analyze_file",
+        name="Analyze File",
+        description="OBSERVE phase: Analyze file structure from S3, detect columns, "
+                    "identify patterns, and determine routing to specialist agents.",
+        tags=["nexo", "import", "analysis", "observe", "file-detection"],
+    ),
+    AgentSkill(
+        id="reason_mappings",
+        name="Reason Mappings",
+        description="THINK phase: Reason about column mappings using schema context, "
+                    "prior knowledge from LearningAgent, and confidence scoring.",
+        tags=["nexo", "import", "reasoning", "think", "mappings"],
+    ),
+    AgentSkill(
+        id="generate_questions",
+        name="Generate Questions",
+        description="HIL phase: Generate Human-in-the-Loop clarification questions "
+                    "for low-confidence mappings (threshold: 80%).",
+        tags=["nexo", "import", "hil", "questions", "confidence"],
+    ),
+    AgentSkill(
+        id="execute_import",
+        name="Execute Import",
+        description="ACT phase: Execute validated import with column mappings, "
+                    "delegating to specialist agents and storing learned patterns.",
+        tags=["nexo", "import", "execution", "act", "database"],
+    ),
+    AgentSkill(
+        id="route_to_specialist",
+        name="Route to Specialist",
+        description="ORCHESTRATION: Central routing logic to delegate requests to "
+                    "appropriate specialist agents (IntakeAgent, ImportAgent, etc.) via A2A.",
+        tags=["nexo", "orchestration", "routing", "a2a", "delegation"],
+    ),
+    AgentSkill(
+        id="health_check",
+        name="Health Check",
+        description="Monitoring endpoint returning agent health status, version, "
+                    "model configuration, and protocol information.",
+        tags=["nexo", "monitoring", "health", "status"],
+    ),
+]
 
 # =============================================================================
 # System Prompt (ReAct Pattern)
@@ -416,23 +471,29 @@ def create_agent() -> Agent:
 
 def main():
     """
-    Start the Strands A2AServer.
+    Start the Strands A2AServer with 100% A2A Architecture.
 
     Port 9000 is the standard for A2A protocol.
+    Agent Card is served at /.well-known/agent-card.json for discovery.
     """
     logger.info(f"[{AGENT_NAME}] Starting Strands A2AServer on port 9000...")
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
     logger.info(f"[{AGENT_NAME}] Version: {AGENT_VERSION}")
+    logger.info(f"[{AGENT_NAME}] Skills: {[s.id for s in AGENT_SKILLS]}")
+    logger.info(f"[{AGENT_NAME}] Agent Card: GET /.well-known/agent-card.json")
 
     # Create agent
     agent = create_agent()
 
-    # Create A2A server
+    # Create A2A server with skills for Agent Card discovery (100% A2A Architecture)
+    # Reference: https://a2a-protocol.org/latest/specification/
     a2a_server = A2AServer(
         agent=agent,
         host="0.0.0.0",
         port=9000,
-        serve_at_root=True,  # Serve at / for AgentCore compatibility
+        version=AGENT_VERSION,              # Agent version in Agent Card
+        skills=AGENT_SKILLS,                # Skills exposed in Agent Card
+        serve_at_root=True,                 # Serve at / for AgentCore compatibility
     )
 
     # Start server
