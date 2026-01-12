@@ -614,6 +614,21 @@ class A2AClient:
             raw_response=response,
         )
 
+    def _get_runtime_arn(self, agent_id: str) -> Optional[str]:
+        """
+        Get the full ARN for an agent runtime.
+
+        Args:
+            agent_id: Agent identifier (e.g., "learning", "validation")
+
+        Returns:
+            Full ARN string or None if agent not found
+        """
+        runtime_id = RUNTIME_IDS.get(agent_id)
+        if not runtime_id:
+            return None
+        return f"arn:aws:bedrock-agentcore:{self.region}:{self.account_id}:runtime/{runtime_id}"
+
     async def invoke_agent(
         self,
         agent_id: str,
@@ -623,13 +638,14 @@ class A2AClient:
         use_discovery: Optional[bool] = None,
     ) -> A2AResponse:
         """
-        Invoke another agent via A2A protocol with optional Agent Card discovery.
+        Invoke another agent via A2A protocol using boto3 SDK.
 
         This is the main method for cross-agent communication.
 
-        100% A2A Architecture: Uses hardcoded runtime IDs (NO SSM) for
-        zero-latency lookups. When use_discovery=True (default), performs
-        Agent Card discovery first to validate the target agent exists.
+        100% A2A Architecture: Uses boto3 SDK invoke_agent_runtime() which
+        correctly handles IAM role credentials from inside AgentCore Runtime.
+        The A2A JSON-RPC 2.0 payload format is preserved - only the transport
+        mechanism changes from HTTP direct to SDK.
 
         Args:
             agent_id: ID of the agent to invoke (e.g., "learning", "validation")
@@ -662,44 +678,16 @@ class A2AClient:
         current_agent = os.environ.get("AGENT_ID", "unknown")
         audit = AgentAuditEmitter(current_agent)
 
-        # Determine discovery mode
-        should_discover = use_discovery if use_discovery is not None else self.use_discovery
-
-        # =================================================================
-        # 100% A2A Architecture: Agent Card Discovery (when enabled)
-        # =================================================================
-        agent_url = None
-        agent_card = None
-
-        if should_discover:
-            # A2A Protocol Compliant: Discover agent via Agent Card first
-            agent_card = await self.discover_agent(agent_id)
-            if agent_card:
-                # Use authoritative URL from Agent Card
-                agent_url = agent_card.url
-                logger.debug(f"[A2A] Using URL from Agent Card: {agent_url}")
-            else:
-                # Discovery failed - use hardcoded runtime URL
-                logger.warning(
-                    f"[A2A] Agent Card discovery failed for '{agent_id}', "
-                    f"using hardcoded runtime URL"
-                )
-
-        # Use hardcoded runtime URL if discovery disabled or failed
-        if not agent_url:
-            agent_url = await self.get_agent_url(agent_id)
-
-        if not agent_url:
+        # Get runtime ARN for target agent
+        runtime_arn = self._get_runtime_arn(agent_id)
+        if not runtime_arn:
             return A2AResponse(
                 success=False,
                 response="",
                 agent_id=agent_id,
                 message_id="",
-                error=f"Agent '{agent_id}' not found (discovery={should_discover})",
+                error=f"Agent '{agent_id}' not found in RUNTIME_IDS",
             )
-
-        # Normalize URL for A2A protocol (handles legacy /invocations URLs)
-        agent_url = self._normalize_url(agent_url)
 
         # Emit delegation event
         audit.delegating(
@@ -708,99 +696,82 @@ class A2AClient:
             session_id=session_id,
         )
 
-        # Build A2A request
+        # Build A2A request (JSON-RPC 2.0 format preserved)
         message_id = str(uuid.uuid4())
         a2a_request = self._build_a2a_request(payload, message_id)
 
-        # Sign request with SigV4 (REQUIRED for InvokeAgentRuntime API)
-        # FIX: Previous code used plain headers without SigV4 auth, causing 403 Forbidden
-        headers = self._sign_request("POST", agent_url, a2a_request)
-
-        # Add session ID if provided (after signing - not included in signature)
-        if session_id:
-            headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] = session_id
+        # Generate session ID if not provided
+        runtime_session_id = session_id or str(uuid.uuid4())
 
         try:
-            httpx = _get_httpx()
+            boto3 = _get_boto3()
 
             # =================================================================
-            # Exponential Backoff with Jitter (AWS Best Practices)
+            # boto3 SDK invoke_agent_runtime() - CORRECT for AgentCore Runtime
             # =================================================================
-            last_exception = None
+            # This method correctly handles IAM role credentials from inside
+            # the AgentCore Runtime environment. HTTP direct with manual SigV4
+            # fails because the credential chain doesn't work the same way.
+            # =================================================================
 
-            for attempt in range(MAX_RETRIES):
-                try:
-                    async with httpx.AsyncClient(timeout=timeout) as client:
-                        response = await client.post(
-                            agent_url,
-                            json=a2a_request,
-                            headers=headers,
-                        )
+            # Create client with timeout configuration
+            from botocore.config import Config
+            config = Config(
+                connect_timeout=timeout,
+                read_timeout=timeout,
+                retries={
+                    'max_attempts': MAX_RETRIES,
+                    'mode': 'adaptive'  # AWS adaptive retry with backoff + jitter
+                }
+            )
 
-                        # Check if retryable status code
-                        if response.status_code in RETRYABLE_STATUS_CODES:
-                            # Calculate backoff delay with jitter
-                            delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
-                            jitter = delay * JITTER_RANGE * (2 * random.random() - 1)
-                            delay = delay + jitter
+            client = boto3.client(
+                'bedrock-agentcore',
+                region_name=self.region,
+                config=config
+            )
 
-                            # Check Retry-After header
-                            retry_after = response.headers.get("Retry-After")
-                            if retry_after:
-                                try:
-                                    delay = max(delay, float(retry_after))
-                                except ValueError:
-                                    pass
+            # Invoke the agent runtime
+            # The payload is the A2A JSON-RPC 2.0 request - format is preserved!
+            logger.info(f"[A2A] Invoking {agent_id} via boto3 SDK (ARN: {runtime_arn[:50]}...)")
 
-                            logger.warning(
-                                f"[A2A] {response.status_code} from {agent_id}, "
-                                f"retry {attempt + 1}/{MAX_RETRIES} after {delay:.2f}s"
-                            )
-                            await asyncio.sleep(delay)
-                            continue
+            response = client.invoke_agent_runtime(
+                agentRuntimeArn=runtime_arn,
+                runtimeSessionId=runtime_session_id,
+                payload=json.dumps(a2a_request).encode('utf-8')
+            )
 
-                        response.raise_for_status()
-                        response_data = response.json()
-
-                        return self._parse_a2a_response(response_data, agent_id, message_id)
-
-                except httpx.TimeoutException as e:
-                    last_exception = e
-                    if attempt < MAX_RETRIES - 1:
-                        delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
-                        jitter = delay * JITTER_RANGE * (2 * random.random() - 1)
-                        delay = delay + jitter
-                        logger.warning(
-                            f"[A2A] Timeout calling {agent_id}, "
-                            f"retry {attempt + 1}/{MAX_RETRIES} after {delay:.2f}s"
-                        )
-                        await asyncio.sleep(delay)
-                    else:
-                        raise
-
-                except httpx.HTTPStatusError as e:
-                    # Non-retryable HTTP errors
-                    if e.response.status_code not in RETRYABLE_STATUS_CODES:
-                        raise
-                    last_exception = e
-
-            # Max retries exceeded
-            if last_exception:
-                raise last_exception
-            raise Exception(f"Max retries ({MAX_RETRIES}) exceeded for {agent_id}")
+            # Read response payload
+            response_payload = response.get('payload')
+            if response_payload:
+                # response_payload is a StreamingBody, read it
+                response_body = response_payload.read().decode('utf-8')
+                response_data = json.loads(response_body)
+                logger.debug(f"[A2A] Response from {agent_id}: {str(response_data)[:200]}...")
+                return self._parse_a2a_response(response_data, agent_id, message_id)
+            else:
+                return A2AResponse(
+                    success=False,
+                    response="",
+                    agent_id=agent_id,
+                    message_id=message_id,
+                    error="Empty response payload from agent runtime",
+                )
 
         except Exception as e:
+            error_msg = str(e)
+            logger.error(f"[A2A] Error invoking {agent_id}: {error_msg}")
             audit.error(
                 message=f"Erro ao chamar {agent_id}",
                 session_id=session_id,
-                error=str(e),
+                error=error_msg,
             )
             return A2AResponse(
                 success=False,
                 response="",
                 agent_id=agent_id,
                 message_id=message_id,
-                error=str(e),
+                error=error_msg,
             )
 
     async def invoke_with_streaming(
