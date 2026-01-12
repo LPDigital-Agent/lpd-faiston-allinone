@@ -261,25 +261,6 @@ Return the most appropriate PostgreSQL type from the allowed types list."""
 
 
 # =============================================================================
-# Health Check
-# =============================================================================
-
-@app.ping
-def health_check() -> Dict[str, Any]:
-    """
-    Health check for AgentCore Runtime.
-
-    Returns:
-        Health status
-    """
-    return {
-        "status": "healthy",
-        "agent_id": AGENT_ID,
-        "agent_name": AGENT_NAME,
-    }
-
-
-# =============================================================================
 # Run
 # =============================================================================
 

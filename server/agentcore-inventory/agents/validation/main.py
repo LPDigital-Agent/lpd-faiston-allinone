@@ -372,21 +372,6 @@ Check data types, required fields, and value constraints."""
 
 
 # =============================================================================
-# Health Check
-# =============================================================================
-
-@app.ping
-def health_check() -> Dict[str, Any]:
-    """Health check for AgentCore Runtime."""
-    return {
-        "status": "healthy",
-        "agent_id": AGENT_ID,
-        "agent_name": AGENT_NAME,
-        "role": "validator",
-    }
-
-
-# =============================================================================
 # Run
 # =============================================================================
 

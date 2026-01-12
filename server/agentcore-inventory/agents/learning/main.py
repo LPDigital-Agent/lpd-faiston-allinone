@@ -315,25 +315,6 @@ Based on historical success rates, determine the appropriate threshold."""
         return f"Process the following request: {json.dumps(payload)}"
 
 
-# =============================================================================
-# Health Check
-# =============================================================================
-
-@app.ping
-def health_check() -> Dict[str, Any]:
-    """
-    Health check for AgentCore Runtime.
-
-    Returns:
-        Health status
-    """
-    return {
-        "status": "healthy",
-        "agent_id": AGENT_ID,
-        "agent_name": AGENT_NAME,
-        "memory_id": MEMORY_ID,
-        "memory_namespace": MEMORY_NAMESPACE,
-    }
 
 
 # =============================================================================
