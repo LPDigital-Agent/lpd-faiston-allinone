@@ -197,26 +197,53 @@ jobs:
           pip install --upgrade boto3 botocore --quiet
 
           # Wait for AWS API to propagate newly deployed runtimes
-          # GitHub Actions job scheduling is fast, but AWS API needs time
-          # to make newly deployed runtimes visible in list_agent_runtimes()
-          echo "Waiting 30s for AWS API propagation..."
-          sleep 30
+          # AWS AgentCore has significant eventual consistency delay (>30s observed)
+          # We use initial wait + retry loop to handle this
+          echo "Waiting 45s for AWS API initial propagation..."
+          sleep 45
 
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import json
+          import time
           from urllib.parse import quote
 
           REGION = "us-east-2"
           PROJECT_NAME = "faiston-one"
+          EXPECTED_AGENT_COUNT = 14  # 1 orchestrator + 13 specialists
+          MAX_LIST_RETRIES = 12      # Up to 12 retries = 3 more minutes
+          LIST_RETRY_DELAY = 15      # 15 seconds between retries
 
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
           ssm = boto3.client("ssm", region_name=REGION)
 
           print("=== Building SSM Agent Registry ===")
 
-          # List all runtimes
-          runtimes = client.list_agent_runtimes()
+          # List all runtimes with retry for eventual consistency
+          # AWS AgentCore API may not return newly deployed runtimes immediately
+          runtimes = None
+          for attempt in range(MAX_LIST_RETRIES + 1):
+              runtimes = client.list_agent_runtimes()
+              faiston_count = sum(
+                  1 for rt in runtimes.get("agentRuntimeSummaries", [])
+                  if rt.get("agentRuntimeName", "").startswith("faiston")
+              )
+              print(f"  Found {faiston_count}/{EXPECTED_AGENT_COUNT} Faiston agents (attempt {attempt + 1})")
+
+              if faiston_count >= EXPECTED_AGENT_COUNT:
+                  print(f"  ✅ All {EXPECTED_AGENT_COUNT} agents visible in API")
+                  break
+              elif faiston_count > 0:
+                  # Some agents found, wait a bit more for the rest
+                  print(f"  ⏳ Waiting for remaining agents... ({LIST_RETRY_DELAY}s)")
+                  time.sleep(LIST_RETRY_DELAY)
+              elif attempt < MAX_LIST_RETRIES:
+                  # No agents found yet, wait longer
+                  print(f"  ⏳ No agents visible yet, waiting... ({LIST_RETRY_DELAY}s)")
+                  time.sleep(LIST_RETRY_DELAY)
+              else:
+                  print(f"  ⚠️ Only found {faiston_count} agents after {MAX_LIST_RETRIES} retries")
+                  print("  Proceeding with available agents...")
 
           registry = {}
           for rt in runtimes.get("agentRuntimeSummaries", []):
@@ -299,6 +326,9 @@ jobs:
           REGION = "us-east-2"
           COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
           COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
+          # Retry settings - SSM step already waited, but add safety margin
+          MAX_FIND_RETRIES = 5
+          FIND_RETRY_DELAY = 10
 
           print("=== Configuring JWT Authorizer for Orchestrator ===")
           print(f"  Cognito Pool: {COGNITO_POOL_ID}")
@@ -306,17 +336,24 @@ jobs:
 
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
-          # Find orchestrator runtime (should exist - all deploys completed)
-          runtimes = client.list_agent_runtimes()
+          # Find orchestrator runtime with retry for API eventual consistency
+          # The SSM Registry step should have already waited for all agents to be visible,
+          # but we add a small retry here as a safety margin
           agent_runtime_id = None
-          for rt in runtimes.get("agentRuntimeSummaries", []):
-              if rt["agentRuntimeName"] == "faiston_asset_management":
-                  agent_runtime_id = rt["agentRuntimeId"]
-                  print(f"  Found orchestrator runtime: {agent_runtime_id}")
+          for find_attempt in range(MAX_FIND_RETRIES):
+              runtimes = client.list_agent_runtimes()
+              for rt in runtimes.get("agentRuntimeSummaries", []):
+                  if rt["agentRuntimeName"] == "faiston_asset_management":
+                      agent_runtime_id = rt["agentRuntimeId"]
+                      print(f"  Found orchestrator runtime: {agent_runtime_id}")
+                      break
+              if agent_runtime_id:
                   break
+              print(f"  Orchestrator not found, retrying... (attempt {find_attempt + 1}/{MAX_FIND_RETRIES})")
+              time.sleep(FIND_RETRY_DELAY)
 
           if not agent_runtime_id:
-              print("ERROR: Orchestrator runtime not found!")
+              print("ERROR: Orchestrator runtime not found after retries!")
               print("  Available runtimes:")
               for rt in runtimes.get("agentRuntimeSummaries", []):
                   print(f"    - {rt['agentRuntimeName']}: {rt['agentRuntimeId']}")
