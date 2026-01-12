@@ -26,6 +26,7 @@ To be used on web research we are in year 2026.
 - https://aws.amazon.com/blogs/opensource/introducing-strands-agents-an-open-source-ai-agents-sdk/
 - https://aws.amazon.com/blogs/opensource/introducing-strands-agents-1-0-production-ready-multi-agent-orchestration-made-simple/
 - https://aws.amazon.com/blogs/opensource/introducing-strands-agent-sops-natural-language-workflows-for-ai-agents/
+- GEMINI Strands -> https://strandsagents.com/latest/documentation/docs/user-guide/concepts/model-providers/gemini/
 
 ### A2A / INTER-AGENT COMMUNICATION (REFERENCE)
 

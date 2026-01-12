@@ -17,6 +17,9 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import os
 
+# Strands Model Provider for Gemini (per CLAUDE.md - Gemini 3.0 Family ONLY)
+from strands.models.gemini import GeminiModel
+
 # =============================================================================
 # Constants
 # =============================================================================
@@ -118,6 +121,47 @@ def requires_thinking(agent_type: str) -> bool:
         True if agent requires thinking mode
     """
     return agent_type in PRO_THINKING_AGENTS
+
+
+def create_gemini_model(agent_type: str = "default") -> GeminiModel:
+    """
+    Create configured GeminiModel for Strands Agent.
+
+    MANDATORY per CLAUDE.md: ALL agents MUST use Gemini 3.0 Family.
+    Uses GOOGLE_API_KEY from environment (set at deploy time via --env).
+
+    This function centralizes model configuration to:
+    1. Apply correct model ID based on agent type (Pro vs Flash)
+    2. Configure thinking mode for complex reasoning agents
+    3. Ensure consistent parameters across all agents
+
+    Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/model-providers/gemini/
+
+    Args:
+        agent_type: Agent identifier for model selection
+
+    Returns:
+        Configured GeminiModel instance ready for Strands Agent
+    """
+    model_id = get_model(agent_type)
+
+    # Model parameters (sensible defaults for inventory agents)
+    params = {
+        "temperature": 0.7,
+        "max_output_tokens": 4096,
+    }
+
+    # Add thinking config for Pro+Thinking agents (file analysis, schema understanding)
+    if requires_thinking(agent_type):
+        params["thinking_config"] = {
+            "thinking_level": "high"  # Maximize reasoning for complex tasks
+        }
+
+    return GeminiModel(
+        model_id=model_id,
+        params=params,
+        # GOOGLE_API_KEY automatically read from environment
+    )
 
 # Environment variables
 INVENTORY_TABLE = os.environ.get("INVENTORY_TABLE", "faiston-one-sga-inventory-prod")

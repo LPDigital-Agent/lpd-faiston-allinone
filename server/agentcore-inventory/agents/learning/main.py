@@ -28,7 +28,7 @@ from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
-from agents.utils import get_model, requires_thinking, AGENT_VERSION
+from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gemini_model
 
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
@@ -554,7 +554,7 @@ def create_agent() -> Agent:
     return Agent(
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
-        model=f"litellm/{MODEL_ID}",  # Use LiteLLM for Gemini integration
+        model=create_gemini_model(AGENT_ID),  # GeminiModel via Google AI Studio
         tools=[
             create_episode,
             retrieve_prior_knowledge,
