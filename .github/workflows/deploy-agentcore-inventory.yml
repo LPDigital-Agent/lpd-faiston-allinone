@@ -205,8 +205,14 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import json
-          import time
+          import subprocess
           from urllib.parse import quote
+
+          # NOTE: time.sleep() does NOT work in GitHub Actions Python heredocs!
+          # Use subprocess.run(['sleep', 'N']) instead which calls the OS-level sleep
+          def sleep_seconds(n):
+              """Sleep using OS-level command - time.sleep() fails in heredocs."""
+              subprocess.run(['sleep', str(n)], check=True)
 
           REGION = "us-east-2"
           PROJECT_NAME = "faiston-one"
@@ -228,22 +234,22 @@ jobs:
                   1 for rt in runtimes.get("agentRuntimeSummaries", [])
                   if rt.get("agentRuntimeName", "").startswith("faiston")
               )
-              print(f"  Found {faiston_count}/{EXPECTED_AGENT_COUNT} Faiston agents (attempt {attempt + 1})")
+              print(f"  Found {faiston_count}/{EXPECTED_AGENT_COUNT} Faiston agents (attempt {attempt + 1})", flush=True)
 
               if faiston_count >= EXPECTED_AGENT_COUNT:
-                  print(f"  ✅ All {EXPECTED_AGENT_COUNT} agents visible in API")
+                  print(f"  ✅ All {EXPECTED_AGENT_COUNT} agents visible in API", flush=True)
                   break
               elif faiston_count > 0:
                   # Some agents found, wait a bit more for the rest
-                  print(f"  ⏳ Waiting for remaining agents... ({LIST_RETRY_DELAY}s)")
-                  time.sleep(LIST_RETRY_DELAY)
+                  print(f"  ⏳ Waiting for remaining agents... ({LIST_RETRY_DELAY}s)", flush=True)
+                  sleep_seconds(LIST_RETRY_DELAY)
               elif attempt < MAX_LIST_RETRIES:
                   # No agents found yet, wait longer
-                  print(f"  ⏳ No agents visible yet, waiting... ({LIST_RETRY_DELAY}s)")
-                  time.sleep(LIST_RETRY_DELAY)
+                  print(f"  ⏳ No agents visible yet, waiting... ({LIST_RETRY_DELAY}s)", flush=True)
+                  sleep_seconds(LIST_RETRY_DELAY)
               else:
-                  print(f"  ⚠️ Only found {faiston_count} agents after {MAX_LIST_RETRIES} retries")
-                  print("  Proceeding with available agents...")
+                  print(f"  ⚠️ Only found {faiston_count} agents after {MAX_LIST_RETRIES} retries", flush=True)
+                  print("  Proceeding with available agents...", flush=True)
 
           registry = {}
           for rt in runtimes.get("agentRuntimeSummaries", []):
@@ -321,7 +327,13 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import os
-          import time
+          import subprocess
+
+          # NOTE: time.sleep() does NOT work in GitHub Actions Python heredocs!
+          # Use subprocess.run(['sleep', 'N']) instead which calls the OS-level sleep
+          def sleep_seconds(n):
+              """Sleep using OS-level command - time.sleep() fails in heredocs."""
+              subprocess.run(['sleep', str(n)], check=True)
 
           REGION = "us-east-2"
           COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
@@ -330,9 +342,9 @@ jobs:
           MAX_FIND_RETRIES = 5
           FIND_RETRY_DELAY = 10
 
-          print("=== Configuring JWT Authorizer for Orchestrator ===")
-          print(f"  Cognito Pool: {COGNITO_POOL_ID}")
-          print(f"  Cognito Client: {COGNITO_CLIENT_ID}")
+          print("=== Configuring JWT Authorizer for Orchestrator ===", flush=True)
+          print(f"  Cognito Pool: {COGNITO_POOL_ID}", flush=True)
+          print(f"  Cognito Client: {COGNITO_CLIENT_ID}", flush=True)
 
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
@@ -345,18 +357,18 @@ jobs:
               for rt in runtimes.get("agentRuntimeSummaries", []):
                   if rt["agentRuntimeName"] == "faiston_asset_management":
                       agent_runtime_id = rt["agentRuntimeId"]
-                      print(f"  Found orchestrator runtime: {agent_runtime_id}")
+                      print(f"  Found orchestrator runtime: {agent_runtime_id}", flush=True)
                       break
               if agent_runtime_id:
                   break
-              print(f"  Orchestrator not found, retrying... (attempt {find_attempt + 1}/{MAX_FIND_RETRIES})")
-              time.sleep(FIND_RETRY_DELAY)
+              print(f"  Orchestrator not found, retrying... (attempt {find_attempt + 1}/{MAX_FIND_RETRIES})", flush=True)
+              sleep_seconds(FIND_RETRY_DELAY)
 
           if not agent_runtime_id:
-              print("ERROR: Orchestrator runtime not found after retries!")
-              print("  Available runtimes:")
+              print("ERROR: Orchestrator runtime not found after retries!", flush=True)
+              print("  Available runtimes:", flush=True)
               for rt in runtimes.get("agentRuntimeSummaries", []):
-                  print(f"    - {rt['agentRuntimeName']}: {rt['agentRuntimeId']}")
+                  print(f"    - {rt['agentRuntimeName']}: {rt['agentRuntimeId']}", flush=True)
               exit(1)
 
           # Wait for ACTIVE status (with retry)
@@ -368,14 +380,14 @@ jobs:
               try:
                   current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
                   status = current_config.get("status")
-                  print(f"  Current status: {status}")
+                  print(f"  Current status: {status}", flush=True)
                   if status == "ACTIVE":
                       break
-                  print(f"  Waiting for ACTIVE state... (attempt {attempt + 1}/{MAX_RETRIES})")
-                  time.sleep(RETRY_DELAY)
+                  print(f"  Waiting for ACTIVE state... (attempt {attempt + 1}/{MAX_RETRIES})", flush=True)
+                  sleep_seconds(RETRY_DELAY)
               except Exception as e:
-                  print(f"  Waiting... {e}")
-                  time.sleep(RETRY_DELAY)
+                  print(f"  Waiting... {e}", flush=True)
+                  sleep_seconds(RETRY_DELAY)
 
           if not current_config or current_config.get("status") != "ACTIVE":
               print("ERROR: Runtime did not reach ACTIVE status!")
