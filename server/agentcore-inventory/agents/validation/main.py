@@ -375,7 +375,7 @@ Check data types, required fields, and value constraints."""
 # Health Check
 # =============================================================================
 
-@app.health_check
+@app.ping
 def health_check() -> Dict[str, Any]:
     """Health check for AgentCore Runtime."""
     return {

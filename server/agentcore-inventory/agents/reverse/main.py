@@ -200,7 +200,7 @@ async def handle_evaluate_condition(
 # =============================================================================
 
 
-@app.health_check
+@app.ping
 def health_check() -> Dict[str, Any]:
     """Health check endpoint."""
     return {

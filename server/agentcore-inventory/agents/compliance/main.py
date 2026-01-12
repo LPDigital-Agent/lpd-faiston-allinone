@@ -186,7 +186,7 @@ async def _invoke_adk_agent(payload: Dict[str, Any], session_id: str, user_id: s
         return {"response": response_text}
 
 
-@app.health_check
+@app.ping
 def health_check() -> Dict[str, Any]:
     return {"status": "healthy", "agent_id": AGENT_ID, "agent_name": AGENT_NAME, "role": "compliance_validator"}
 
