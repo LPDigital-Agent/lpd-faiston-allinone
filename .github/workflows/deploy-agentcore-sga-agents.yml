@@ -1,21 +1,24 @@
 # =============================================================================
-# AgentCore Deployment Workflow - 14 SGA Agents (100% Agentic Architecture)
+# AgentCore Deployment Workflow - 14 SGA Agents (TRUE Multi-Agent A2A)
 # =============================================================================
 # Deploys all 14 SGA agents to their dedicated AgentCore Runtimes.
-# Each agent runs in its own runtime for A2A communication.
+# Each agent runs in its own runtime with A2A communication.
 #
-# Architecture:
+# Architecture (100% TRUE Multi-Agent A2A):
 # - 14 separate AgentCore Runtimes (one per agent)
 # - A2A Protocol (JSON-RPC 2.0, port 9000, root path /)
 # - AWS Strands Agents framework with A2AServer
-# - AgentCore Memory (global namespace)
+# - Each agent has its OWN main.py with Strands A2AServer
+# - ORCHESTRATOR (nexo_import) routes to SPECIALISTS via A2A
+# - ReAct Pattern: OBSERVE→THINK→LEARN→EXECUTE + HIL
 #
-# MIGRATION: BedrockAgentCoreApp (HTTP) → Strands A2AServer (A2A)
-# - Entry point: main_a2a.py (unified for all agents)
-# - Differentiation: AGENT_ID environment variable (set by Terraform)
+# MIGRATION COMPLETE: BedrockAgentCoreApp (HTTP) → Strands A2AServer (A2A)
+# - Each agent has: agents/<agent_id>/main.py (own A2AServer)
+# - Entry point: main.py at package root (copied from agent's main.py)
+# - NO unified main_a2a.py - TRUE multi-agent isolation
 #
 # Deployment Strategy:
-# 1. Package main_a2a.py with shared modules for each agent
+# 1. Package each agent's OWN main.py with shared modules
 # 2. Upload ZIP artifacts to S3
 # 3. Terraform manages the runtimes (A2A protocol)
 #
@@ -29,7 +32,8 @@ on:
     branches:
       - main
     paths:
-      - 'server/agentcore-inventory/main_a2a.py'
+      # Each agent has its own main.py (TRUE Multi-Agent A2A)
+      - 'server/agentcore-inventory/agents/*/main.py'
       - 'server/agentcore-inventory/agents/**'
       - 'server/agentcore-inventory/shared/**'
       - 'server/agentcore-inventory/tools/**'
@@ -163,28 +167,44 @@ jobs:
           # Copy agent code with PRESERVED DIRECTORY STRUCTURE
           # =========================================================================
           # AgentCore Runtime entry point: main.py at package root
-          # MIGRATION: Using unified main_a2a.py for ALL agents (Strands A2AServer)
-          # - All 14 agents use the same entry point
-          # - Differentiated by AGENT_ID environment variable (set by Terraform)
+          # TRUE Multi-Agent A2A: Each agent has its OWN main.py with A2AServer
+          # - Each agent is ISOLATED with its own Strands A2AServer
           # - Strands A2AServer serves at port 9000, root path /
+          # - ORCHESTRATOR (nexo_import) routes to SPECIALISTS via A2A
           #
           # Structure:
-          #   main.py (copied from main_a2a.py)  <- Entry point (root)
+          #   main.py (copied from agents/<agent_id>/main.py)  <- Entry point
           #   agents/
-          #     __init__.py
-          #     nexo_import_agent.py
-          #     estoque_control_agent.py
-          #     ...
+          #     <agent_id>/
+          #       agent.py (business logic)
+          #       tools/
+          #     utils.py (model config)
+          #   shared/
+          #     a2a_client.py (inter-agent communication)
           # =========================================================================
 
-          # Copy main_a2a.py to package root as main.py (unified entry point)
-          # This is the Strands A2AServer with all 41 tools
-          cp "main_a2a.py" "$PACKAGE_DIR/main.py"
+          # Copy agent's OWN main.py to package root (TRUE Multi-Agent A2A)
+          # Each agent has its own Strands A2AServer entry point
+          if [ -f "agents/$AGENT/main.py" ]; then
+            cp "agents/$AGENT/main.py" "$PACKAGE_DIR/main.py"
+            echo "✅ Copied agents/$AGENT/main.py → main.py"
+          else
+            echo "::error::Missing agents/$AGENT/main.py - TRUE Multi-Agent A2A requires per-agent main.py"
+            exit 1
+          fi
 
-          # Copy ALL agent modules (unified architecture - all tools in main_a2a.py)
-          # The main_a2a.py imports from agents/, so we copy everything
-          mkdir -p "$PACKAGE_DIR/agents"
-          cp -r agents/* "$PACKAGE_DIR/agents/"
+          # Copy agent modules (agent's own directory + utils.py for model config)
+          # TRUE Multi-Agent: Each agent has isolated business logic
+          mkdir -p "$PACKAGE_DIR/agents/$AGENT"
+          cp -r agents/$AGENT/* "$PACKAGE_DIR/agents/$AGENT/"
+
+          # Copy utils.py for centralized model configuration (Gemini 3.0)
+          if [ -f "agents/utils.py" ]; then
+            cp "agents/utils.py" "$PACKAGE_DIR/agents/utils.py"
+          fi
+
+          # Create agents/__init__.py
+          touch "$PACKAGE_DIR/agents/__init__.py"
 
           # Copy tools/ directory (contains MCP clients, adapters, etc.)
           if [ -d "tools" ]; then
@@ -443,10 +463,12 @@ jobs:
           echo "| observation | Import analysis | agentcore/agents/observation/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "| equipment_research | Doc discovery | agentcore/agents/equipment_research/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Architecture" >> $GITHUB_STEP_SUMMARY
+          echo "### Architecture (TRUE Multi-Agent A2A)" >> $GITHUB_STEP_SUMMARY
           echo "- **Framework:** AWS Strands Agents (A2AServer)" >> $GITHUB_STEP_SUMMARY
           echo "- **Protocol:** A2A (JSON-RPC 2.0, port 9000, root path /)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Entry Point:** main_a2a.py (unified for all agents)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Entry Point:** agents/<agent_id>/main.py (per-agent A2AServer)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Pattern:** ORCHESTRATOR (nexo_import) + SPECIALISTS + SUPPORT" >> $GITHUB_STEP_SUMMARY
+          echo "- **Communication:** Inter-agent A2A via shared/a2a_client.py" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. Run \`terraform plan\` to verify runtime configuration" >> $GITHUB_STEP_SUMMARY

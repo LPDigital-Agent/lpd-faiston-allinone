@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 # =============================================================================
-# Agent Structure Validation Script
-# Validates all 14 agents follow the correct AgentCore pattern
+# Agent Structure Validation Script - Strands A2A Architecture
+# =============================================================================
+# Validates all 14 agents follow the correct AgentCore pattern.
+#
+# ARCHITECTURE: TRUE Multi-Agent A2A
+# - Each agent has its OWN main.py with Strands A2AServer
+# - ORCHESTRATOR (nexo_import) routes to SPECIALISTS via A2A
+# - ReAct pattern: OBSERVE → THINK → LEARN → ACT + HIL
 # =============================================================================
 
 import os
@@ -27,11 +33,29 @@ EXPECTED_AGENTS = [
     "validation",
 ]
 
-# Required files for each agent
+# Agent roles for documentation
+AGENT_ROLES = {
+    "nexo_import": "ORCHESTRATOR",
+    "intake": "SPECIALIST (NF Parsing)",
+    "import": "SPECIALIST (Spreadsheet)",
+    "estoque_control": "SPECIALIST (Inventory Control)",
+    "learning": "SPECIALIST (Memory/Learning)",
+    "observation": "SUPPORT (Audit Trail)",
+    "validation": "SUPPORT (Validation)",
+    "compliance": "SUPPORT (Compliance)",
+    "carrier": "SUPPORT (Carrier)",
+    "expedition": "SUPPORT (Expedition)",
+    "reverse": "SUPPORT (Reverse Logistics)",
+    "reconciliacao": "SUPPORT (Reconciliation)",
+    "equipment_research": "SUPPORT (Equipment KB)",
+    "schema_evolution": "SUPPORT (Schema Evolution)",
+}
+
+# Required files for each agent subdirectory
 REQUIRED_FILES = [
     "__init__.py",
     "agent.py",
-    "main.py",
+    "main.py",  # NEW: Each agent has its own main.py with Strands A2AServer
     "Dockerfile",
     "requirements.txt",
 ]
@@ -102,6 +126,42 @@ def validate_shared_module(base_dir: Path) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
+def validate_per_agent_main(agents_dir: Path) -> Tuple[bool, List[str]]:
+    """Validate each agent has its own main.py with Strands A2AServer."""
+    errors = []
+
+    for agent_name in EXPECTED_AGENTS:
+        main_py = agents_dir / agent_name / "main.py"
+
+        if not main_py.exists():
+            errors.append(f"❌ {agent_name}: Missing main.py")
+            continue
+
+        content = main_py.read_text()
+
+        # Check for Strands imports
+        if "from strands" not in content:
+            errors.append(f"⚠️  {agent_name}: main.py missing Strands imports")
+
+        # Check for A2AServer
+        if "A2AServer" not in content:
+            errors.append(f"⚠️  {agent_name}: main.py missing A2AServer")
+
+        # Check for @tool decorator
+        if "@tool" not in content:
+            errors.append(f"⚠️  {agent_name}: main.py missing @tool decorators")
+
+        # Check for port 9000
+        if "9000" not in content:
+            errors.append(f"⚠️  {agent_name}: main.py not using port 9000")
+
+        # Check for serve_at_root
+        if "serve_at_root" not in content:
+            errors.append(f"⚠️  {agent_name}: main.py missing serve_at_root=True")
+
+    return len(errors) == 0, errors
+
+
 def validate_dockerfile_content(agents_dir: Path) -> Tuple[bool, List[str]]:
     """Validate Dockerfiles have correct settings."""
     errors = []
@@ -129,27 +189,56 @@ def validate_dockerfile_content(agents_dir: Path) -> Tuple[bool, List[str]]:
 
 
 def validate_agent_id(agents_dir: Path) -> Tuple[bool, List[str]]:
-    """Validate each agent has correct AGENT_ID."""
+    """Validate each agent has correct AGENT_ID in main.py."""
     errors = []
 
     for agent_name in EXPECTED_AGENTS:
-        agent_file = agents_dir / agent_name / "agent.py"
-        if not agent_file.exists():
-            continue
+        # Check main.py (primary) - this is the Strands A2AServer entry point
+        main_file = agents_dir / agent_name / "main.py"
+        if main_file.exists():
+            content = main_file.read_text()
 
-        content = agent_file.read_text()
+            # Check AGENT_ID is defined
+            if "AGENT_ID" not in content:
+                errors.append(f"⚠️  {agent_name}: main.py missing AGENT_ID")
 
-        # Check AGENT_ID is defined
-        if "AGENT_ID" not in content:
-            errors.append(f"⚠️  {agent_name}: agent.py missing AGENT_ID")
+            # Check AGENT_NAME is defined
+            if "AGENT_NAME" not in content:
+                errors.append(f"⚠️  {agent_name}: main.py missing AGENT_NAME")
 
-        # Check AGENT_NAME is defined
-        if "AGENT_NAME" not in content:
-            errors.append(f"⚠️  {agent_name}: agent.py missing AGENT_NAME")
+            # Check create_agent function exists
+            if "def create_agent" not in content:
+                errors.append(f"⚠️  {agent_name}: main.py missing create_agent function")
 
-        # Check create_*_agent function exists
-        if "def create_" not in content:
-            errors.append(f"⚠️  {agent_name}: agent.py missing create_*_agent function")
+            # Check main() function exists
+            if "def main()" not in content:
+                errors.append(f"⚠️  {agent_name}: main.py missing main() function")
+
+    return len(errors) == 0, errors
+
+
+def validate_no_legacy_files(base_dir: Path) -> Tuple[bool, List[str]]:
+    """Validate legacy files have been removed."""
+    errors = []
+
+    # Check no unified main_a2a.py exists
+    main_a2a = base_dir / "main_a2a.py"
+    if main_a2a.exists():
+        errors.append("❌ Legacy main_a2a.py still exists (should be deleted)")
+
+    # Check no shim agent files at root agents/ level
+    legacy_shims = [
+        "nexo_import_agent.py",
+        "intake_agent.py",
+        "estoque_control_agent.py",
+        "nexo_estoque_agent.py",
+    ]
+
+    agents_dir = base_dir / "agents"
+    for shim_file in legacy_shims:
+        shim_path = agents_dir / shim_file
+        if shim_path.exists():
+            errors.append(f"❌ Legacy shim file still exists: agents/{shim_file}")
 
     return len(errors) == 0, errors
 
@@ -157,7 +246,7 @@ def validate_agent_id(agents_dir: Path) -> Tuple[bool, List[str]]:
 def main():
     """Run all validations."""
     print("=" * 60)
-    print("🔍 Agent Structure Validation")
+    print("🔍 Agent Structure Validation (TRUE Multi-Agent A2A)")
     print("=" * 60)
     print()
 
@@ -169,28 +258,42 @@ def main():
     all_valid = True
     all_errors = []
 
-    # 1. Validate agent structure
+    # 1. Validate no legacy files
+    print("🗑️  Checking legacy files removed...")
+    valid, errors = validate_no_legacy_files(base_dir)
+    all_valid = all_valid and valid
+    all_errors.extend(errors)
+    print(f"   {'✅ No legacy files' if valid else '❌ Legacy files found'}")
+
+    # 2. Validate agent structure
     print("📁 Checking agent directory structure...")
     valid, errors = validate_agent_structure(agents_dir)
     all_valid = all_valid and valid
     all_errors.extend(errors)
     print(f"   {'✅ All agents present' if valid else '❌ Issues found'}")
 
-    # 2. Validate shared module
+    # 3. Validate shared module
     print("📦 Checking shared module...")
     valid, errors = validate_shared_module(base_dir)
     all_valid = all_valid and valid
     all_errors.extend(errors)
     print(f"   {'✅ Shared module complete' if valid else '❌ Issues found'}")
 
-    # 3. Validate Dockerfiles
+    # 4. Validate per-agent main.py (Strands A2AServer)
+    print("🚀 Checking per-agent main.py (Strands A2AServer)...")
+    valid, errors = validate_per_agent_main(agents_dir)
+    all_valid = all_valid and valid
+    all_errors.extend(errors)
+    print(f"   {'✅ All main.py files valid' if valid else '❌ Issues found'}")
+
+    # 5. Validate Dockerfiles
     print("🐳 Checking Dockerfiles...")
     valid, errors = validate_dockerfile_content(agents_dir)
     all_valid = all_valid and valid
     all_errors.extend(errors)
     print(f"   {'✅ Dockerfiles valid' if valid else '⚠️  Warnings found'}")
 
-    # 4. Validate agent.py content
+    # 6. Validate agent content
     print("🤖 Checking agent definitions...")
     valid, errors = validate_agent_id(agents_dir)
     all_valid = all_valid and valid
@@ -206,9 +309,18 @@ def main():
             print(f"   {error}")
         print()
 
+    # Print agent roles
+    print("📊 Agent Roles:")
+    for agent_name in EXPECTED_AGENTS:
+        role = AGENT_ROLES.get(agent_name, "UNKNOWN")
+        status = "✅" if (agents_dir / agent_name / "main.py").exists() else "❌"
+        print(f"   {status} {agent_name}: {role}")
+    print()
+
     if all_valid:
         print("✅ All validations passed!")
         print(f"   {len(EXPECTED_AGENTS)} agents ready for deployment")
+        print("   Architecture: TRUE Multi-Agent A2A (ORCHESTRATOR + SPECIALISTS)")
         return 0
     else:
         print(f"⚠️  Validation completed with {len(all_errors)} issue(s)")
