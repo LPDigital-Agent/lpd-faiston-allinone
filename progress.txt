@@ -41,14 +41,29 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
 - Fix: Updated server/agentcore-inventory/agents/utils.py
 - Status: PENDING - Need to commit, deploy, and re-test
 
+### Iteration 5 (2026-01-12)
+- Deployed BUG-006 fix, forced runtime update to v33
+- Ran E2E test - got Internal error (-32603)
+- Checked CloudWatch logs - found new error:
+  `Function call is missing a thought_signature in functionCall parts`
+- Root cause: BUG-007 - Strands SDK doesn't support Gemini 3 thoughtSignature
+  - Gemini 3 preview models require thoughtSignature for multi-step function calling
+  - Strands SDK 1.21.0 doesn't forward this signature back
+  - Issue: https://github.com/strands-agents/sdk-python/issues/1199
+- User decision: Use Gemini 2.5 Pro as temporary workaround
+- Fix: Updated utils.py to use gemini-2.5-pro and gemini-2.5-flash
+- Status: DEPLOYING - Waiting for GitHub Actions
+
 ## Bug Fixes Applied This Session
 1. BUG-004: Missing AgentCore runtime endpoints (FIXED - Terraform import)
 2. BUG-005: Missing google-genai dependency (FIXED - CI workflow update)
-3. BUG-006: Invalid Gemini model names (FIXING - utils.py updated)
+3. BUG-006: Invalid Gemini model names (FIXED - utils.py updated)
+4. BUG-007: Strands SDK thoughtSignature incompatibility (WORKAROUND - Gemini 2.5)
 
 ## Next Steps
-1. Commit utils.py fix
+1. Commit Gemini 2.5 workaround
 2. Push to trigger GitHub Actions
 3. Wait for deployment to complete
 4. Force runtime update
 5. Re-run E2E test
+6. Verify 1,688 records imported

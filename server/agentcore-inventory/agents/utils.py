@@ -4,7 +4,7 @@
 # Common helpers used across all inventory management agents.
 #
 # Module: Gestao de Ativos -> Gestao de Estoque
-# All agents use Gemini 3.0 Pro exclusively (per CLAUDE.md mandate).
+# TEMPORARY: Using Gemini 2.5 (Strands SDK thoughtSignature issue #1199)
 #
 # API Key Note:
 # GOOGLE_API_KEY is passed via --env at deploy time (not runtime SSM lookup).
@@ -31,21 +31,25 @@ APP_NAME = "faiston-sga-inventory"
 AGENT_VERSION = "2026.01.04.v1"
 
 # =============================================================================
-# Gemini 3.0 Model Configuration (MANDATORY - per CLAUDE.md)
+# Gemini 2.5 Model Configuration (TEMPORARY WORKAROUND)
 # =============================================================================
-# Model selection based on agent type:
-# - Pro + Thinking: Import/analysis agents (complex file understanding)
-# - Pro: Complex reasoning agents (compliance, audit)
-# - Flash: Operational agents (speed-critical, simple tasks)
+# TEMPORARY: Using Gemini 2.5 instead of Gemini 3 due to Strands SDK not
+# supporting the required thoughtSignature feature in Gemini 3 preview.
+# Issue: https://github.com/strands-agents/sdk-python/issues/1199
+# TODO: Revert to Gemini 3 when Strands SDK is updated
 #
-# Reference: https://ai.google.dev/gemini-api/docs/thinking
+# Model selection based on agent type:
+# - Pro: Import/analysis agents (complex file understanding)
+# - Flash: Operational agents (speed-critical, simple tasks)
 # =============================================================================
 
-# Gemini 3 Model Family (Preview models - January 2026)
-# NOTE: Google uses "gemini-3-*-preview" naming, NOT "gemini-3.0-*"
-# Reference: https://ai.google.dev/gemini-api/docs/gemini-3
-MODEL_GEMINI_FLASH = "gemini-3-flash-preview"  # Fast, cost-effective (simple tasks)
-MODEL_GEMINI_PRO = "gemini-3-pro-preview"      # Complex reasoning + Thinking support
+# Gemini 2.5 Model Family (Stable - January 2026)
+# TEMPORARY WORKAROUND: Using Gemini 2.5 instead of 3 preview due to Strands SDK
+# not supporting Gemini 3's required thoughtSignature feature.
+# Issue: https://github.com/strands-agents/sdk-python/issues/1199
+# TODO: Revert to gemini-3-*-preview once Strands SDK is updated
+MODEL_GEMINI_FLASH = "gemini-2.5-flash"  # Fast, cost-effective (simple tasks)
+MODEL_GEMINI_PRO = "gemini-2.5-pro"      # Complex reasoning
 
 # Legacy constant (for backwards compatibility)
 MODEL_GEMINI = MODEL_GEMINI_PRO
@@ -67,11 +71,14 @@ PRO_AGENTS = {
 
 def get_model(agent_type: str = "default") -> str:
     """
-    Get appropriate Gemini 3.0 model for agent type.
+    Get appropriate Gemini 2.5 model for agent type.
+
+    TEMPORARY: Using Gemini 2.5 due to Strands SDK not supporting Gemini 3 thoughtSignature.
+    See: https://github.com/strands-agents/sdk-python/issues/1199
 
     Model selection:
-    - PRO_THINKING_AGENTS and PRO_AGENTS → gemini-3-pro-preview
-    - All others → gemini-3-flash-preview
+    - PRO_THINKING_AGENTS and PRO_AGENTS → gemini-2.5-pro
+    - All others → gemini-2.5-flash
 
     Args:
         agent_type: Agent identifier (e.g., "nexo_import", "observation")
@@ -129,7 +136,8 @@ def create_gemini_model(agent_type: str = "default") -> GeminiModel:
     """
     Create configured GeminiModel for Strands Agent.
 
-    MANDATORY per CLAUDE.md: ALL agents MUST use Gemini 3.0 Family.
+    TEMPORARY: Using Gemini 2.5 due to Strands SDK thoughtSignature issue.
+    See: https://github.com/strands-agents/sdk-python/issues/1199
     Uses GOOGLE_API_KEY from environment (set at deploy time via --env).
 
     This function centralizes model configuration to:
