@@ -3,8 +3,9 @@
 # =============================================================================
 # MINIMAL DEPENDENCIES - Cold start must complete in <30 seconds!
 #
-# Framework: Google ADK with native Gemini 3.0 Pro
+# Framework: AWS Strands Agents with A2A Protocol (per CLAUDE.md mandate)
 # Module: Gestao de Ativos -> Gestao de Estoque
+# Protocol: A2A (Agent-to-Agent) - JSON-RPC 2.0, Port 9000
 #
 # IMPORTANT: AgentCore Runtime ≠ Lambda!
 # Lambda has boto3/botocore pre-installed, AgentCore Runtime does NOT.
@@ -13,12 +14,22 @@
 # NF XML Parsing:
 # Using Python stdlib xml.etree.ElementTree (no external dependency needed)
 # REMOVED lxml - violates CLAUDE.md cold start rules (C extension, ~50MB)
+#
+# Migration: BedrockAgentCoreApp (HTTP) → A2AServer (A2A)
+# Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
 # =============================================================================
 
-# Core framework - REQUIRED
-google-adk
+# Core framework - AWS Strands A2A (REQUIRED)
+strands-agents[a2a]>=0.1.0
+bedrock-agentcore>=0.1.0
+strands-agents-tools>=0.1.0
+
+# A2A Server dependencies
+uvicorn>=0.30.0
+fastapi>=0.115.0
+
+# Google Gemini for LLM (used by Strands Agent)
 google-genai>=1.0.0
-bedrock-agentcore
 
 # MCP Protocol for AgentCore Gateway communication
 # Used by agents to call PostgreSQL tools via Gateway MCP endpoint

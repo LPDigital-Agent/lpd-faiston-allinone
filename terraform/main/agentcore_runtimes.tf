@@ -3,18 +3,19 @@
 # =============================================================================
 # Each agent runs in its own dedicated AgentCore Runtime for:
 # - Independent scaling and lifecycle
-# - Cross-agent communication via A2A client (SigV4 signed HTTP calls)
+# - Cross-agent communication via A2A protocol (JSON-RPC 2.0, SigV4 signed)
 #
-# Architecture (100% Agentic - Google ADK + AWS Bedrock AgentCore):
+# Architecture (100% Agentic - AWS Strands Agents + AWS Bedrock AgentCore):
 # - 14 runtimes (one per agent)
-# - HTTP protocol (port 8080, /invocations endpoint) - uses BedrockAgentCoreApp
+# - A2A protocol (port 9000, root path /) - uses Strands A2AServer
 # - AgentCore Memory (global namespace)
 # - AgentCore Identity for cross-agent auth
 #
-# NOTE: We use HTTP protocol because BedrockAgentCoreApp serves at /invocations.
-# A2A inter-agent communication is handled by the A2A client (SigV4 signed),
-# not by the protocol_configuration (which defines the server's listen mode).
+# MIGRATION COMPLETE: BedrockAgentCoreApp (HTTP) → Strands A2AServer (A2A)
+# - Old: HTTP protocol, port 8080, /invocations endpoint
+# - New: A2A protocol, port 9000, root path /
 #
+# Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
 # Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime.html
 # =============================================================================
 
@@ -323,11 +324,11 @@ resource "aws_bedrockagentcore_agent_runtime" "sga_agents" {
     network_mode = "PUBLIC"
   }
 
-  # HTTP Protocol configuration (REST-like, port 8080 → /invocations)
-  # NOTE: Changed from A2A to HTTP because BedrockAgentCoreApp serves at /invocations
-  # A2A protocol expects root path / but BedrockAgentCoreApp uses /invocations
+  # A2A Protocol configuration (JSON-RPC 2.0, port 9000 → /)
+  # MIGRATION: Strands A2AServer now serves at root path /
+  # Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
   protocol_configuration {
-    server_protocol = "HTTP"
+    server_protocol = "A2A"
   }
 
   # Environment variables for the agent
@@ -372,8 +373,9 @@ resource "aws_ssm_parameter" "sga_agent_urls" {
   name        = "/${var.project_name}/sga/agents/${each.key}/url"
   description = "AgentCore Runtime URL for ${each.value.name}"
   type        = "String"
-  # FIX: Use full ARN (URL-encoded) instead of runtime ID - required by InvokeAgentRuntime API
-  value = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
+  # A2A Protocol: Use root path / instead of /invocations
+  # Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-a2a-protocol-contract.html
+  value = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_arn)}/?qualifier=DEFAULT"
 
   tags = merge(local.common_tags, {
     Name      = "${local.name_prefix}-sga-${each.key}-url"
@@ -394,8 +396,8 @@ resource "aws_ssm_parameter" "sga_agent_registry" {
     for agent_id, agent_config in local.sga_agents : agent_id => {
       name        = agent_config.name
       description = agent_config.description
-      # FIX: Use full ARN (URL-encoded) instead of runtime ID - required by InvokeAgentRuntime API
-      url             = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
+      # A2A Protocol: Use root path / instead of /invocations
+      url             = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn)}/?qualifier=DEFAULT"
       runtime_id      = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_id
       runtime_arn     = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
       skills          = agent_config.skills

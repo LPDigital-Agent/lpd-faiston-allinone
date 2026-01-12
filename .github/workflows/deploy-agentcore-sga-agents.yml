@@ -6,14 +6,18 @@
 #
 # Architecture:
 # - 14 separate AgentCore Runtimes (one per agent)
-# - A2A Protocol (JSON-RPC 2.0) for inter-agent communication
-# - Google ADK framework with Gemini models
+# - A2A Protocol (JSON-RPC 2.0, port 9000, root path /)
+# - AWS Strands Agents framework with A2AServer
 # - AgentCore Memory (global namespace)
 #
+# MIGRATION: BedrockAgentCoreApp (HTTP) → Strands A2AServer (A2A)
+# - Entry point: main_a2a.py (unified for all agents)
+# - Differentiation: AGENT_ID environment variable (set by Terraform)
+#
 # Deployment Strategy:
-# 1. Package each agent with shared modules
+# 1. Package main_a2a.py with shared modules for each agent
 # 2. Upload ZIP artifacts to S3
-# 3. Terraform manages the runtimes
+# 3. Terraform manages the runtimes (A2A protocol)
 #
 # Reference: terraform/main/agentcore_runtimes.tf
 # =============================================================================
@@ -25,8 +29,10 @@ on:
     branches:
       - main
     paths:
+      - 'server/agentcore-inventory/main_a2a.py'
       - 'server/agentcore-inventory/agents/**'
       - 'server/agentcore-inventory/shared/**'
+      - 'server/agentcore-inventory/tools/**'
       - '.github/workflows/deploy-agentcore-sga-agents.yml'
   workflow_dispatch:
     inputs:
@@ -157,30 +163,35 @@ jobs:
           # Copy agent code with PRESERVED DIRECTORY STRUCTURE
           # =========================================================================
           # AgentCore Runtime entry point: main.py at package root
-          # main.py imports from 'agents.nexo_import.agent', so we MUST preserve:
-          #   main.py                  <- Entry point (root)
+          # MIGRATION: Using unified main_a2a.py for ALL agents (Strands A2AServer)
+          # - All 14 agents use the same entry point
+          # - Differentiated by AGENT_ID environment variable (set by Terraform)
+          # - Strands A2AServer serves at port 9000, root path /
+          #
+          # Structure:
+          #   main.py (copied from main_a2a.py)  <- Entry point (root)
           #   agents/
           #     __init__.py
-          #     nexo_import/
-          #       __init__.py
-          #       agent.py
-          #       ...
+          #     nexo_import_agent.py
+          #     estoque_control_agent.py
+          #     ...
           # =========================================================================
 
-          # Copy main.py to package root (entry point)
-          cp "agents/$AGENT/main.py" "$PACKAGE_DIR/main.py"
+          # Copy main_a2a.py to package root as main.py (unified entry point)
+          # This is the Strands A2AServer with all 41 tools
+          cp "main_a2a.py" "$PACKAGE_DIR/main.py"
 
-          # Copy agent module with preserved structure
-          mkdir -p "$PACKAGE_DIR/agents/$AGENT"
-          cp -r "agents/$AGENT"/* "$PACKAGE_DIR/agents/$AGENT/"
+          # Copy ALL agent modules (unified architecture - all tools in main_a2a.py)
+          # The main_a2a.py imports from agents/, so we copy everything
+          mkdir -p "$PACKAGE_DIR/agents"
+          cp -r agents/* "$PACKAGE_DIR/agents/"
 
-          # Copy agents/ shared utilities (utils.py, __init__.py)
-          # These are imported by all agents: from agents.utils import get_model
-          cp "agents/__init__.py" "$PACKAGE_DIR/agents/__init__.py"
-          cp "agents/utils.py" "$PACKAGE_DIR/agents/utils.py"
-
-          # Ensure agent has __init__.py
-          touch "$PACKAGE_DIR/agents/$AGENT/__init__.py"
+          # Copy tools/ directory (contains MCP clients, adapters, etc.)
+          if [ -d "tools" ]; then
+            mkdir -p "$PACKAGE_DIR/tools"
+            cp -r tools/* "$PACKAGE_DIR/tools/"
+            touch "$PACKAGE_DIR/tools/__init__.py"
+          fi
 
           # Copy shared modules
           mkdir -p "$PACKAGE_DIR/shared"
@@ -193,14 +204,27 @@ jobs:
             cp "agents/$AGENT/requirements.txt" "$PACKAGE_DIR/requirements.txt"
           fi
 
-          # Ensure requirements.txt exists with minimal dependencies
+          # Ensure requirements.txt exists with Strands A2A dependencies
           # NOTE: boto3, botocore, httpx, anyio, pydantic are PRE-INSTALLED on AgentCore Runtime
           if [ ! -f "$PACKAGE_DIR/requirements.txt" ]; then
-            echo "Creating default requirements.txt (minimal)"
+            echo "Creating default requirements.txt (Strands A2A)"
             cat > "$PACKAGE_DIR/requirements.txt" << 'EOF'
+          # Core framework - AWS Strands A2A (REQUIRED)
+          strands-agents[a2a]>=0.1.0
           bedrock-agentcore>=0.1.0
-          google-adk>=0.3.0
-          aws-xray-sdk>=2.14.0
+          strands-agents-tools>=0.1.0
+          # A2A Server dependencies
+          uvicorn>=0.30.0
+          fastapi>=0.115.0
+          # Google Gemini for LLM (used by Strands Agent)
+          google-genai>=1.0.0
+          # MCP Protocol for AgentCore Gateway communication
+          mcp>=0.1.0
+          # PostgreSQL driver for Lambda MCP Tools
+          psycopg[binary]>=3.1.0
+          # Excel parsing
+          openpyxl>=3.1.0
+          xlrd>=2.0.1
           EOF
           fi
 
@@ -226,26 +250,24 @@ jobs:
           # Common uv flags for ARM64 cross-compilation
           UV_FLAGS="--python-platform aarch64-manylinux2014 --python-version 3.13 --target $PACKAGE_DIR --only-binary=:all:"
 
-          # Step 1: Install google-adk (its transitive deps don't include boto3/botocore)
-          echo "Step 1: Installing google-adk..."
-          $HOME/.local/bin/uv pip install $UV_FLAGS google-adk
+          # Step 1: Install strands-agents[a2a] (AWS Strands A2A framework)
+          echo "Step 1: Installing strands-agents[a2a]..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS "strands-agents[a2a]"
 
-          # Step 2: Install aws-xray-sdk WITHOUT its dependencies
-          # (we install botocore separately in Step 4 for ARM64 compatibility)
-          echo "Step 2: Installing aws-xray-sdk (--no-deps)..."
-          $HOME/.local/bin/uv pip install $UV_FLAGS --no-deps aws-xray-sdk
-
-          # Step 3: Install bedrock-agentcore WITHOUT its dependencies
+          # Step 2: Install bedrock-agentcore WITHOUT its dependencies
           # (we install boto3/botocore separately in Step 4 for ARM64 compatibility)
-          echo "Step 3: Installing bedrock-agentcore (--no-deps)..."
+          echo "Step 2: Installing bedrock-agentcore (--no-deps)..."
           $HOME/.local/bin/uv pip install $UV_FLAGS --no-deps bedrock-agentcore
+
+          # Step 3: Install uvicorn and fastapi for A2A server
+          echo "Step 3: Installing uvicorn, fastapi..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS uvicorn fastapi
 
           # Step 4: Install required dependencies (AgentCore ≠ Lambda!)
           # AgentCore Runtime does NOT have boto3/botocore pre-installed.
-          # aws-xray-sdk requires: botocore, wrapt
-          # bedrock-agentcore requires: boto3, botocore, starlette, uvicorn, websockets
+          # strands-agents requires: boto3, botocore, starlette, uvicorn, websockets
           echo "Step 4: Installing required deps (including boto3/botocore)..."
-          $HOME/.local/bin/uv pip install $UV_FLAGS boto3 botocore wrapt starlette typing-extensions urllib3 uvicorn websockets
+          $HOME/.local/bin/uv pip install $UV_FLAGS boto3 botocore wrapt starlette typing-extensions urllib3 websockets
 
           # Step 5: Install any agent-specific dependencies from requirements.txt
           # (Skip known packages we already installed)
@@ -421,10 +443,15 @@ jobs:
           echo "| observation | Import analysis | agentcore/agents/observation/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "| equipment_research | Doc discovery | agentcore/agents/equipment_research/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Architecture" >> $GITHUB_STEP_SUMMARY
+          echo "- **Framework:** AWS Strands Agents (A2AServer)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Protocol:** A2A (JSON-RPC 2.0, port 9000, root path /)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Entry Point:** main_a2a.py (unified for all agents)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. Run \`terraform plan\` to verify runtime configuration" >> $GITHUB_STEP_SUMMARY
           echo "2. Run \`terraform apply\` to create/update runtimes" >> $GITHUB_STEP_SUMMARY
-          echo "3. Verify agent health via A2A protocol" >> $GITHUB_STEP_SUMMARY
+          echo "3. Verify agent health via A2A protocol: \`curl https://<runtime-url>/.well-known/agent-card.json\`" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
   # Job 4: Status Check

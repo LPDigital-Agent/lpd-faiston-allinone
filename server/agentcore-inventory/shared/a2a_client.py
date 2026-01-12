@@ -1,8 +1,8 @@
 # =============================================================================
-# A2A Client - Agent-to-Agent Communication
+# A2A Client - Agent-to-Agent Communication (Strands A2AServer Compatible)
 # =============================================================================
 # Standardized client for A2A protocol (JSON-RPC 2.0) communication between
-# AgentCore Runtimes.
+# AgentCore Runtimes using Strands A2AServer.
 #
 # Usage:
 #   from shared.a2a_client import A2AClient
@@ -13,13 +13,19 @@
 #   })
 #
 # Architecture:
-# - JSON-RPC 2.0 over HTTP (port 9000)
+# - JSON-RPC 2.0 over HTTP (port 9000, path /)
+# - Agent Card discovery at /.well-known/agent-card.json
 # - Agent discovery via SSM Parameter Store
-# - AgentCore Identity for authentication
+# - AgentCore Identity for authentication (SigV4)
 # - X-Ray tracing for distributed observability
+#
+# Migration Note:
+# - Migrated from BedrockAgentCoreApp (HTTP, port 8080, /invocations)
+# - Now uses Strands A2AServer (A2A, port 9000, /)
 #
 # Reference:
 # - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-a2a-protocol-contract.html
+# - https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
 # =============================================================================
 
 import os
@@ -107,6 +113,26 @@ class A2AResponse:
     message_id: str
     error: Optional[str] = None
     raw_response: Optional[Dict] = None
+
+
+@dataclass
+class AgentCard:
+    """
+    A2A Protocol Agent Card structure.
+
+    The Agent Card provides discovery information about an agent's capabilities.
+    Served at /.well-known/agent-card.json per A2A specification.
+
+    Reference: https://a2a-protocol.org/latest/specification/
+    """
+    name: str
+    description: str
+    url: str
+    version: str = "1.0.0"
+    protocol_version: str = "0.1"
+    capabilities: List[str] = field(default_factory=list)
+    skills: List[Dict[str, Any]] = field(default_factory=list)
+    authentication: Dict[str, Any] = field(default_factory=dict)
 
 
 class A2AClient:
@@ -268,6 +294,112 @@ class A2AClient:
 
         return None
 
+    async def get_agent_card(
+        self,
+        agent_id: str,
+        timeout: float = 10.0
+    ) -> Optional[AgentCard]:
+        """
+        Discover agent capabilities via Agent Card.
+
+        Fetches the Agent Card from /.well-known/agent-card.json endpoint.
+        The Agent Card provides discovery information about an agent's capabilities,
+        skills, and authentication requirements.
+
+        Args:
+            agent_id: ID of the agent to discover
+            timeout: Request timeout in seconds
+
+        Returns:
+            AgentCard with agent capabilities, or None if not available
+
+        Example:
+            card = await client.get_agent_card("learning")
+            if card:
+                print(f"Agent {card.name} has skills: {card.skills}")
+        """
+        agent_url = await self.get_agent_url(agent_id)
+        if not agent_url:
+            logger.warning(f"[A2A] Agent '{agent_id}' not found for card discovery")
+            return None
+
+        # Build Agent Card URL
+        # For A2A protocol: base_url/.well-known/agent-card.json
+        # Handle both trailing slash and no trailing slash cases
+        base_url = agent_url.rstrip("/").split("?")[0]  # Remove query params and trailing slash
+        agent_card_url = f"{base_url}/.well-known/agent-card.json"
+
+        try:
+            httpx = _get_httpx()
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.get(agent_card_url)
+
+                if response.status_code == 404:
+                    logger.info(f"[A2A] Agent Card not available for {agent_id}")
+                    return None
+
+                response.raise_for_status()
+                card_data = response.json()
+
+                return AgentCard(
+                    name=card_data.get("name", agent_id),
+                    description=card_data.get("description", ""),
+                    url=card_data.get("url", agent_url),
+                    version=card_data.get("version", "1.0.0"),
+                    protocol_version=card_data.get("protocolVersion", "0.1"),
+                    capabilities=card_data.get("capabilities", []),
+                    skills=card_data.get("skills", []),
+                    authentication=card_data.get("authentication", {}),
+                )
+
+        except Exception as e:
+            logger.warning(f"[A2A] Failed to fetch Agent Card for {agent_id}: {e}")
+            return None
+
+    async def validate_agent_availability(
+        self,
+        agent_id: str,
+        timeout: float = 10.0
+    ) -> bool:
+        """
+        Check if an agent is available and responding.
+
+        Uses Agent Card discovery to verify the agent is reachable.
+        This is useful for health checks and pre-flight validation.
+
+        Args:
+            agent_id: ID of the agent to check
+            timeout: Request timeout in seconds
+
+        Returns:
+            True if agent is available, False otherwise
+        """
+        card = await self.get_agent_card(agent_id, timeout)
+        return card is not None
+
+    def _normalize_url(self, url: str) -> str:
+        """
+        Normalize agent URL for A2A protocol.
+
+        Ensures URL is properly formatted for A2A (root path, no /invocations).
+
+        Args:
+            url: Raw URL from registry
+
+        Returns:
+            Normalized URL for A2A protocol
+        """
+        # Remove /invocations suffix if present (legacy HTTP format)
+        if "/invocations" in url:
+            url = url.replace("/invocations", "/")
+
+        # Ensure trailing slash for A2A root path
+        if not url.endswith("/") and "?" not in url:
+            url = url + "/"
+
+        return url
+
     def _build_a2a_request(
         self,
         payload: Dict[str, Any],
@@ -387,7 +519,7 @@ class A2AClient:
         current_agent = os.environ.get("AGENT_ID", "unknown")
         audit = AgentAuditEmitter(current_agent)
 
-        # Get target agent URL
+        # Get target agent URL and normalize for A2A protocol
         agent_url = await self.get_agent_url(agent_id)
         if not agent_url:
             return A2AResponse(
@@ -397,6 +529,9 @@ class A2AClient:
                 message_id="",
                 error=f"Agent '{agent_id}' not found in registry",
             )
+
+        # Normalize URL for A2A protocol (handles legacy /invocations URLs)
+        agent_url = self._normalize_url(agent_url)
 
         # Emit delegation event
         audit.delegating(
@@ -521,11 +656,14 @@ class A2AClient:
         Yields:
             Response text chunks
         """
-        # Get target agent URL
+        # Get target agent URL and normalize for A2A protocol
         agent_url = await self.get_agent_url(agent_id)
         if not agent_url:
             yield f"Error: Agent '{agent_id}' not found"
             return
+
+        # Normalize URL for A2A protocol (handles legacy /invocations URLs)
+        agent_url = self._normalize_url(agent_url)
 
         # Build A2A request with streaming flag
         message_id = str(uuid.uuid4())
@@ -615,3 +753,135 @@ async def delegate_to_schema_evolution(
     """
     client = A2AClient()
     return await client.invoke_agent("schema_evolution", payload, session_id)
+
+
+# =============================================================================
+# Local Testing Support (Strands A2AServer)
+# =============================================================================
+
+class LocalA2AClient(A2AClient):
+    """
+    A2A Client for local development and testing.
+
+    Connects to locally running Strands A2AServer instances without
+    SSM Parameter Store or AWS authentication.
+
+    Example:
+        # Start local server: python main_a2a.py
+        client = LocalA2AClient()
+
+        # Test health check
+        result = await client.invoke_agent("nexo_import", {"action": "health_check"})
+        print(result.response)
+
+        # Test Agent Card discovery
+        card = await client.get_agent_card("nexo_import")
+        print(f"Agent: {card.name}, Skills: {len(card.skills)}")
+    """
+
+    # Local agent URLs (port 9000, root path /)
+    LOCAL_AGENTS = {
+        "nexo_import": "http://127.0.0.1:9000/",
+        "learning": "http://127.0.0.1:9001/",
+        "validation": "http://127.0.0.1:9002/",
+        "schema_evolution": "http://127.0.0.1:9003/",
+        "intake": "http://127.0.0.1:9004/",
+        "import": "http://127.0.0.1:9005/",
+        "estoque_control": "http://127.0.0.1:9006/",
+        "compliance": "http://127.0.0.1:9007/",
+        "reconciliacao": "http://127.0.0.1:9008/",
+        "expedition": "http://127.0.0.1:9009/",
+        "carrier": "http://127.0.0.1:9010/",
+        "reverse": "http://127.0.0.1:9011/",
+        "observation": "http://127.0.0.1:9012/",
+        "equipment_research": "http://127.0.0.1:9013/",
+    }
+
+    def __init__(self, base_port: int = 9000):
+        """
+        Initialize local A2A client.
+
+        Args:
+            base_port: Base port for agent servers (default 9000)
+        """
+        super().__init__()
+        self.base_port = base_port
+        self._local_mode = True
+
+    async def get_agent_url(self, agent_id: str) -> Optional[str]:
+        """
+        Get local URL for agent.
+
+        Args:
+            agent_id: Agent identifier
+
+        Returns:
+            Local URL for agent
+        """
+        # Check environment variable override first
+        env_var = f"AGENT_URL_{agent_id.upper()}"
+        if env_var in os.environ:
+            return os.environ[env_var]
+
+        return self.LOCAL_AGENTS.get(agent_id)
+
+    def _sign_request(
+        self,
+        method: str,
+        url: str,
+        payload: Dict[str, Any]
+    ) -> Dict[str, str]:
+        """
+        Skip SigV4 signing for local requests.
+
+        Local Strands A2AServer doesn't require AWS authentication.
+        """
+        return {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+
+async def test_local_a2a():
+    """
+    Test A2A communication with locally running Strands A2AServer.
+
+    Usage:
+        cd server/agentcore-inventory
+        python main_a2a.py &  # Start server in background
+        python -c "import asyncio; from shared.a2a_client import test_local_a2a; asyncio.run(test_local_a2a())"
+    """
+    print("=" * 60)
+    print("Local A2A Client Test - Strands A2AServer")
+    print("=" * 60)
+
+    client = LocalA2AClient()
+
+    # Test 1: Agent Card Discovery
+    print("\n[Test 1] Agent Card Discovery...")
+    card = await client.get_agent_card("nexo_import")
+    if card:
+        print(f"  ✅ Agent: {card.name}")
+        print(f"  ✅ Description: {card.description[:50]}...")
+        print(f"  ✅ Skills: {len(card.skills)} available")
+    else:
+        print("  ❌ Agent Card not available")
+
+    # Test 2: Health Check
+    print("\n[Test 2] Health Check...")
+    result = await client.invoke_agent("nexo_import", {"action": "health_check"})
+    if result.success:
+        print(f"  ✅ Status: healthy")
+        print(f"  ✅ Protocol: A2A")
+        print(f"  ✅ Response: {result.response[:100]}...")
+    else:
+        print(f"  ❌ Error: {result.error}")
+
+    # Test 3: Agent Availability
+    print("\n[Test 3] Agent Availability...")
+    available = await client.validate_agent_availability("nexo_import")
+    print(f"  {'✅' if available else '❌'} nexo_import: {'Available' if available else 'Not available'}")
+
+    print("\n" + "=" * 60)
+    print("Test Complete")
+    print("=" * 60)
