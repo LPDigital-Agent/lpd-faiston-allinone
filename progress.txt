@@ -67,6 +67,19 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
   - Defers Google API connection until first actual inference request
   - A2A server starts instantly, responds to health checks
   - Model initializes on first real user request
+- Status: FIXED - 424 timeout resolved
+
+### Iteration 7 (2026-01-12)
+- Deployed BUG-008 fix (LazyGeminiModel), forced runtime update to v37
+- Ran E2E test - got Internal error (-32603)
+- CloudWatch shows:
+  - ✅ LazyGeminiModel deferred init correctly
+  - ✅ Server started instantly (no 424)
+  - ❌ Gemini API error: "Thinking level is not supported for this model."
+- Root cause: BUG-009 - thinking_config incompatible with Gemini 2.5
+  - Code was adding thinking_config to all Pro agents
+  - But Gemini 2.5 doesn't support thinking mode (only Gemini 3)
+- Fix: Only add thinking_config when model_id contains "gemini-3"
 - Status: DEPLOYING - Waiting for GitHub Actions
 
 ## Bug Fixes Applied This Session
@@ -75,6 +88,7 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
 3. BUG-006: Invalid Gemini model names (FIXED - utils.py updated)
 4. BUG-007: Strands SDK thoughtSignature incompatibility (WORKAROUND - Gemini 2.5)
 5. BUG-008: Blocking GeminiModel initialization (FIXED - LazyGeminiModel wrapper)
+6. BUG-009: thinking_config incompatible with Gemini 2.5 (FIXED - version check)
 
 ## Next Steps
 1. Commit BUG-008 fix (LazyGeminiModel)

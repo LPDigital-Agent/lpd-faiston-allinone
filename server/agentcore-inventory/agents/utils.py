@@ -188,11 +188,17 @@ class LazyGeminiModel:
                 "max_output_tokens": 4096,
             }
 
-            # Add thinking config for Pro+Thinking agents
-            if requires_thinking(self._agent_type):
+            # BUG-009 FIX: Only add thinking config for Gemini 3 models
+            # Gemini 2.5 does NOT support thinking_config parameter
+            # When we revert to Gemini 3, thinking will be re-enabled automatically
+            is_gemini_3 = "gemini-3" in self._model_id
+            if requires_thinking(self._agent_type) and is_gemini_3:
                 params["thinking_config"] = {
                     "thinking_level": "high"
                 }
+                logger.info(f"[LazyGeminiModel] Thinking mode enabled (Gemini 3)")
+            elif requires_thinking(self._agent_type):
+                logger.info(f"[LazyGeminiModel] Thinking mode SKIPPED (Gemini 2.5 doesn't support it)")
 
             # NOW make the actual connection to Google
             self._model = GeminiModel(
