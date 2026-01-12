@@ -197,6 +197,13 @@ jobs:
         run: |
           # Install latest boto3 with bedrock-agentcore-control support
           pip install --upgrade boto3 botocore --quiet
+
+          # Wait for AWS API to propagate newly deployed runtimes
+          # GitHub Actions job scheduling is fast, but AWS API needs time
+          # to make newly deployed runtimes visible in list_agent_runtimes()
+          echo "Waiting 30s for AWS API propagation..."
+          sleep 30
+
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import json
