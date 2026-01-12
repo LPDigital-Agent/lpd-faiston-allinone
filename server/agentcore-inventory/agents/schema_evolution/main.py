@@ -264,7 +264,7 @@ Return the most appropriate PostgreSQL type from the allowed types list."""
 # Health Check
 # =============================================================================
 
-@app.health_check
+@app.ping
 def health_check() -> Dict[str, Any]:
     """
     Health check for AgentCore Runtime.

@@ -481,7 +481,7 @@ def _build_message(payload: Dict[str, Any]) -> str:
 # Health Check
 # =============================================================================
 
-@app.health_check
+@app.ping
 def health_check() -> Dict[str, Any]:
     """Health check for AgentCore Runtime."""
     return {

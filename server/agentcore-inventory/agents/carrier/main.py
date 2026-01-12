@@ -206,7 +206,7 @@ async def handle_track_shipment(
 # =============================================================================
 
 
-@app.health_check
+@app.ping
 def health_check() -> Dict[str, Any]:
     """Health check endpoint."""
     return {
