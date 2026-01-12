@@ -153,12 +153,41 @@ jobs:
           PACKAGE_DIR="dist/$AGENT"
           mkdir -p "$PACKAGE_DIR"
 
-          # Copy agent code
-          cp -r "agents/$AGENT"/* "$PACKAGE_DIR/"
+          # =========================================================================
+          # Copy agent code with PRESERVED DIRECTORY STRUCTURE
+          # =========================================================================
+          # AgentCore Runtime entry point: main.py at package root
+          # main.py imports from 'agents.nexo_import.agent', so we MUST preserve:
+          #   main.py                  <- Entry point (root)
+          #   agents/
+          #     __init__.py
+          #     nexo_import/
+          #       __init__.py
+          #       agent.py
+          #       ...
+          # =========================================================================
+
+          # Copy main.py to package root (entry point)
+          cp "agents/$AGENT/main.py" "$PACKAGE_DIR/main.py"
+
+          # Copy agent module with preserved structure
+          mkdir -p "$PACKAGE_DIR/agents/$AGENT"
+          cp -r "agents/$AGENT"/* "$PACKAGE_DIR/agents/$AGENT/"
+
+          # Create __init__.py files for proper Python packages
+          touch "$PACKAGE_DIR/agents/__init__.py"
+          touch "$PACKAGE_DIR/agents/$AGENT/__init__.py"
 
           # Copy shared modules
           mkdir -p "$PACKAGE_DIR/shared"
           cp -r shared/* "$PACKAGE_DIR/shared/"
+          # Ensure shared/__init__.py exists for proper package
+          touch "$PACKAGE_DIR/shared/__init__.py"
+
+          # Copy requirements.txt to package root (if exists in agent folder)
+          if [ -f "agents/$AGENT/requirements.txt" ]; then
+            cp "agents/$AGENT/requirements.txt" "$PACKAGE_DIR/requirements.txt"
+          fi
 
           # Ensure requirements.txt exists with all needed dependencies
           if [ ! -f "$PACKAGE_DIR/requirements.txt" ]; then
