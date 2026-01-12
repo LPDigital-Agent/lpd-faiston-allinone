@@ -1,7 +1,13 @@
 # =============================================================================
-# Execute Import Tool
+# Execute Import Tool - AI-First with Gemini
 # =============================================================================
-# Executes the import with validated mappings.
+# Executes the import with validated mappings using Gemini for data extraction.
+#
+# Philosophy: OBSERVE → THINK → LEARN → EXECUTE
+# - Gemini analyzed the file (THINK phase completed)
+# - Now we EXECUTE: extract data and insert into PostgreSQL
+#
+# Module: Gestao de Ativos -> Gestao de Estoque -> Smart Import
 # =============================================================================
 
 import logging
@@ -30,10 +36,9 @@ async def execute_import_tool(
     Execute the import with validated column mappings.
 
     Steps:
-    1. Download file from S3
-    2. Parse file content based on format
-    3. Transform columns using mappings
-    4. Insert rows into PostgreSQL via MCP Gateway
+    1. Extract data from S3 file using column mappings
+    2. Add metadata to transformed rows
+    3. Insert rows into PostgreSQL via MCP Gateway
 
     Args:
         s3_key: S3 key where file is stored
@@ -51,41 +56,51 @@ async def execute_import_tool(
     )
 
     try:
-        # Step 1: Download and parse file
+        # Step 1: Extract data with Gemini analyzer
         audit.working(
-            message="Baixando arquivo do S3...",
+            message="Extraindo dados do arquivo...",
             session_id=session_id,
         )
 
-        from tools.sheet_analyzer import SheetAnalyzer
+        from tools.gemini_text_analyzer import extract_data_with_gemini
 
-        analyzer = SheetAnalyzer()
-        file_data = await analyzer.download_and_parse(s3_key)
+        extract_result = await extract_data_with_gemini(
+            s3_key=s3_key,
+            column_mappings=column_mappings,
+        )
 
-        if not file_data or not file_data.get("rows"):
+        if not extract_result.get("success", False):
+            return {
+                "success": False,
+                "error": extract_result.get("error", "Extração falhou"),
+                "rows_imported": 0,
+            }
+
+        raw_rows = extract_result.get("rows", [])
+
+        if not raw_rows:
             return {
                 "success": False,
                 "error": "Arquivo vazio ou inválido",
                 "rows_imported": 0,
             }
 
-        # Step 2: Transform data using mappings
+        # Step 2: Add metadata and validate
         audit.working(
-            message="Transformando dados...",
+            message=f"Processando {len(raw_rows)} registros...",
             session_id=session_id,
-            details={"total_rows": len(file_data.get("rows", []))},
+            details={"total_rows": len(raw_rows)},
         )
 
-        transformed_rows = _transform_rows(
-            rows=file_data.get("rows", []),
-            column_mappings=column_mappings,
+        transformed_rows = _add_metadata_and_validate(
+            rows=raw_rows,
             user_id=user_id,
         )
 
         if not transformed_rows:
             return {
                 "success": False,
-                "error": "Nenhuma linha válida após transformação",
+                "error": "Nenhuma linha válida após validação",
                 "rows_imported": 0,
             }
 
@@ -125,7 +140,7 @@ async def execute_import_tool(
         return {
             "success": success,
             "rows_imported": rows_imported,
-            "rows_total": len(file_data.get("rows", [])),
+            "rows_total": len(raw_rows),
             "rows_transformed": len(transformed_rows),
             "errors": errors[:10],  # Limit errors in response
             "errors_count": len(errors),
@@ -147,47 +162,48 @@ async def execute_import_tool(
         }
 
 
-def _transform_rows(
+def _add_metadata_and_validate(
     rows: List[Dict[str, Any]],
-    column_mappings: Dict[str, str],
     user_id: Optional[str],
 ) -> List[Dict[str, Any]]:
     """
-    Transform source rows using column mappings.
+    Add metadata to rows and validate required fields.
 
-    Applies mappings, adds metadata, and validates required fields.
+    The column mappings were already applied during extraction.
+    This function adds system metadata and filters invalid rows.
     """
-    transformed = []
+    validated = []
     now = datetime.utcnow().isoformat() + "Z"
 
     for row_idx, row in enumerate(rows):
-        transformed_row = {}
-
-        # Apply mappings
-        for source_col, target_field in column_mappings.items():
-            if target_field and target_field not in ("_skip", "_create_new"):
-                value = row.get(source_col)
-                if value is not None:
-                    transformed_row[target_field] = _clean_value(value, target_field)
-
         # Skip empty rows
-        if not transformed_row:
+        if not row:
+            continue
+
+        # Clean values
+        cleaned_row = {}
+        for key, value in row.items():
+            cleaned_value = _clean_value(value, key)
+            if cleaned_value is not None:
+                cleaned_row[key] = cleaned_value
+
+        if not cleaned_row:
             continue
 
         # Add metadata
-        transformed_row["created_at"] = now
-        transformed_row["updated_at"] = now
-        transformed_row["source"] = "import"
-        transformed_row["import_row_number"] = row_idx + 1
+        cleaned_row["created_at"] = now
+        cleaned_row["updated_at"] = now
+        cleaned_row["source"] = "import"
+        cleaned_row["import_row_number"] = row_idx + 1
 
         if user_id:
-            transformed_row["created_by"] = user_id
+            cleaned_row["created_by"] = user_id
 
         # Validate required fields
-        if _has_required_fields(transformed_row):
-            transformed.append(transformed_row)
+        if _has_required_fields(cleaned_row):
+            validated.append(cleaned_row)
 
-    return transformed
+    return validated
 
 
 def _clean_value(value: Any, target_field: str) -> Any:
@@ -217,7 +233,7 @@ def _clean_value(value: Any, target_field: str) -> Any:
     if target_field == "part_number":
         return str(value).upper().strip()
 
-    # Description - title case for readability
+    # Description - preserve formatting
     if target_field == "description":
         return str(value).strip()
 
