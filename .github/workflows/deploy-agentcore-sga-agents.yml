@@ -192,8 +192,10 @@ jobs:
           ls -la "$PACKAGE_DIR" | head -20
 
           # Create ZIP package with dependencies included
+          # IMPORTANT: Include .dist-info folders - they contain entry_points.txt needed by
+          # packages like opentelemetry that use entry point discovery at runtime
           cd "dist/$AGENT"
-          zip -r "../$AGENT.zip" . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*" -x "*.egg-info/*"
+          zip -r "../$AGENT.zip" . -x "*.pyc" -x "__pycache__/*"
           cd ../..
 
           echo "Package created: dist/$AGENT.zip"
