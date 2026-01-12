@@ -197,10 +197,10 @@ jobs:
           pip install --upgrade boto3 botocore --quiet
 
           # Wait for AWS API to propagate newly deployed runtimes
-          # AWS AgentCore has significant eventual consistency delay (>30s observed)
+          # AWS AgentCore has significant eventual consistency delay (4+ minutes observed)
           # We use initial wait + retry loop to handle this
-          echo "Waiting 45s for AWS API initial propagation..."
-          sleep 45
+          echo "Waiting 120s for AWS API initial propagation..."
+          sleep 120
 
           python3 << 'PYTHON_SCRIPT'
           import boto3
@@ -217,8 +217,8 @@ jobs:
           REGION = "us-east-2"
           PROJECT_NAME = "faiston-one"
           EXPECTED_AGENT_COUNT = 14  # 1 orchestrator + 13 specialists
-          MAX_LIST_RETRIES = 12      # Up to 12 retries = 3 more minutes
-          LIST_RETRY_DELAY = 15      # 15 seconds between retries
+          MAX_LIST_RETRIES = 20      # Up to 20 retries = ~7 more minutes
+          LIST_RETRY_DELAY = 20      # 20 seconds between retries
 
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
           ssm = boto3.client("ssm", region_name=REGION)
@@ -338,9 +338,9 @@ jobs:
           REGION = "us-east-2"
           COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
           COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
-          # Retry settings - SSM step already waited, but add safety margin
-          MAX_FIND_RETRIES = 5
-          FIND_RETRY_DELAY = 10
+          # Retry settings - increased for eventual consistency
+          MAX_FIND_RETRIES = 15
+          FIND_RETRY_DELAY = 20
 
           print("=== Configuring JWT Authorizer for Orchestrator ===", flush=True)
           print(f"  Cognito Pool: {COGNITO_POOL_ID}", flush=True)
