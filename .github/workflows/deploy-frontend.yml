@@ -65,6 +65,8 @@ jobs:
           NEXT_PUBLIC_USER_POOL_ID: us-east-2_lkBXr4kjy
           NEXT_PUBLIC_USER_POOL_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg
           NEXT_PUBLIC_GRAPHQL_ENDPOINT: ${{ secrets.NEXT_PUBLIC_GRAPHQL_ENDPOINT }}
+          # Agent Room WebSocket for real-time events (<100ms latency)
+          NEXT_PUBLIC_AGENTROOM_WS_URL: wss://wts0zmjxv5.execute-api.us-east-2.amazonaws.com/production
         run: pnpm build
 
       - name: Configure AWS credentials
