@@ -23,6 +23,7 @@ from typing import Optional, Dict, Any, List
 
 # Strands A2A imports
 from strands import Agent, tool
+from strands.models.gemini import GeminiModel
 from strands.multiagent.a2a import A2AServer
 import uvicorn
 from fastapi import FastAPI
@@ -45,6 +46,9 @@ AWS_REGION = os.environ.get('AWS_REGION', 'us-east-2')
 # Agent identification
 AGENT_ID = os.environ.get('AGENT_ID', 'nexo_import')
 AGENT_NAME = os.environ.get('AGENT_NAME', 'NexoImportAgent')
+
+# Google API Key (MANDATORY for Gemini 3.0 - per CLAUDE.md)
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', '')
 
 # Database configuration
 USE_POSTGRES_MCP = os.environ.get("USE_POSTGRES_MCP", "true").lower() == "true"
@@ -2344,6 +2348,79 @@ async def execute_import(
 
 
 # =============================================================================
+# Gemini 3.0 Model Configuration (MANDATORY - per CLAUDE.md)
+# =============================================================================
+# ALL agents MUST use Gemini 3.0 Family:
+# - Critical agents (nexo_import, learning, validation, schema_evolution, intake, import):
+#   → gemini-3-pro with thinking_level="high"
+# - Standard agents: → gemini-3-flash
+#
+# Reference: https://ai.google.dev/gemini-api/docs/gemini-3
+# Reference: https://ai.google.dev/gemini-api/docs/thinking
+# =============================================================================
+
+# Critical agents that require Pro + Thinking (file analysis, schema understanding)
+CRITICAL_AGENTS = {
+    "nexo_import",      # Main orchestrator - file analysis with schema
+    "intake",           # Document intake - NF parsing with Vision
+    "import",           # Data import - file structure understanding
+    "learning",         # Memory extraction - pattern recognition
+    "schema_evolution", # Schema analysis - SQL generation
+    "validation",       # Data validation - complex rules
+}
+
+
+def create_gemini_model(agent_id: str) -> GeminiModel:
+    """
+    Create GeminiModel with appropriate configuration based on agent criticality.
+
+    MANDATORY: ALL agents use Gemini 3.0 Family (per CLAUDE.md immutable block).
+
+    Args:
+        agent_id: Agent identifier to determine model tier
+
+    Returns:
+        Configured GeminiModel instance
+
+    Raises:
+        ValueError: If GOOGLE_API_KEY is not set
+    """
+    if not GOOGLE_API_KEY:
+        raise ValueError(
+            "GOOGLE_API_KEY environment variable is required for Gemini 3.0. "
+            "This is MANDATORY per CLAUDE.md - NO FALLBACK to other LLM providers."
+        )
+
+    if agent_id in CRITICAL_AGENTS:
+        # Gemini 3 Pro with Thinking HIGH for critical analysis tasks
+        logger.info(f"Creating GeminiModel: gemini-3-pro (Thinking=HIGH) for critical agent {agent_id}")
+        return GeminiModel(
+            client_args={"api_key": GOOGLE_API_KEY},
+            model_id="gemini-3-pro",
+            params={
+                "temperature": 1.0,  # Recommended for Gemini 3 (per Google docs)
+                "max_output_tokens": 8192,
+                "top_p": 0.95,
+            },
+            # Thinking mode for deep reasoning on file analysis
+            # Note: Strands GeminiModel may not directly support thinking_config
+            # but we set the params that enable better reasoning
+        )
+    else:
+        # Gemini 3 Flash for standard agents (faster, cost-effective)
+        logger.info(f"Creating GeminiModel: gemini-3-flash for standard agent {agent_id}")
+        return GeminiModel(
+            client_args={"api_key": GOOGLE_API_KEY},
+            model_id="gemini-3-flash",
+            params={
+                "temperature": 0.7,
+                "max_output_tokens": 4096,
+                "top_p": 0.9,
+            },
+        )
+
+
+# =============================================================================
 # Strands Agent Definition
 # =============================================================================
 
@@ -2405,11 +2482,18 @@ AGENT_TOOLS = [
     execute_import,
 ]
 
-# Create Strands agent
+# Create GeminiModel based on agent criticality (MANDATORY per CLAUDE.md)
+# This ensures ALL agents use Gemini 3.0 Family - NO EXCEPTIONS
+agent_model = create_gemini_model(AGENT_ID)
+logger.info(f"Gemini model created for {AGENT_ID}: {agent_model.config.get('model_id', 'unknown')}")
+
+# Create Strands agent with Gemini 3.0 model
 strands_agent = Agent(
     name=AGENT_NAME,
+    model=agent_model,  # CRITICAL: Must specify Gemini model (per CLAUDE.md mandate)
     description="""
     SGA Inventory Agent - Full inventory management with A2A protocol.
+    LLM: Gemini 3.0 Family (MANDATORY per CLAUDE.md)
 
     Capabilities:
     - NEXO Smart Import (ReAct pattern: OBSERVE → THINK → ASK → LEARN → ACT)

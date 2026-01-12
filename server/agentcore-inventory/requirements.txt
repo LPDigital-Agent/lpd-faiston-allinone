@@ -20,7 +20,7 @@
 # =============================================================================
 
 # Core framework - AWS Strands A2A (REQUIRED)
-strands-agents[a2a]>=0.1.0
+strands-agents[a2a,gemini]>=0.1.0
 bedrock-agentcore>=0.1.0
 strands-agents-tools>=0.1.0
 
