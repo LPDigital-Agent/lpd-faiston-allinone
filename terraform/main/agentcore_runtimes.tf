@@ -428,16 +428,5 @@ output "sga_agent_endpoint_arns" {
   }
 }
 
-output "sga_agent_urls" {
-  description = "Map of agent IDs to their invocation URLs"
-  sensitive   = true
-  value = {
-    for agent_id, param in aws_ssm_parameter.sga_agent_urls :
-    agent_id => param.value
-  }
-}
-
-output "sga_agent_registry_ssm" {
-  description = "SSM parameter path for agent registry"
-  value       = aws_ssm_parameter.sga_agent_registry.name
-}
+# NOTE: sga_agent_urls and sga_agent_registry_ssm outputs REMOVED (100% A2A Architecture)
+# Runtime IDs are now hardcoded in a2a_client.py - no SSM parameters needed
