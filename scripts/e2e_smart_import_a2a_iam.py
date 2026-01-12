@@ -75,9 +75,10 @@ def invoke_a2a(action: str, payload: dict, session_id: str = None) -> dict:
     - Session header: X-Amzn-Bedrock-AgentCore-Runtime-Session-Id
     - Auth: SigV4 signed request (IAM)
     """
-    # Build A2A URL (root path, not /invocations)
+    # Build A2A URL with /invocations/ path (per AWS AgentCore A2A documentation)
+    # Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
     encoded_arn = quote(NEXO_IMPORT_RUNTIME_ARN, safe='')
-    url = f"{AGENTCORE_ENDPOINT}/runtimes/{encoded_arn}/?qualifier=DEFAULT"
+    url = f"{AGENTCORE_ENDPOINT}/runtimes/{encoded_arn}/invocations/"
 
     # Session ID (must be >= 33 characters)
     if not session_id:

@@ -1,0 +1,40 @@
+# E2E Smart Import Test Progress
+# Ralph Wiggum Loop - Iteration Tracker
+
+## Current Task
+Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
+
+## Success Criteria
+- [ ] E2E test script runs without HTTP errors
+- [ ] NEXO agent processes file analysis request
+- [ ] Import executes successfully
+- [ ] 1,688 records in pending_entry_items table
+
+## Iterations
+
+### Iteration 1 (2026-01-12)
+- Ran E2E test with old URL format (/?qualifier=DEFAULT)
+- Result: HTTP 404 (UnknownOperationException)
+- Fix: Changed URL to /invocations/ path
+
+### Iteration 2 (2026-01-12)
+- Ran E2E test with correct URL format (/invocations/)
+- Result: HTTP 424 (Runtime client error -32055)
+- Diagnosis: Need to check CloudWatch logs
+
+### Iteration 3 (2026-01-12)
+- Checked CloudWatch logs for nexo_import runtime
+- Root cause found: ImportError: cannot import name 'genai' from 'google'
+- Analysis: CI workflow installs strands-agents[a2a] without gemini extra
+- Fix: Updated deploy-agentcore-sga-agents.yml to use strands-agents[a2a,gemini]
+- Status: PENDING - Need to commit and deploy
+
+## Bug Fixes Applied This Session
+1. BUG-004: Missing AgentCore runtime endpoints (FIXED - Terraform import)
+2. BUG-005: Missing google-genai dependency (FIXED - CI workflow update)
+
+## Next Steps
+1. Commit CI workflow fix
+2. Push to trigger GitHub Actions
+3. Wait for deployment to complete
+4. Re-run E2E test

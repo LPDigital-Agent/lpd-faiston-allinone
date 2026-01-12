@@ -270,9 +270,11 @@ jobs:
           # Common uv flags for ARM64 cross-compilation
           UV_FLAGS="--python-platform aarch64-manylinux2014 --python-version 3.13 --target $PACKAGE_DIR --only-binary=:all:"
 
-          # Step 1: Install strands-agents[a2a] (AWS Strands A2A framework)
-          echo "Step 1: Installing strands-agents[a2a]..."
-          $HOME/.local/bin/uv pip install $UV_FLAGS "strands-agents[a2a]"
+          # Step 1: Install strands-agents[a2a,gemini] (AWS Strands A2A framework + Gemini model)
+          # CRITICAL: The 'gemini' extra installs google-genai, required for GeminiModel
+          # Without it, agents crash with: ImportError: cannot import name 'genai' from 'google'
+          echo "Step 1: Installing strands-agents[a2a,gemini]..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS "strands-agents[a2a,gemini]"
 
           # Step 2: Install bedrock-agentcore WITHOUT its dependencies
           # (we install boto3/botocore separately in Step 4 for ARM64 compatibility)
