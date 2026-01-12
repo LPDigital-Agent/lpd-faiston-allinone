@@ -76,11 +76,19 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
   - ✅ LazyGeminiModel deferred init correctly
   - ✅ Server started instantly (no 424)
   - ❌ Gemini API error: "Thinking level is not supported for this model."
-- Root cause: BUG-009 - thinking_config incompatible with Gemini 2.5
-  - Code was adding thinking_config to all Pro agents
-  - But Gemini 2.5 doesn't support thinking mode (only Gemini 3)
-- Fix: Only add thinking_config when model_id contains "gemini-3"
-- Status: DEPLOYING - Waiting for GitHub Actions
+- INCORRECT diagnosis: Thought Gemini 2.5 doesn't support thinking
+- INCORRECT fix: Disabled thinking for Gemini 2.5 (WRONG!)
+- Status: FIX WAS INCORRECT - See Iteration 8
+
+### Iteration 8 (2026-01-12)
+- User correction: Gemini 2.5 DOES support thinking mode!
+- The difference is the PARAMETER NAME, not capability:
+  - Gemini 3: uses `thinking_level` ("high", "medium", "low")
+  - Gemini 2.5: uses `thinking_budget` (128-32768, or -1 for dynamic)
+- Reference: https://ai.google.dev/gemini-api/docs/thinking
+- Root cause: BUG-009 was WRONG PARAMETER NAME, not missing support
+- Correct fix: Use `thinking_budget: -1` for Gemini 2.5 (dynamic allocation)
+- Status: DEPLOYING - Committing correct fix
 
 ## Bug Fixes Applied This Session
 1. BUG-004: Missing AgentCore runtime endpoints (FIXED - Terraform import)
@@ -88,7 +96,7 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
 3. BUG-006: Invalid Gemini model names (FIXED - utils.py updated)
 4. BUG-007: Strands SDK thoughtSignature incompatibility (WORKAROUND - Gemini 2.5)
 5. BUG-008: Blocking GeminiModel initialization (FIXED - LazyGeminiModel wrapper)
-6. BUG-009: thinking_config incompatible with Gemini 2.5 (FIXED - version check)
+6. BUG-009: Wrong thinking parameter for Gemini 2.5 (FIXED - use thinking_budget:-1)
 
 ## Next Steps
 1. Commit BUG-008 fix (LazyGeminiModel)
