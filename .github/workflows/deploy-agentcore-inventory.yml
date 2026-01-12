@@ -188,39 +188,47 @@ jobs:
           COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
           COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
 
+          MAX_RETRIES = 10
+          RETRY_DELAY = 6  # seconds
+
           print(f"Configuring JWT Authorizer for orchestrator...")
           print(f"  Cognito Pool: {COGNITO_POOL_ID}")
           print(f"  Cognito Client: {COGNITO_CLIENT_ID}")
 
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
-          # Find the orchestrator runtime
-          runtimes = client.list_agent_runtimes()
+          # RETRY LOGIC: Wait for runtime to appear in list (handles AWS API eventual consistency)
           agent_runtime_id = None
-          for rt in runtimes.get("agentRuntimeSummaries", []):
-              if rt["agentRuntimeName"] == "faiston_asset_management":
-                  agent_runtime_id = rt["agentRuntimeId"]
+          for attempt in range(MAX_RETRIES):
+              print(f"  Looking for runtime... (attempt {attempt + 1}/{MAX_RETRIES})")
+              runtimes = client.list_agent_runtimes()
+              for rt in runtimes.get("agentRuntimeSummaries", []):
+                  if rt["agentRuntimeName"] == "faiston_asset_management":
+                      agent_runtime_id = rt["agentRuntimeId"]
+                      print(f"  ✅ Found runtime: {agent_runtime_id}")
+                      break
+              if agent_runtime_id:
                   break
+              print(f"  Runtime not visible yet, waiting {RETRY_DELAY}s...")
+              time.sleep(RETRY_DELAY)
 
           if not agent_runtime_id:
-              print("ERROR: Orchestrator runtime not found!")
+              print("ERROR: Orchestrator runtime not found after all retries!")
               exit(1)
 
-          print(f"  Runtime ID: {agent_runtime_id}")
-
-          # Wait for runtime to be ready
-          for attempt in range(10):
+          # Wait for runtime to be ACTIVE
+          for attempt in range(MAX_RETRIES):
               try:
                   current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
                   status = current_config.get("status")
                   print(f"  Current status: {status}")
                   if status == "ACTIVE":
                       break
-                  print(f"  Waiting for ACTIVE state... (attempt {attempt + 1}/10)")
-                  time.sleep(10)
+                  print(f"  Waiting for ACTIVE state... (attempt {attempt + 1}/{MAX_RETRIES})")
+                  time.sleep(RETRY_DELAY)
               except Exception as e:
                   print(f"  Waiting... {e}")
-                  time.sleep(10)
+                  time.sleep(RETRY_DELAY)
 
           # Check current authorizer config
           existing_auth = current_config.get("authorizerConfiguration", {})
