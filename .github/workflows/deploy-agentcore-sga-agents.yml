@@ -133,10 +133,15 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Python for packaging
+      - name: Setup Python and uv
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Package agent (ARM64 cross-compile)
         working-directory: server/agentcore-inventory
@@ -170,37 +175,60 @@ jobs:
           fi
 
           # =========================================================================
-          # CRITICAL: Install dependencies for ARM64 (AWS Graviton)
+          # AgentCore Runtime Best Practices for ZIP Deployment
           # =========================================================================
-          # AgentCore Runtime uses AWS Graviton (ARM64), but GitHub Actions runs x86_64.
-          # Strategy: Use Docker with QEMU emulation to install ARM64 packages natively.
-          # This ensures all binary extensions (pydantic-core, etc.) are ARM64-compatible.
+          # Runtime: AWS Graviton (ARM64) + Amazon Linux 2023
+          # Platform: linux_aarch64 / manylinux2014_aarch64
+          # Size limit: 250 MB zipped, 750 MB unzipped
+          #
+          # Use uv for fast cross-platform dependency resolution:
+          # - Downloads ARM64-compatible wheels (manylinux2014_aarch64)
+          # - Resolves transitive dependencies correctly
+          # - Much faster than pip or Docker QEMU
           # =========================================================================
-          echo "Installing dependencies for ARM64 using Docker QEMU emulation..."
+          echo "Installing ARM64 dependencies using uv..."
 
-          # Setup QEMU for ARM64 emulation
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes 2>/dev/null || true
-
-          # Install dependencies inside ARM64 container
-          docker run --rm --platform linux/arm64 \
-            -v "$(pwd)/$PACKAGE_DIR:/deps" \
-            -w /deps \
-            python:3.13-slim \
-            bash -c "pip install -r requirements.txt --target . --quiet --upgrade && rm -rf *.dist-info *.egg-info __pycache__"
+          $HOME/.local/bin/uv pip install \
+            --python-platform aarch64-manylinux2014 \
+            --python-version 3.13 \
+            --target "$PACKAGE_DIR" \
+            --only-binary=:all: \
+            -r "$PACKAGE_DIR/requirements.txt"
 
           echo "Dependencies installed for ARM64"
           ls -la "$PACKAGE_DIR" | head -20
 
-          # Create ZIP package with dependencies included
-          # IMPORTANT: Include .dist-info folders - they contain entry_points.txt needed by
-          # packages like opentelemetry that use entry point discovery at runtime
+          # =========================================================================
+          # Set POSIX permissions (required by AgentCore Runtime)
+          # - Files: 644 (rw-r--r--)
+          # - Directories: 755 (rwxr-xr-x)
+          # =========================================================================
+          echo "Setting POSIX permissions..."
+          find "$PACKAGE_DIR" -type f -exec chmod 644 {} \;
+          find "$PACKAGE_DIR" -type d -exec chmod 755 {} \;
+
+          # =========================================================================
+          # Create ZIP with flat structure
+          # - main.py at root of ZIP (not in subfolder)
+          # - Exclude __pycache__ and .pyc (bytecode from wrong arch may crash)
+          # - Include .dist-info (required for entry point discovery)
+          # =========================================================================
           cd "dist/$AGENT"
-          zip -r "../$AGENT.zip" . -x "*.pyc" -x "__pycache__/*"
+          zip -r "../$AGENT.zip" . -x "*.pyc" -x "__pycache__/*" -x "*/__pycache__/*"
           cd ../..
 
           echo "Package created: dist/$AGENT.zip"
           ls -lah "dist/$AGENT.zip"
-          echo "Package size: $(du -h dist/$AGENT.zip | cut -f1)"
+          ZIP_SIZE=$(du -h "dist/$AGENT.zip" | cut -f1)
+          echo "Package size: $ZIP_SIZE"
+
+          # Verify size is under 250 MB limit
+          ZIP_BYTES=$(stat -f%z "dist/$AGENT.zip" 2>/dev/null || stat -c%s "dist/$AGENT.zip")
+          MAX_BYTES=$((250 * 1024 * 1024))
+          if [ "$ZIP_BYTES" -gt "$MAX_BYTES" ]; then
+            echo "::error::ZIP exceeds 250 MB limit! Use Container Image deployment."
+            exit 1
+          fi
 
       - name: Upload to S3
         working-directory: server/agentcore-inventory
