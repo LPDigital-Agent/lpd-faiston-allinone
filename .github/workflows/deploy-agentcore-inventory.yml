@@ -395,7 +395,9 @@ jobs:
                   print(f"    - {rt['agentRuntimeName']}: {rt['agentRuntimeId']}", flush=True)
               exit(1)
 
-          # Wait for ACTIVE status (with retry)
+          # Wait for READY status (per AWS docs: CREATING → READY)
+          # NOTE: AgentCore uses "READY" NOT "ACTIVE" as the final successful state!
+          # Valid statuses: CREATING, CREATE_FAILED, UPDATING, UPDATE_FAILED, READY, DELETING
           MAX_RETRIES = 10
           RETRY_DELAY = 6
           current_config = None
@@ -405,16 +407,20 @@ jobs:
                   current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
                   status = current_config.get("status")
                   print(f"  Current status: {status}", flush=True)
-                  if status == "ACTIVE":
+                  if status == "READY":
+                      print("  ✅ Runtime is READY!", flush=True)
                       break
-                  print(f"  Waiting for ACTIVE state... (attempt {attempt + 1}/{MAX_RETRIES})", flush=True)
+                  if status in ("CREATE_FAILED", "UPDATE_FAILED"):
+                      print(f"  ❌ Runtime in failed state: {status}", flush=True)
+                      exit(1)
+                  print(f"  Waiting for READY state... (attempt {attempt + 1}/{MAX_RETRIES})", flush=True)
                   sleep_seconds(RETRY_DELAY)
               except Exception as e:
                   print(f"  Waiting... {e}", flush=True)
                   sleep_seconds(RETRY_DELAY)
 
-          if not current_config or current_config.get("status") != "ACTIVE":
-              print("ERROR: Runtime did not reach ACTIVE status!")
+          if not current_config or current_config.get("status") != "READY":
+              print("ERROR: Runtime did not reach READY status!")
               exit(1)
 
           # Check if JWT already configured
