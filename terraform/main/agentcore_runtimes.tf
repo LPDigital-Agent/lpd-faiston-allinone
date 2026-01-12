@@ -19,6 +19,18 @@
 # =============================================================================
 
 # =============================================================================
+# Data Sources - External Configuration
+# =============================================================================
+
+# Google API Key for Gemini 3.0 (Google ADK)
+# The resource is defined in ssm_academy.tf with value managed outside Terraform.
+# We use a data source to read the actual decrypted value at plan/apply time.
+data "aws_ssm_parameter" "google_api_key" {
+  name            = aws_ssm_parameter.academy_google_api_key.name
+  with_decryption = true
+}
+
+# =============================================================================
 # Local Variables - Agent Definitions
 # =============================================================================
 
@@ -29,10 +41,10 @@ locals {
     # Core Agents (Orchestration & Memory)
     # ==========================================================================
     nexo_import = {
-      name        = "NexoImportAgent"
-      description = "Main orchestrator for intelligent file import with ReAct pattern"
-      entry_point = ["main.py"]
-      memory_access = true
+      name            = "NexoImportAgent"
+      description     = "Main orchestrator for intelligent file import with ReAct pattern"
+      entry_point     = ["main.py"]
+      memory_access   = true
       is_orchestrator = true
       skills = [
         "analyze_file",
@@ -43,10 +55,10 @@ locals {
     }
 
     learning = {
-      name        = "LearningAgent"
-      description = "Episodic memory agent for import intelligence and pattern learning"
-      entry_point = ["main.py"]
-      memory_access = true
+      name            = "LearningAgent"
+      description     = "Episodic memory agent for import intelligence and pattern learning"
+      entry_point     = ["main.py"]
+      memory_access   = true
       is_orchestrator = false
       skills = [
         "retrieve_prior_knowledge",
@@ -57,10 +69,10 @@ locals {
     }
 
     validation = {
-      name        = "ValidationAgent"
-      description = "Schema validation and data quality agent"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "ValidationAgent"
+      description     = "Schema validation and data quality agent"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "validate_schema",
@@ -71,10 +83,10 @@ locals {
     }
 
     schema_evolution = {
-      name        = "SchemaEvolutionAgent"
-      description = "Dynamic schema evolution and column creation agent"
-      entry_point = ["main.py"]
-      memory_access = true
+      name            = "SchemaEvolutionAgent"
+      description     = "Dynamic schema evolution and column creation agent"
+      entry_point     = ["main.py"]
+      memory_access   = true
       is_orchestrator = false
       skills = [
         "propose_column",
@@ -88,10 +100,10 @@ locals {
     # Import & Intake Agents
     # ==========================================================================
     intake = {
-      name        = "IntakeAgent"
-      description = "Nota Fiscal reader and XML/PDF parser"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "IntakeAgent"
+      description     = "Nota Fiscal reader and XML/PDF parser"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "read_nf_xml",
@@ -102,10 +114,10 @@ locals {
     }
 
     import = {
-      name        = "ImportAgent"
-      description = "Bulk import agent for spreadsheets and CSV files"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "ImportAgent"
+      description     = "Bulk import agent for spreadsheets and CSV files"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "parse_csv",
@@ -119,10 +131,10 @@ locals {
     # Control & Validation Agents
     # ==========================================================================
     estoque_control = {
-      name        = "EstoqueControlAgent"
-      description = "Inventory control and stock balance management"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "EstoqueControlAgent"
+      description     = "Inventory control and stock balance management"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "check_balance",
@@ -133,10 +145,10 @@ locals {
     }
 
     compliance = {
-      name        = "ComplianceAgent"
-      description = "Regulatory compliance and audit trail agent"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "ComplianceAgent"
+      description     = "Regulatory compliance and audit trail agent"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "validate_compliance",
@@ -146,10 +158,10 @@ locals {
     }
 
     reconciliacao = {
-      name        = "ReconciliacaoAgent"
-      description = "SAP reconciliation and data comparison agent"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "ReconciliacaoAgent"
+      description     = "SAP reconciliation and data comparison agent"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "compare_sap_data",
@@ -162,10 +174,10 @@ locals {
     # Logistics & Movement Agents
     # ==========================================================================
     expedition = {
-      name        = "ExpeditionAgent"
-      description = "Shipment and expedition management agent"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "ExpeditionAgent"
+      description     = "Shipment and expedition management agent"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "create_shipment",
@@ -175,10 +187,10 @@ locals {
     }
 
     carrier = {
-      name        = "CarrierAgent"
-      description = "Carrier management and tracking agent"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "CarrierAgent"
+      description     = "Carrier management and tracking agent"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "select_carrier",
@@ -188,10 +200,10 @@ locals {
     }
 
     reverse = {
-      name        = "ReverseAgent"
-      description = "Reverse logistics and returns management"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "ReverseAgent"
+      description     = "Reverse logistics and returns management"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "process_return",
@@ -204,10 +216,10 @@ locals {
     # Support & Research Agents
     # ==========================================================================
     observation = {
-      name        = "ObservationAgent"
-      description = "Monitoring and alerting agent"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "ObservationAgent"
+      description     = "Monitoring and alerting agent"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "monitor_inventory",
@@ -217,10 +229,10 @@ locals {
     }
 
     equipment_research = {
-      name        = "EquipmentResearchAgent"
-      description = "Equipment research and knowledge base agent"
-      entry_point = ["main.py"]
-      memory_access = false
+      name            = "EquipmentResearchAgent"
+      description     = "Equipment research and knowledge base agent"
+      entry_point     = ["main.py"]
+      memory_access   = false
       is_orchestrator = false
       skills = [
         "search_equipment_kb",
@@ -263,6 +275,10 @@ locals {
 
     # Logging
     LOG_LEVEL = var.environment == "prod" ? "INFO" : "DEBUG"
+
+    # Google ADK Configuration (Gemini 3.0 Pro)
+    # Required for Google ADK agents to authenticate with Gemini API
+    GOOGLE_API_KEY = data.aws_ssm_parameter.google_api_key.value
   }
 }
 
@@ -336,11 +352,11 @@ resource "aws_bedrockagentcore_agent_runtime" "sga_agents" {
   }
 
   tags = merge(local.common_tags, {
-    Name        = "${local.name_prefix}-sga-${each.key}"
-    Module      = "SGA"
-    Feature     = "AgentCore Runtime"
-    AgentID     = each.key
-    AgentName   = each.value.name
+    Name         = "${local.name_prefix}-sga-${each.key}"
+    Module       = "SGA"
+    Feature      = "AgentCore Runtime"
+    AgentID      = each.key
+    AgentName    = each.value.name
     Orchestrator = each.value.is_orchestrator ? "true" : "false"
   })
 }
@@ -357,7 +373,7 @@ resource "aws_ssm_parameter" "sga_agent_urls" {
   description = "AgentCore Runtime URL for ${each.value.name}"
   type        = "String"
   # FIX: Use full ARN (URL-encoded) instead of runtime ID - required by InvokeAgentRuntime API
-  value       = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
+  value = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
 
   tags = merge(local.common_tags, {
     Name      = "${local.name_prefix}-sga-${each.key}-url"
@@ -379,11 +395,11 @@ resource "aws_ssm_parameter" "sga_agent_registry" {
       name        = agent_config.name
       description = agent_config.description
       # FIX: Use full ARN (URL-encoded) instead of runtime ID - required by InvokeAgentRuntime API
-      url         = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
-      runtime_id  = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_id
-      runtime_arn = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
-      skills      = agent_config.skills
-      memory_access = agent_config.memory_access
+      url             = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn)}/invocations?qualifier=DEFAULT"
+      runtime_id      = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_id
+      runtime_arn     = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
+      skills          = agent_config.skills
+      memory_access   = agent_config.memory_access
       is_orchestrator = agent_config.is_orchestrator
     }
   })
