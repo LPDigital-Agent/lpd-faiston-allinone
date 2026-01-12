@@ -130,12 +130,12 @@ jobs:
 
           DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Use Terraform-managed IAM role with A2A permissions
-          # Role ARN: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
-          # This role includes bedrock-agentcore:InvokeAgentRuntime for A2A protocol
+          # Deploy using .bedrock_agentcore.yaml configuration
+          # Execution role is defined in the YAML file for each agent:
+          #   execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+          # DO NOT pass --execution-role as CLI argument (not supported by agentcore CLI)
           echo "y" | agentcore deploy --agent ${{ matrix.agent }} \
             --auto-update-on-conflict \
-            --execution-role arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
             --env INVENTORY_TABLE=faiston-one-sga-inventory-prod \
             --env HIL_TASKS_TABLE=faiston-one-sga-hil-tasks-prod \
@@ -149,9 +149,7 @@ jobs:
             --env DEPLOYED_AT=$DEPLOY_TIMESTAMP \
             --env AGENTCORE_MEMORY_ID=nexo_agent_mem-Z5uQr8CDGf \
             --env PROJECT_NAME=faiston-one \
-            --env AGENT_ID=${{ matrix.agent }} 2>&1 || {
-            echo "::warning::Deploy command returned non-zero exit code for ${{ matrix.agent }}"
-          }
+            --env AGENT_ID=${{ matrix.agent }}
 
       - name: Check deployment status
         working-directory: server/agentcore-inventory
