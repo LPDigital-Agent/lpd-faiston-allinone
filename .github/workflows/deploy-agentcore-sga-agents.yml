@@ -217,35 +217,42 @@ jobs:
           #
           # Strategy:
           #   1. Install google-adk and aws-xray-sdk normally (no boto3 deps)
-          #   2. Install bedrock-agentcore with --no-deps (it requires boto3)
-          #   3. Install bedrock-agentcore's non-pre-installed deps manually
+          #   2. Install aws-xray-sdk with --no-deps (it requires botocore)
+          #   3. Install bedrock-agentcore with --no-deps (it requires boto3)
+          #   4. Install non-pre-installed deps manually
           # =========================================================================
           echo "Installing ARM64 dependencies using uv (multi-step to exclude pre-installed)..."
 
           # Common uv flags for ARM64 cross-compilation
           UV_FLAGS="--python-platform aarch64-manylinux2014 --python-version 3.13 --target $PACKAGE_DIR --only-binary=:all:"
 
-          # Step 1: Install google-adk and aws-xray-sdk (these don't depend on boto3)
-          echo "Step 1: Installing google-adk and aws-xray-sdk..."
-          $HOME/.local/bin/uv pip install $UV_FLAGS google-adk aws-xray-sdk
+          # Step 1: Install google-adk (its transitive deps don't include boto3/botocore)
+          echo "Step 1: Installing google-adk..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS google-adk
 
-          # Step 2: Install bedrock-agentcore WITHOUT its dependencies
+          # Step 2: Install aws-xray-sdk WITHOUT its dependencies
+          # (aws-xray-sdk requires botocore which is PRE-INSTALLED)
+          echo "Step 2: Installing aws-xray-sdk (--no-deps)..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS --no-deps aws-xray-sdk
+
+          # Step 3: Install bedrock-agentcore WITHOUT its dependencies
           # (bedrock-agentcore depends on boto3/botocore which are PRE-INSTALLED)
-          echo "Step 2: Installing bedrock-agentcore (--no-deps)..."
+          echo "Step 3: Installing bedrock-agentcore (--no-deps)..."
           $HOME/.local/bin/uv pip install $UV_FLAGS --no-deps bedrock-agentcore
 
-          # Step 3: Install bedrock-agentcore's NON-PRE-INSTALLED dependencies
-          # bedrock-agentcore requires: boto3, botocore (PRE-INSTALLED), pydantic (PRE-INSTALLED),
+          # Step 4: Install NON-PRE-INSTALLED dependencies manually
+          # aws-xray-sdk requires: botocore (PRE-INSTALLED), wrapt (MUST INSTALL)
+          # bedrock-agentcore requires: boto3, botocore, pydantic (PRE-INSTALLED),
           #   starlette, typing-extensions, urllib3, uvicorn, websockets (MUST INSTALL)
-          echo "Step 3: Installing bedrock-agentcore's non-pre-installed deps..."
-          $HOME/.local/bin/uv pip install $UV_FLAGS starlette typing-extensions urllib3 uvicorn websockets
+          echo "Step 4: Installing non-pre-installed deps..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS wrapt starlette typing-extensions urllib3 uvicorn websockets
 
-          # Step 4: Install any agent-specific dependencies from requirements.txt
+          # Step 5: Install any agent-specific dependencies from requirements.txt
           # (Skip known packages we already installed)
-          echo "Step 4: Installing agent-specific dependencies..."
+          echo "Step 5: Installing agent-specific dependencies..."
           if [ -f "$PACKAGE_DIR/requirements.txt" ]; then
             # Filter out packages we already installed or are pre-installed
-            grep -v -E "^(bedrock-agentcore|google-adk|aws-xray-sdk|boto3|botocore|httpx|anyio|pydantic|requests|tenacity)" \
+            grep -v -E "^(bedrock-agentcore|google-adk|aws-xray-sdk|boto3|botocore|httpx|anyio|pydantic|requests|tenacity|wrapt|starlette|uvicorn|websockets)" \
               "$PACKAGE_DIR/requirements.txt" > "$PACKAGE_DIR/requirements-filtered.txt" || true
             if [ -s "$PACKAGE_DIR/requirements-filtered.txt" ]; then
               echo "Installing additional packages:"
