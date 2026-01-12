@@ -211,15 +211,15 @@ jobs:
           # Platform: linux_aarch64 / manylinux2014_aarch64
           # Size limit: 250 MB zipped, 750 MB unzipped
           #
-          # CRITICAL: AgentCore Runtime PRE-INSTALLS these packages:
-          #   boto3, botocore, httpx, requests, tenacity, pydantic, anyio
-          # We MUST NOT include them in our ZIP to avoid 115MB bloat!
+          # IMPORTANT: AgentCore Runtime ≠ Lambda!
+          # Lambda has boto3/botocore pre-installed, AgentCore does NOT.
+          # We MUST include boto3/botocore in our ZIP.
           #
           # Strategy:
-          #   1. Install google-adk and aws-xray-sdk normally (no boto3 deps)
-          #   2. Install aws-xray-sdk with --no-deps (it requires botocore)
-          #   3. Install bedrock-agentcore with --no-deps (it requires boto3)
-          #   4. Install non-pre-installed deps manually
+          #   1. Install google-adk (transitive deps don't include boto3)
+          #   2. Install aws-xray-sdk with --no-deps (add botocore separately)
+          #   3. Install bedrock-agentcore with --no-deps (add boto3 separately)
+          #   4. Install boto3, botocore, and other required deps manually
           # =========================================================================
           echo "Installing ARM64 dependencies using uv (multi-step to exclude pre-installed)..."
 
@@ -231,21 +231,21 @@ jobs:
           $HOME/.local/bin/uv pip install $UV_FLAGS google-adk
 
           # Step 2: Install aws-xray-sdk WITHOUT its dependencies
-          # (aws-xray-sdk requires botocore which is PRE-INSTALLED)
+          # (we install botocore separately in Step 4 for ARM64 compatibility)
           echo "Step 2: Installing aws-xray-sdk (--no-deps)..."
           $HOME/.local/bin/uv pip install $UV_FLAGS --no-deps aws-xray-sdk
 
           # Step 3: Install bedrock-agentcore WITHOUT its dependencies
-          # (bedrock-agentcore depends on boto3/botocore which are PRE-INSTALLED)
+          # (we install boto3/botocore separately in Step 4 for ARM64 compatibility)
           echo "Step 3: Installing bedrock-agentcore (--no-deps)..."
           $HOME/.local/bin/uv pip install $UV_FLAGS --no-deps bedrock-agentcore
 
-          # Step 4: Install NON-PRE-INSTALLED dependencies manually
-          # aws-xray-sdk requires: botocore (PRE-INSTALLED), wrapt (MUST INSTALL)
-          # bedrock-agentcore requires: boto3, botocore, pydantic (PRE-INSTALLED),
-          #   starlette, typing-extensions, urllib3, uvicorn, websockets (MUST INSTALL)
-          echo "Step 4: Installing non-pre-installed deps..."
-          $HOME/.local/bin/uv pip install $UV_FLAGS wrapt starlette typing-extensions urllib3 uvicorn websockets
+          # Step 4: Install required dependencies (AgentCore ≠ Lambda!)
+          # AgentCore Runtime does NOT have boto3/botocore pre-installed.
+          # aws-xray-sdk requires: botocore, wrapt
+          # bedrock-agentcore requires: boto3, botocore, starlette, uvicorn, websockets
+          echo "Step 4: Installing required deps (including boto3/botocore)..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS boto3 botocore wrapt starlette typing-extensions urllib3 uvicorn websockets
 
           # Step 5: Install any agent-specific dependencies from requirements.txt
           # (Skip known packages we already installed)
@@ -266,8 +266,8 @@ jobs:
           echo "Package contents:"
           ls -la "$PACKAGE_DIR" | head -30
           echo ""
-          echo "Checking for boto3/botocore (should NOT be present):"
-          ls -d "$PACKAGE_DIR/boto"* 2>/dev/null && echo "WARNING: boto3/botocore found!" || echo "OK: boto3/botocore not in package"
+          echo "Verifying boto3/botocore included (required for AgentCore):"
+          ls -d "$PACKAGE_DIR/boto"* 2>/dev/null && echo "✅ boto3/botocore present" || echo "❌ ERROR: boto3/botocore NOT in package!"
 
           # =========================================================================
           # Set POSIX permissions (required by AgentCore Runtime)

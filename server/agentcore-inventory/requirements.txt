@@ -6,17 +6,9 @@
 # Framework: Google ADK with native Gemini 3.0 Pro
 # Module: Gestao de Ativos -> Gestao de Estoque
 #
-# Note: Many common packages (boto3, httpx, tenacity, etc.) are pre-installed
-# on AgentCore Runtime. Only add dependencies that are NOT pre-installed.
-#
-# PRE-INSTALLED on AgentCore Runtime (DO NOT ADD):
-# - boto3, botocore
-# - httpx, requests
-# - tenacity
-# - pydantic
-# - python-dateutil
-# - chardet
-# - Pillow
+# IMPORTANT: AgentCore Runtime ≠ Lambda!
+# Lambda has boto3/botocore pre-installed, AgentCore Runtime does NOT.
+# The CI workflow (deploy-agentcore-sga-agents.yml) handles dependency packaging.
 #
 # NF XML Parsing:
 # Using Python stdlib xml.etree.ElementTree (no external dependency needed)
