@@ -12,7 +12,49 @@ To be used on web research we are in year 2026.
 <!-- ANY CHANGE, REMOVAL, OR REWRITE IS STRICTLY FORBIDDEN -->
 <!-- ===================================================== -->
 
-## 🔒 [IMMUTABLE][DO-NOT-REMOVE][AI-FIRST][AGENTIC][GOOGLE-ADK][BEDROCK-AGENTCORE]
+## 🔒 [IMMUTABLE][DO-NOT-REMOVE][AI-FIRST][AGENTIC][AWS Strands][BEDROCK-AGENTCORE]
+
+- ALL agents MUST be created using the **AWS STRANDS AGENTS FRAMEWORK**.
+- YOU MUST follow ONLY the documentation below as references for Strands Agents usage.
+
+### SOURCE OF TRUTH (OFFICIAL)
+
+- https://strandsagents.com/latest/
+- https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
+- https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-frameworks/strands-agents.html
+- https://github.com/strands-agents/sdk-python
+- https://aws.amazon.com/blogs/opensource/introducing-strands-agents-an-open-source-ai-agents-sdk/
+- https://aws.amazon.com/blogs/opensource/introducing-strands-agents-1-0-production-ready-multi-agent-orchestration-made-simple/
+- https://aws.amazon.com/blogs/opensource/introducing-strands-agent-sops-natural-language-workflows-for-ai-agents/
+
+### A2A / INTER-AGENT COMMUNICATION (REFERENCE)
+
+- https://builder.aws.com/content/2y90GhUwgOEbKULKuehf2WHUf9Q/leveraging-agent-to-agent-a2a-with-strands-part-1
+- https://aws.amazon.com/blogs/opensource/open-protocols-for-agent-interoperability-part-4-inter-agent-communication-on-a2a/
+
+### COMMUNITY (OPTIONAL — NOT SOURCE OF TRUTH)
+
+- https://www.reddit.com/r/aws/comments/1mcc2di/beginnerfriendly_guide_to_aws_strands_agents/
+
+  
+
+## 🧠 LLM POLICY — IMMUTABLE & MANDATORY (GEMINI 3 FAMILY ONLY)
+
+- **ABSOLUTE RULE:** ALL agents MUST use **GEMINI 3.0 FAMILY** as the LLM. This rule is **MANDATORY** and MUST NEVER be removed.
+  - **CRITICAL INVENTORY AGENTS (MANDATORY):** Any agent in the Inventory/SGA flow that:
+    - analyzes stock/inventory files (XML/PDF/CSV/XLSX/images/text),
+    - performs reasoning over extracted data,
+    - generates clarification questions (HIL),
+    - validates mappings and reconciles inventory,
+    MUST use **GEMINI 3.0 PRO** with **THINKING ENABLED**.
+  - **NON-CRITICAL AGENTS:** All other agents MAY use **GEMINI 3.0 FLASH**.
+
+- **NO EXCEPTIONS:** Do NOT use Gemini 2.x, 2.5, or any non-Gemini model for agents.
+
+- **DOCUMENTATION (SOURCE OF TRUTH):**
+  - https://ai.google.dev/gemini-api/docs/gemini-3
+  - https://ai.google.dev/gemini-api/docs/thinking
+  - https://ai.google.dev/gemini-api/docs/files
 
 ---
 
@@ -58,7 +100,7 @@ To be used on web research we are in year 2026.
 
 ## 🧠 CONTEXT WINDOW MANAGEMENT — MANDATORY
 
-- When the active context window exceeds approximately **60%** (long session, many files loaded, degraded recall):
+- MANDATORY: When the active context window exceeds approximately **60%** (long session, many files loaded, degraded recall):
   1. **STOP**
   2. Re-read this `CLAUDE.md`
   3. Restate active constraints and the current PLAN
@@ -110,6 +152,8 @@ To be used on web research we are in year 2026.
 - AWS Account ID: `377311924364`
 - AWS Region: `us-east-2`
 - AWS CLI PROFILE (MANDATORY): For ANY AWS CLI command, you MUST use the correct AWS profile from the **AWS CONFIGURATION** section (right account + region). Never run AWS CLI commands without explicitly setting/confirming the profile (e.g., `--profile <profile>`). If the profile is unknown or not configured, STOP and ask before proceeding.
+- To check AWS Bedrock AgentCore configurations and make CLI change to AgentCore use the AgentCore CLI  
+  https://aws.github.io/bedrock-agentcore-starter-toolkit/api-reference/cli.html
 
 ---
 
@@ -142,6 +186,24 @@ To be used on web research we are in year 2026.
   - MCP AWS documentation
   - MCP Context7 documentation  
   If unclear → **STOP AND ASK**.
+
+### AWS STRANDS AGENTS — DOCUMENTATION (MANDATORY)
+
+- **OFFICIAL / PRIMARY SOURCES (SOURCE OF TRUTH):**
+  - https://aws.amazon.com/blogs/opensource/introducing-strands-agents-an-open-source-ai-agents-sdk/
+  - https://strandsagents.com/latest/
+  - https://docs.aws.amazon.com/prescriptive-guidance/latest/agentic-ai-frameworks/strands-agents.html
+  - https://github.com/strands-agents/sdk-python
+  - https://aws.amazon.com/blogs/opensource/introducing-strands-agent-sops-natural-language-workflows-for-ai-agents/
+  - https://aws.amazon.com/blogs/opensource/introducing-strands-agents-1-0-production-ready-multi-agent-orchestration-made-simple/
+
+- **A2A / MULTI-AGENT (REFERENCE):**
+  - https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
+  - https://builder.aws.com/content/2y90GhUwgOEbKULKuehf2WHUf9Q/leveraging-agent-to-agent-a2a-with-strands-part-1
+  - https://aws.amazon.com/blogs/opensource/open-protocols-for-agent-interoperability-part-4-inter-agent-communication-on-a2a/
+
+- **COMMUNITY (OPTIONAL — NOT SOURCE OF TRUTH):**
+  - https://www.reddit.com/r/aws/comments/1mcc2di/beginnerfriendly_guide_to_aws_strands_agents/
 
 ### Lambda + Terraform
 
@@ -322,79 +384,7 @@ To be used on web research we are in year 2026.
 - **ENFORCEMENT:**  
   If a change was made without proper context understanding or impact analysis, it MUST be considered **INVALID**, reverted if necessary, and you MUST **STOP AND ASK FOR GUIDANCE** before proceeding.
 
----
 
-## 📦 SGA MODULE ARCHITECTURE — IMMUTABLE & MANDATORY
-
-> **Sistema de Gestão de Ativos (SGA)** is the reference architecture for ALL new modules.
-
-- **MANDATORY READING BEFORE ANY SGA WORK:**
-  You MUST read and follow the official architecture document:
-  - `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
-
-- **SGA ARCHITECTURAL PATTERNS (MANDATORY):**
-  All SGA implementations MUST follow these patterns:
-
-  1. **Context Provider Hierarchy:**
-     ```
-     QueryClientProvider → AssetManagementProvider → InventoryOperationsProvider
-       → TaskInboxProvider → NexoEstoqueProvider → InventoryCountProvider → OfflineSyncProvider
-     ```
-     - Reference: `client/app/(main)/ferramentas/ativos/layout.tsx`
-
-  2. **Hook Organization:**
-     - Data fetching hooks: `useAssets`, `useMovements`, `useLocations`, `usePartNumbers`, `useProjects`
-     - Operation hooks: `useMovementMutations`, `useMovementValidation`
-     - Import hooks: `useSmartImporter`, `useNFReader`, `useBulkImport`
-     - Reference: `client/hooks/ativos/`
-
-  3. **Service Layer Pattern:**
-     - All backend calls via `sgaAgentcore.ts` service
-     - JWT Bearer token auth with AgentCore Gateway
-     - Session management with sessionStorage
-     - Reference: `client/services/sgaAgentcore.ts`
-
-  4. **Smart Import Architecture:**
-     - File type detection via magic bytes (`file_detector.py`)
-     - Route to appropriate agent: IntakeAgent (NF), ImportAgent (spreadsheet)
-     - Confidence-based HIL routing (≥80% = autonomous, <80% = HIL review)
-     - Reference: `client/hooks/ativos/useSmartImporter.ts`
-
-  5. **NEXO AI Copilot Pattern:**
-     - Frosted glass FAB with sliding panel (Apple TV style)
-     - Quick actions (7 predefined queries)
-     - KB integration with citations
-     - Reference: `client/components/ferramentas/ativos/estoque/nexo/`
-
-  6. **Offline-First (PWA):**
-     - Queue-based sync with localStorage persistence
-     - Auto-retry with exponential backoff (max 3 retries)
-     - Reference: `client/contexts/ativos/OfflineSyncContext.tsx`
-
-  7. **Schema Evolution Pattern:**
-     - Dynamic column creation via Schema Evolution Agent (SEA)
-     - ALL schema changes via MCP Gateway (never direct DB connections)
-     - JSONB `metadata` column fallback when column creation fails
-     - Advisory locking (`pg_advisory_xact_lock`) for concurrent modifications
-     - Reference: `server/agentcore-inventory/agents/schema_evolution_agent.py`
-
-  8. **LLM Response Validation Pattern:**
-     - LLM JSON responses can contain `null` values that cause runtime errors
-     - ALWAYS validate before storing: `if value:` guard before assignment
-     - ALWAYS guard before string methods: `if val and val.startswith(...)`
-     - Apply "belt-and-suspenders": preventive (validate before store) + defensive (guard before use)
-     - Reference: `server/agentcore-inventory/agents/nexo_import_agent.py:1950-1963`
-
-- **KEY FILE REFERENCES:**
-  - **Types**: `client/lib/ativos/types.ts`
-  - **Constants**: `client/lib/ativos/constants.ts`
-  - **Smart Import Types**: `client/lib/ativos/smartImportTypes.ts`
-  - **Backend Main**: `server/agentcore-inventory/main.py`
-  - **Backend Agents**: `server/agentcore-inventory/agents/`
-  - **DB Migrations**: `server/agentcore-inventory/schema/` (numbered: `001_*.sql`, `002_*.sql`, ...)
-
-- **ENFORCEMENT:**
-  If you implement SGA features without following this architecture, you MUST **STOP IMMEDIATELY** and **CONSULT THE ARCHITECTURE DOC**.
 
 ---
 
@@ -439,35 +429,6 @@ To be used on web research we are in year 2026.
   - Use specialized agents for focused tasks
   - Return **condensed summaries** (1,000-2,000 tokens) to parent agent
   - Reference: Available SubAgents in Claude Code Skills
-
----
-
-## 📚 PROGRESSIVE DISCLOSURE — IMMUTABLE & MANDATORY
-
-> Module-specific details MUST live in subdirectory docs, not in root CLAUDE.md.
-
-- **ARCHITECTURE DOCS (Reference as needed):**
-  - SGA Module: `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
-  - **NEXO Memory**: `docs/architecture/NEXO_MEMORY_ARCHITECTURE.md` *(MANDATORY for memory features)*
-  - AgentCore Implementation: `docs/AgentCore/` *(check all relevant files)*
-  - Frontend Auth: `docs/FRONTEND_AUTH.md`
-  - Agent Design: `docs/agents/ADK_AGENTCORE_ARCHITECT.md`
-  - AGENT ADK MUST FOLOW:
-    - https://google.github.io/adk-docs/llms-full.txt
-    - https://google.github.io/adk-docs/llms.txt
-
-- **PRD DOCS (Reference for requirements):**
-  - SGA Estoque PRD: `docs/prd_modulo_gestao_estoque_faiston_sga2.md`
-  - Inventory Management: `docs/Faiston_Investory_Mamagement.md`
-
-- **SETUP DOCS (Reference for configuration):**
-  - Equipment KB Setup: `docs/SGA_EQUIPMENT_KB_SETUP.md`
-
-- **USAGE PATTERN:**
-  - Before implementing a feature → `@docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`
-  - Before AgentCore work → `@docs/AgentCore/IMPLEMENTATION_GUIDE.md`
-  - Before memory/learning features → `@docs/architecture/NEXO_MEMORY_ARCHITECTURE.md`
-  - When unsure about patterns → Read the relevant doc **FIRST**
 
 ---
 

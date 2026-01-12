@@ -282,8 +282,10 @@ jobs:
               else:
                   agent_id = name.replace("faiston_sga_", "")
 
-              # Build invocation URL with URL-encoded ARN (required by InvokeAgentRuntime API)
-              url = f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{quote(runtime_arn, safe='')}/invocations?qualifier=DEFAULT"
+              # Build A2A invocation URL with URL-encoded ARN
+              # A2A Protocol uses root path /, not /invocations (HTTP protocol)
+              # Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
+              url = f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{quote(runtime_arn, safe='')}/?qualifier=DEFAULT"
 
               registry[agent_id] = {
                   "name": name,
