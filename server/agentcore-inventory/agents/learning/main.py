@@ -27,6 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
 from a2a.types import AgentSkill
+from fastapi import FastAPI
+import uvicorn
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Pro + Thinking)
 from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gemini_model
@@ -631,9 +633,10 @@ def create_agent() -> Agent:
 
 def main():
     """
-    Start the Strands A2AServer.
+    Start the Strands A2AServer with FastAPI wrapper.
 
     Port 9000 is the standard for A2A protocol.
+    Includes /ping health endpoint for AWS ALB.
     """
     logger.info(f"[{AGENT_NAME}] Starting Strands A2AServer on port 9000...")
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
@@ -643,6 +646,19 @@ def main():
     logger.info(f"[{AGENT_NAME}] Skills: {len(AGENT_SKILLS)} registered")
     for skill in AGENT_SKILLS:
         logger.info(f"[{AGENT_NAME}]   - {skill.id}: {skill.name}")
+
+    # Create FastAPI app first
+    app = FastAPI(title=AGENT_NAME, version=AGENT_VERSION)
+
+    # Add /ping health endpoint for AWS ALB
+    @app.get("/ping")
+    async def ping():
+        """Health check endpoint for AWS Application Load Balancer."""
+        return {
+            "status": "healthy",
+            "agent": AGENT_ID,
+            "version": AGENT_VERSION,
+        }
 
     # Create agent
     agent = create_agent()
@@ -654,11 +670,15 @@ def main():
         port=9000,
         version=AGENT_VERSION,
         skills=AGENT_SKILLS,
-        serve_at_root=True,  # Serve at / for AgentCore compatibility
+        serve_at_root=False,  # Mount at root below
     )
 
-    # Start server
-    a2a_server.serve()
+    # Mount A2A server at root
+    app.mount("/", a2a_server.to_fastapi_app())
+
+    # Start server with uvicorn
+    logger.info(f"[{AGENT_NAME}] Starting uvicorn server on 0.0.0.0:9000")
+    uvicorn.run(app, host="0.0.0.0", port=9000)
 
 
 if __name__ == "__main__":

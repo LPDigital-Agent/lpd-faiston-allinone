@@ -24,6 +24,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
+from fastapi import FastAPI
+import uvicorn
 
 # A2A Protocol Types for Agent Card Discovery (100% A2A Architecture)
 from a2a.types import AgentSkill
@@ -475,6 +477,9 @@ def main():
 
     Port 9000 is the standard for A2A protocol.
     Agent Card is served at /.well-known/agent-card.json for discovery.
+
+    IMPORTANT: Uses FastAPI wrapper with /ping endpoint for AgentCore health checks.
+    Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
     """
     logger.info(f"[{AGENT_NAME}] Starting Strands A2AServer on port 9000...")
     logger.info(f"[{AGENT_NAME}] Model: {MODEL_ID}")
@@ -482,7 +487,18 @@ def main():
     logger.info(f"[{AGENT_NAME}] Skills: {[s.id for s in AGENT_SKILLS]}")
     logger.info(f"[{AGENT_NAME}] Agent Card: GET /.well-known/agent-card.json")
 
-    # Create agent
+    # Create FastAPI app FIRST for immediate health check response
+    # This is CRITICAL for AgentCore cold start - /ping must respond before A2A server is ready
+    app = FastAPI(title=AGENT_NAME, version=AGENT_VERSION)
+
+    @app.get("/ping")
+    def ping():
+        """Health check endpoint - responds immediately for AgentCore cold start."""
+        return {"status": "healthy", "agent": AGENT_ID, "version": AGENT_VERSION}
+
+    logger.info(f"[{AGENT_NAME}] Health check endpoint ready: GET /ping")
+
+    # Create agent (uses LazyGeminiModel for deferred initialization)
     agent = create_agent()
 
     # Create A2A server with skills for Agent Card discovery (100% A2A Architecture)
@@ -496,8 +512,14 @@ def main():
         serve_at_root=True,                 # Serve at / for AgentCore compatibility
     )
 
-    # Start server
-    a2a_server.serve()
+    # Mount A2A server on FastAPI app
+    # /ping is served by FastAPI, everything else by A2AServer
+    app.mount("/", a2a_server.to_fastapi_app())
+
+    logger.info(f"[{AGENT_NAME}] A2A server mounted, starting uvicorn...")
+
+    # Start uvicorn server
+    uvicorn.run(app, host="0.0.0.0", port=9000)
 
 
 if __name__ == "__main__":

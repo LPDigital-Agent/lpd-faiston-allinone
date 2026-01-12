@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
 from a2a.types import AgentSkill
+from fastapi import FastAPI
+import uvicorn
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
@@ -357,7 +359,7 @@ def create_agent() -> Agent:
 
 def main():
     """
-    Start the Strands A2AServer.
+    Start the Strands A2AServer with FastAPI /ping endpoint.
 
     Port 9000 is the standard for A2A protocol.
     """
@@ -369,6 +371,18 @@ def main():
     for skill in AGENT_SKILLS:
         logger.info(f"  - {skill.name}: {skill.description}")
 
+    # Create FastAPI app
+    app = FastAPI(title=AGENT_NAME, version=AGENT_VERSION)
+
+    # Add /ping endpoint for health checks
+    @app.get("/ping")
+    async def ping():
+        return {
+            "status": "healthy",
+            "agent": AGENT_ID,
+            "version": AGENT_VERSION,
+        }
+
     # Create agent
     agent = create_agent()
 
@@ -377,13 +391,16 @@ def main():
         agent=agent,
         host="0.0.0.0",
         port=9000,
-        serve_at_root=True,  # Serve at / for AgentCore compatibility
+        serve_at_root=False,  # Mount under /a2a to avoid conflict with /ping
         version=AGENT_VERSION,
         skills=AGENT_SKILLS,
     )
 
-    # Start server
-    a2a_server.serve()
+    # Mount A2A server at root
+    app.mount("/", a2a_server.to_fastapi_app())
+
+    # Start server with uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=9000)
 
 
 if __name__ == "__main__":
