@@ -1,22 +1,15 @@
 # =============================================================================
-# EquipmentResearchAgent Dependencies
-# Minimal footprint for <30s cold start
+# EquipmentResearchAgent Dependencies - MINIMAL for <30s cold start
+# =============================================================================
+# PRE-INSTALLED on AgentCore Runtime (DO NOT ADD):
+# - boto3, botocore, httpx, requests, tenacity, pydantic, anyio
 # =============================================================================
 
-# AWS Bedrock AgentCore
+# AWS Bedrock AgentCore Runtime SDK
 bedrock-agentcore>=0.1.0
 
-# Google ADK Framework
+# Google ADK (Agent Development Kit)
 google-adk>=0.3.0
 
-# AWS SDK
-boto3>=1.35.0
-
-# HTTP Client for A2A and downloads
-httpx>=0.27.0
-
-# X-Ray Tracing
+# X-Ray tracing
 aws-xray-sdk>=2.14.0
-
-# Async Support
-anyio>=4.0.0
