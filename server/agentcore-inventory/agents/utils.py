@@ -41,9 +41,11 @@ AGENT_VERSION = "2026.01.04.v1"
 # Reference: https://ai.google.dev/gemini-api/docs/thinking
 # =============================================================================
 
-# Gemini 3.0 Model Family
-MODEL_GEMINI_FLASH = "gemini-3.0-flash"  # Fast, cost-effective (simple tasks)
-MODEL_GEMINI_PRO = "gemini-3.0-pro"      # Complex reasoning + Thinking support
+# Gemini 3 Model Family (Preview models - January 2026)
+# NOTE: Google uses "gemini-3-*-preview" naming, NOT "gemini-3.0-*"
+# Reference: https://ai.google.dev/gemini-api/docs/gemini-3
+MODEL_GEMINI_FLASH = "gemini-3-flash-preview"  # Fast, cost-effective (simple tasks)
+MODEL_GEMINI_PRO = "gemini-3-pro-preview"      # Complex reasoning + Thinking support
 
 # Legacy constant (for backwards compatibility)
 MODEL_GEMINI = MODEL_GEMINI_PRO
@@ -68,8 +70,8 @@ def get_model(agent_type: str = "default") -> str:
     Get appropriate Gemini 3.0 model for agent type.
 
     Model selection:
-    - PRO_THINKING_AGENTS and PRO_AGENTS → gemini-3.0-pro
-    - All others → gemini-3.0-flash
+    - PRO_THINKING_AGENTS and PRO_AGENTS → gemini-3-pro-preview
+    - All others → gemini-3-flash-preview
 
     Args:
         agent_type: Agent identifier (e.g., "nexo_import", "observation")

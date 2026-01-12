@@ -27,14 +27,28 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
 - Root cause found: ImportError: cannot import name 'genai' from 'google'
 - Analysis: CI workflow installs strands-agents[a2a] without gemini extra
 - Fix: Updated deploy-agentcore-sga-agents.yml to use strands-agents[a2a,gemini]
-- Status: PENDING - Need to commit and deploy
+- Status: FIXED - Deployed via GitHub Actions
+
+### Iteration 4 (2026-01-12)
+- Updated SSM parameter with real Google API key (AIzaSy...)
+- Forced runtime update via AWS CLI (version 31)
+- Ran E2E test - got Internal error (-32603)
+- Checked CloudWatch logs - found model not found error:
+  `models/gemini-3.0-pro is not found for API version v1beta`
+- Root cause: BUG-006 - Invalid model names
+  - Code uses: gemini-3.0-pro, gemini-3.0-flash
+  - Correct: gemini-3-pro-preview, gemini-3-flash-preview
+- Fix: Updated server/agentcore-inventory/agents/utils.py
+- Status: PENDING - Need to commit, deploy, and re-test
 
 ## Bug Fixes Applied This Session
 1. BUG-004: Missing AgentCore runtime endpoints (FIXED - Terraform import)
 2. BUG-005: Missing google-genai dependency (FIXED - CI workflow update)
+3. BUG-006: Invalid Gemini model names (FIXING - utils.py updated)
 
 ## Next Steps
-1. Commit CI workflow fix
+1. Commit utils.py fix
 2. Push to trigger GitHub Actions
 3. Wait for deployment to complete
-4. Re-run E2E test
+4. Force runtime update
+5. Re-run E2E test
