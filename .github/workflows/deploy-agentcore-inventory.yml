@@ -1,7 +1,7 @@
 # =============================================================================
 # AgentCore Deployment Workflow - Faiston SGA Multi-Agent System
 # =============================================================================
-# Deploys 14 Python agents to AWS Bedrock AgentCore Runtime
+# Deploys 15 Python agents to AWS Bedrock AgentCore Runtime
 # Uses Google ADK with native Gemini 3.0 Pro models
 #
 # Architecture:
@@ -162,14 +162,16 @@ jobs:
         if: matrix.agent == 'faiston_asset_management'
         run: |
           pip install boto3 --quiet
+          # Note: list_agent_runtimes() is paginated - must iterate through all pages
           RUNTIME_ID=$(python3 -c "
           import boto3
           client = boto3.client('bedrock-agentcore-control', region_name='us-east-2')
-          runtimes = client.list_agent_runtimes()
-          for rt in runtimes.get('agentRuntimes', []):
-              if rt['agentRuntimeName'] == 'faiston_asset_management':
-                  print(rt['agentRuntimeId'])
-                  break
+          paginator = client.get_paginator('list_agent_runtimes')
+          for page in paginator.paginate():
+              for rt in page.get('agentRuntimes', []):
+                  if rt['agentRuntimeName'] == 'faiston_asset_management':
+                      print(rt['agentRuntimeId'])
+                      exit(0)
           ")
           echo "runtime_id=$RUNTIME_ID" >> $GITHUB_OUTPUT
           echo "Orchestrator Runtime ID: $RUNTIME_ID"
@@ -216,22 +218,33 @@ jobs:
 
           REGION = "us-east-2"
           PROJECT_NAME = "faiston-one"
-          EXPECTED_AGENT_COUNT = 14  # 1 orchestrator + 13 specialists
+          EXPECTED_AGENT_COUNT = 15  # 1 orchestrator + 14 specialists
           MAX_LIST_RETRIES = 20      # Up to 20 retries = ~7 more minutes
           LIST_RETRY_DELAY = 20      # 20 seconds between retries
 
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
           ssm = boto3.client("ssm", region_name=REGION)
 
+          # Helper function to list ALL agent runtimes with pagination
+          # CRITICAL: The list_agent_runtimes() API is paginated!
+          # Without pagination, only the first ~10 runtimes are returned.
+          def list_all_runtimes():
+              """Fetch all agent runtimes using pagination."""
+              all_runtimes = []
+              paginator = client.get_paginator("list_agent_runtimes")
+              for page in paginator.paginate():
+                  all_runtimes.extend(page.get("agentRuntimes", []))
+              return all_runtimes
+
           print("=== Building SSM Agent Registry ===")
 
           # List all runtimes with retry for eventual consistency
           # AWS AgentCore API may not return newly deployed runtimes immediately
-          runtimes = None
+          all_runtimes = []
           for attempt in range(MAX_LIST_RETRIES + 1):
-              runtimes = client.list_agent_runtimes()
+              all_runtimes = list_all_runtimes()
               faiston_count = sum(
-                  1 for rt in runtimes.get("agentRuntimes", [])
+                  1 for rt in all_runtimes
                   if rt.get("agentRuntimeName", "").startswith("faiston")
               )
               print(f"  Found {faiston_count}/{EXPECTED_AGENT_COUNT} Faiston agents (attempt {attempt + 1})", flush=True)
@@ -252,7 +265,7 @@ jobs:
                   print("  Proceeding with available agents...", flush=True)
 
           registry = {}
-          for rt in runtimes.get("agentRuntimes", []):
+          for rt in all_runtimes:
               name = rt["agentRuntimeName"]
 
               # Filter for our agents
@@ -348,13 +361,24 @@ jobs:
 
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
 
+          # Helper function to list ALL agent runtimes with pagination
+          # CRITICAL: The list_agent_runtimes() API is paginated!
+          def list_all_runtimes():
+              """Fetch all agent runtimes using pagination."""
+              all_runtimes = []
+              paginator = client.get_paginator("list_agent_runtimes")
+              for page in paginator.paginate():
+                  all_runtimes.extend(page.get("agentRuntimes", []))
+              return all_runtimes
+
           # Find orchestrator runtime with retry for API eventual consistency
           # The SSM Registry step should have already waited for all agents to be visible,
           # but we add a small retry here as a safety margin
           agent_runtime_id = None
+          all_runtimes = []
           for find_attempt in range(MAX_FIND_RETRIES):
-              runtimes = client.list_agent_runtimes()
-              for rt in runtimes.get("agentRuntimes", []):
+              all_runtimes = list_all_runtimes()
+              for rt in all_runtimes:
                   if rt["agentRuntimeName"] == "faiston_asset_management":
                       agent_runtime_id = rt["agentRuntimeId"]
                       print(f"  Found orchestrator runtime: {agent_runtime_id}", flush=True)
@@ -367,7 +391,7 @@ jobs:
           if not agent_runtime_id:
               print("ERROR: Orchestrator runtime not found after retries!", flush=True)
               print("  Available runtimes:", flush=True)
-              for rt in runtimes.get("agentRuntimes", []):
+              for rt in all_runtimes:
                   print(f"    - {rt['agentRuntimeName']}: {rt['agentRuntimeId']}", flush=True)
               exit(1)
 
@@ -460,7 +484,7 @@ jobs:
           echo "| Region | \`us-east-2\` |" >> $GITHUB_STEP_SUMMARY
           echo "| AWS Account | \`377311924364\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Agents Deployed (14)" >> $GITHUB_STEP_SUMMARY
+          echo "### Agents Deployed (15)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Orchestrator (HTTP/JWT):**" >> $GITHUB_STEP_SUMMARY
           echo "- \`faiston_asset_management\` - Main entry point for frontend" >> $GITHUB_STEP_SUMMARY
@@ -552,7 +576,7 @@ jobs:
         run: |
           echo "## AgentCore Inventory Undeployed 🔴" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All 14 agents have been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
+          echo "All 15 agents have been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
   # Check Status
@@ -588,12 +612,17 @@ jobs:
           import boto3
 
           client = boto3.client("bedrock-agentcore-control", region_name="us-east-2")
-          runtimes = client.list_agent_runtimes()
+
+          # Use paginator to list ALL runtimes (API is paginated!)
+          all_runtimes = []
+          paginator = client.get_paginator("list_agent_runtimes")
+          for page in paginator.paginate():
+              all_runtimes.extend(page.get("agentRuntimes", []))
 
           print("=== AgentCore Runtime Status ===\n")
 
           our_agents = []
-          for rt in runtimes.get("agentRuntimes", []):
+          for rt in all_runtimes:
               name = rt["agentRuntimeName"]
               if name.startswith("faiston"):
                   our_agents.append(rt)
@@ -603,8 +632,10 @@ jobs:
           else:
               print(f"{'Agent Name':<40} {'Status':<15} {'Runtime ID'}")
               print("-" * 80)
-              for rt in our_agents:
+              for rt in sorted(our_agents, key=lambda x: x['agentRuntimeName']):
                   print(f"{rt['agentRuntimeName']:<40} {rt.get('status', 'UNKNOWN'):<15} {rt['agentRuntimeId']}")
+              print()
+              print(f"Total Faiston agents: {len(our_agents)}")
           PYTHON_SCRIPT
 
       - name: Status Summary
