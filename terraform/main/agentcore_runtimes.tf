@@ -389,6 +389,12 @@ resource "aws_bedrockagentcore_agent_runtime_endpoint" "sga_agents" {
     AgentID   = each.key
     AgentName = each.value.name
   })
+
+  # DEFAULT endpoints are auto-managed by AgentCore and cannot be updated
+  # via UpdateAgentRuntimeEndpoint API. Ignore all changes after import.
+  lifecycle {
+    ignore_changes = all
+  }
 }
 
 # =============================================================================
