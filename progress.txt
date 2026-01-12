@@ -52,6 +52,21 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
   - Issue: https://github.com/strands-agents/sdk-python/issues/1199
 - User decision: Use Gemini 2.5 Pro as temporary workaround
 - Fix: Updated utils.py to use gemini-2.5-pro and gemini-2.5-flash
+- Status: FIXED - Deployed via GitHub Actions
+
+### Iteration 6 (2026-01-12)
+- Deployed BUG-007 workaround (Gemini 2.5), forced runtime update to v35
+- Ran E2E test - got HTTP 424 (Runtime initialization time exceeded)
+- CloudWatch shows server starts successfully (<1 second)
+- But AgentCore's health check handshake times out (5-10s window)
+- Root cause: BUG-008 - Blocking GeminiModel initialization
+  - GeminiModel constructor makes HTTP call to Google API (generativelanguage.googleapis.com)
+  - This blocks A2A server startup, preventing health check response
+  - Observation agent works (warm session), nexo_import fails (cold start blocks)
+- Fix: Implemented LazyGeminiModel wrapper in utils.py
+  - Defers Google API connection until first actual inference request
+  - A2A server starts instantly, responds to health checks
+  - Model initializes on first real user request
 - Status: DEPLOYING - Waiting for GitHub Actions
 
 ## Bug Fixes Applied This Session
@@ -59,9 +74,10 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
 2. BUG-005: Missing google-genai dependency (FIXED - CI workflow update)
 3. BUG-006: Invalid Gemini model names (FIXED - utils.py updated)
 4. BUG-007: Strands SDK thoughtSignature incompatibility (WORKAROUND - Gemini 2.5)
+5. BUG-008: Blocking GeminiModel initialization (FIXED - LazyGeminiModel wrapper)
 
 ## Next Steps
-1. Commit Gemini 2.5 workaround
+1. Commit BUG-008 fix (LazyGeminiModel)
 2. Push to trigger GitHub Actions
 3. Wait for deployment to complete
 4. Force runtime update
