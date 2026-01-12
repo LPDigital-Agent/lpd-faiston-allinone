@@ -364,20 +364,18 @@ resource "aws_iam_role_policy" "sga_agentcore_gateway" {
 # =============================================================================
 # SSM Parameter Store Access Policy
 # =============================================================================
-# Access to API keys for external services (Google API for Gemini)
+# Access to Google API key for Gemini model
+# NOTE: Agent registry SSM access REMOVED (100% A2A Architecture with hardcoded runtime IDs)
 
 data "aws_iam_policy_document" "sga_agentcore_ssm" {
   statement {
-    sid    = "SSMSGAParameterAccess"
+    sid    = "SSMGoogleAPIKeyAccess"
     effect = "Allow"
     actions = [
-      "ssm:GetParameter",
-      "ssm:GetParameters"
+      "ssm:GetParameter"
     ]
     resources = [
-      # Google API key (for Gemini 3.0)
-      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/sga/*",
-      # Also allow access to shared Google API key from Academy
+      # Google API key (for Gemini 2.5) - Academy shared key
       aws_ssm_parameter.academy_google_api_key.arn
     ]
   }
@@ -438,19 +436,8 @@ data "aws_iam_policy_document" "sga_agentcore_a2a" {
     ]
   }
 
-  # Statement 3: Access agent registry SSM parameters
-  statement {
-    sid    = "A2AAgentRegistryAccess"
-    effect = "Allow"
-    actions = [
-      "ssm:GetParameter",
-      "ssm:GetParameters",
-      "ssm:GetParametersByPath"
-    ]
-    resources = [
-      "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/${var.project_name}/sga/agents/*"
-    ]
-  }
+  # NOTE: A2AAgentRegistryAccess statement REMOVED (100% A2A Architecture)
+  # Agent runtime IDs are now hardcoded in a2a_client.py - no SSM lookup needed
 }
 
 resource "aws_iam_role_policy" "sga_agentcore_a2a" {

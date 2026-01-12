@@ -177,10 +177,13 @@ jobs:
           echo "Orchestrator Runtime ID: $RUNTIME_ID"
 
   # ===========================================================================
-  # Update SSM Registry After All Agents Deploy
+  # Configure Orchestrator JWT Authorizer
   # ===========================================================================
-  update-registry:
-    name: Update SSM Agent Registry
+  # NOTE: SSM Registry update REMOVED (100% A2A Architecture)
+  # Agent runtime IDs are now hardcoded in a2a_client.py - no SSM lookup needed
+  # ===========================================================================
+  configure-orchestrator:
+    name: Configure Orchestrator JWT
     runs-on: ubuntu-latest
     needs: deploy-agents
     if: ${{ github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status' }}
@@ -193,143 +196,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update SSM Registry with Runtime IDs
-        run: |
-          # Install latest boto3 with bedrock-agentcore-control support
-          pip install --upgrade boto3 botocore --quiet
-
-          # Wait for AWS API to propagate newly deployed runtimes
-          # AWS AgentCore has significant eventual consistency delay (4+ minutes observed)
-          # We use initial wait + retry loop to handle this
-          echo "Waiting 120s for AWS API initial propagation..."
-          sleep 120
-
-          python3 << 'PYTHON_SCRIPT'
-          import boto3
-          import json
-          import subprocess
-          from urllib.parse import quote
-
-          # NOTE: time.sleep() does NOT work in GitHub Actions Python heredocs!
-          # Use subprocess.run(['sleep', 'N']) instead which calls the OS-level sleep
-          def sleep_seconds(n):
-              """Sleep using OS-level command - time.sleep() fails in heredocs."""
-              subprocess.run(['sleep', str(n)], check=True)
-
-          REGION = "us-east-2"
-          PROJECT_NAME = "faiston-one"
-          EXPECTED_AGENT_COUNT = 15  # 1 orchestrator + 14 specialists
-          MAX_LIST_RETRIES = 20      # Up to 20 retries = ~7 more minutes
-          LIST_RETRY_DELAY = 20      # 20 seconds between retries
-
-          client = boto3.client("bedrock-agentcore-control", region_name=REGION)
-          ssm = boto3.client("ssm", region_name=REGION)
-
-          # Helper function to list ALL agent runtimes with pagination
-          # CRITICAL: The list_agent_runtimes() API is paginated!
-          # Without pagination, only the first ~10 runtimes are returned.
-          def list_all_runtimes():
-              """Fetch all agent runtimes using pagination."""
-              all_runtimes = []
-              paginator = client.get_paginator("list_agent_runtimes")
-              for page in paginator.paginate():
-                  all_runtimes.extend(page.get("agentRuntimes", []))
-              return all_runtimes
-
-          print("=== Building SSM Agent Registry ===")
-
-          # List all runtimes with retry for eventual consistency
-          # AWS AgentCore API may not return newly deployed runtimes immediately
-          all_runtimes = []
-          for attempt in range(MAX_LIST_RETRIES + 1):
-              all_runtimes = list_all_runtimes()
-              faiston_count = sum(
-                  1 for rt in all_runtimes
-                  if rt.get("agentRuntimeName", "").startswith("faiston")
-              )
-              print(f"  Found {faiston_count}/{EXPECTED_AGENT_COUNT} Faiston agents (attempt {attempt + 1})", flush=True)
-
-              if faiston_count >= EXPECTED_AGENT_COUNT:
-                  print(f"  ✅ All {EXPECTED_AGENT_COUNT} agents visible in API", flush=True)
-                  break
-              elif faiston_count > 0:
-                  # Some agents found, wait a bit more for the rest
-                  print(f"  ⏳ Waiting for remaining agents... ({LIST_RETRY_DELAY}s)", flush=True)
-                  sleep_seconds(LIST_RETRY_DELAY)
-              elif attempt < MAX_LIST_RETRIES:
-                  # No agents found yet, wait longer
-                  print(f"  ⏳ No agents visible yet, waiting... ({LIST_RETRY_DELAY}s)", flush=True)
-                  sleep_seconds(LIST_RETRY_DELAY)
-              else:
-                  print(f"  ⚠️ Only found {faiston_count} agents after {MAX_LIST_RETRIES} retries", flush=True)
-                  print("  Proceeding with available agents...", flush=True)
-
-          registry = {}
-          for rt in all_runtimes:
-              name = rt["agentRuntimeName"]
-
-              # Filter for our agents
-              if not (name.startswith("faiston_sga_") or name == "faiston_asset_management"):
-                  continue
-
-              # Get runtime ARN for URL construction
-              runtime_id = rt["agentRuntimeId"]
-              runtime_arn = rt.get("agentRuntimeArn", f"arn:aws:bedrock-agentcore:{REGION}:377311924364:runtime/{runtime_id}")
-
-              # Determine agent_id from name
-              if name == "faiston_asset_management":
-                  agent_id = "asset_management"
-              else:
-                  agent_id = name.replace("faiston_sga_", "")
-
-              # Build A2A invocation URL with URL-encoded ARN
-              # A2A Protocol uses root path /, not /invocations (HTTP protocol)
-              # Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/
-              url = f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{quote(runtime_arn, safe='')}/?qualifier=DEFAULT"
-
-              registry[agent_id] = {
-                  "name": name,
-                  "description": rt.get("description", ""),
-                  "runtime_id": runtime_id,
-                  "runtime_arn": runtime_arn,
-                  "url": url,
-                  "status": rt.get("status", "UNKNOWN")
-              }
-
-              print(f"  {agent_id}: {runtime_id} ({rt.get('status', 'UNKNOWN')})")
-
-          # Write to SSM
-          ssm_path = f"/{PROJECT_NAME}/sga/agents/registry"
-          print(f"\n=== Updating SSM: {ssm_path} ===")
-
-          try:
-              ssm.put_parameter(
-                  Name=ssm_path,
-                  Value=json.dumps(registry, indent=2),
-                  Type="String",
-                  Tier="Advanced",  # Required for large JSON
-                  Overwrite=True
-              )
-              print(f"✅ SSM Registry updated with {len(registry)} agents")
-          except Exception as e:
-              print(f"ERROR: Failed to update SSM: {e}")
-              exit(1)
-
-          # Also update individual agent URLs for backward compatibility
-          for agent_id, config in registry.items():
-              try:
-                  ssm.put_parameter(
-                      Name=f"/{PROJECT_NAME}/sga/agents/{agent_id}/url",
-                      Value=config["url"],
-                      Type="String",
-                      Overwrite=True
-                  )
-              except Exception as e:
-                  print(f"  Warning: Could not update {agent_id}/url: {e}")
-
-          print("\n✅ All agent URLs updated in SSM")
-          PYTHON_SCRIPT
-
       # =========================================================================
       # Configure JWT Authorizer for Orchestrator
       # =========================================================================
@@ -338,7 +204,14 @@ jobs:
       # =========================================================================
       - name: Configure JWT Authorizer for Orchestrator
         run: |
-          # boto3 already upgraded in previous step
+          # Install boto3 with bedrock-agentcore-control support
+          pip install --upgrade boto3 botocore --quiet
+
+          # Wait for AWS API to propagate newly deployed runtimes
+          # AWS AgentCore has eventual consistency delay
+          echo "Waiting 60s for AWS API propagation..."
+          sleep 60
+
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import os
@@ -374,8 +247,7 @@ jobs:
               return all_runtimes
 
           # Find orchestrator runtime with retry for API eventual consistency
-          # The SSM Registry step should have already waited for all agents to be visible,
-          # but we add a small retry here as a safety margin
+          # Retry here handles AWS API eventual consistency
           agent_runtime_id = None
           all_runtimes = []
           for find_attempt in range(MAX_FIND_RETRIES):
@@ -476,7 +348,7 @@ jobs:
   summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
-    needs: [deploy-agents, update-registry]
+    needs: [deploy-agents, configure-orchestrator]
     if: always() && github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status'
 
     steps:
@@ -521,8 +393,8 @@ jobs:
           echo "| Frontend → Orchestrator | JWT Bearer Token (Cognito) |" >> $GITHUB_STEP_SUMMARY
           echo "| Orchestrator → Agents | SigV4 (IAM) via A2A |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### SSM Registry" >> $GITHUB_STEP_SUMMARY
-          echo "\`/faiston-one/sga/agents/registry\` updated with all runtime URLs" >> $GITHUB_STEP_SUMMARY
+          echo "### Agent Discovery (100% A2A)" >> $GITHUB_STEP_SUMMARY
+          echo "Runtime IDs are hardcoded in \`a2a_client.py\` (NO SSM lookups)" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
   # Undeploy All Agents

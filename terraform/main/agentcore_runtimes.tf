@@ -398,56 +398,11 @@ resource "aws_bedrockagentcore_agent_runtime_endpoint" "sga_agents" {
 }
 
 # =============================================================================
-# SSM Parameters for Agent Discovery
-# =============================================================================
-# Store endpoint ARNs for cross-agent communication (A2A client uses these)
-
-resource "aws_ssm_parameter" "sga_agent_urls" {
-  for_each = local.sga_agents
-
-  name        = "/${var.project_name}/sga/agents/${each.key}/url"
-  description = "AgentCore Runtime Endpoint ARN for ${each.value.name}"
-  type        = "String"
-  # Store endpoint ARN (not URL) - callers use this with invoke_agent_runtime API
-  # Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agent-runtime-versioning.html
-  value = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents[each.key].agent_runtime_endpoint_arn
-
-  tags = merge(local.common_tags, {
-    Name      = "${local.name_prefix}-sga-${each.key}-url"
-    Module    = "SGA"
-    Feature   = "Agent Discovery"
-    AgentID   = each.key
-    AgentName = each.value.name
-  })
-}
-
-# Combined agent registry for runtime lookup
-# NOTE: Simplified to essential fields to stay under SSM 8192 char limit
-resource "aws_ssm_parameter" "sga_agent_registry" {
-  name        = "/${var.project_name}/sga/agents/registry"
-  description = "Registry of all SGA agent runtime ARNs for A2A discovery"
-  type        = "String"
-  tier        = "Advanced"
-  value = jsonencode({
-    for agent_id, agent_config in local.sga_agents : agent_id => {
-      name         = agent_config.name
-      endpoint_arn = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents[agent_id].agent_runtime_endpoint_arn
-      runtime_arn  = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
-      orchestrator = agent_config.is_orchestrator
-      memory       = agent_config.memory_access
-    }
-  })
-
-  tags = merge(local.common_tags, {
-    Name    = "${local.name_prefix}-sga-agent-registry"
-    Module  = "SGA"
-    Feature = "Agent Discovery"
-  })
-}
-
-# =============================================================================
 # Outputs
 # =============================================================================
+# NOTE: SSM Parameters for Agent Discovery have been REMOVED (100% A2A Architecture)
+# Agent runtime IDs are now hardcoded in server/agentcore-inventory/shared/a2a_client.py
+# This eliminates SSM latency (~50ms per lookup) and simplifies the architecture.
 
 output "sga_agent_runtime_ids" {
   description = "Map of agent IDs to their AgentCore Runtime IDs"

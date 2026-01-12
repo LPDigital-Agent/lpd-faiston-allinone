@@ -1,5 +1,5 @@
 # =============================================================================
-# A2A Client - Agent-to-Agent Communication (Strands A2AServer Compatible)
+# A2A Client - Agent-to-Agent Communication (100% A2A Architecture)
 # =============================================================================
 # Standardized client for A2A protocol (JSON-RPC 2.0) communication between
 # AgentCore Runtimes using Strands A2AServer.
@@ -12,16 +12,12 @@
 #       "filename_pattern": "EXPEDIÇÃO_*.csv"
 #   })
 #
-# Architecture:
+# Architecture (100% A2A - NO SSM):
 # - JSON-RPC 2.0 over HTTP (port 9000, path /)
 # - Agent Card discovery at /.well-known/agent-card.json
-# - Agent discovery via SSM Parameter Store
+# - Hardcoded runtime IDs (stable, immutable once created)
 # - AgentCore Identity for authentication (SigV4)
 # - X-Ray tracing for distributed observability
-#
-# Migration Note:
-# - Migrated from BedrockAgentCoreApp (HTTP, port 8080, /invocations)
-# - Now uses Strands A2AServer (A2A, port 9000, /)
 #
 # Reference:
 # - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-a2a-protocol-contract.html
@@ -35,6 +31,7 @@ import asyncio
 import random
 import logging
 import time
+import urllib.parse
 from typing import Dict, Any, Optional, List, Set
 from dataclasses import dataclass, field
 
@@ -62,6 +59,36 @@ MAX_RETRIES = 5
 BASE_DELAY = 1.0  # seconds
 MAX_DELAY = 16.0  # seconds
 JITTER_RANGE = 0.5  # ±50% jitter
+
+# =============================================================================
+# AgentCore Runtime IDs (100% A2A Architecture - NO SSM)
+# =============================================================================
+# These IDs are IMMUTABLE once created - they only change if you delete/recreate
+# the runtime in Terraform. Using hardcoded IDs eliminates SSM latency (~50ms)
+# and simplifies the architecture.
+#
+# To find runtime IDs:
+#   aws bedrock-agentcore list-agent-runtimes --region us-east-2
+#
+# Reference: terraform/main/agentcore_runtimes.tf
+# =============================================================================
+
+RUNTIME_IDS = {
+    "nexo_import": "faiston_sga_nexo_import-0zNtFDAo7M",
+    "learning": "faiston_sga_learning-30cZIOFmzo",
+    "validation": "faiston_sga_validation-3zgXMwCxGN",
+    "observation": "faiston_sga_observation-ACVR2SDmtJ",
+    "import": "faiston_sga_import-sM56rCFLIr",
+    "intake": "faiston_sga_intake-9I7Nwe6ZfP",
+    "estoque_control": "faiston_sga_estoque_control-jLRAIr8EcI",
+    "compliance": "faiston_sga_compliance-2Kty3O64vz",
+    "reconciliacao": "faiston_sga_reconciliacao-poSPdO6OKm",
+    "expedition": "faiston_sga_expedition-yJ7Nb551hS",
+    "carrier": "faiston_sga_carrier-fVOntdCJaZ",
+    "reverse": "faiston_sga_reverse-jeiH9k8CbC",
+    "schema_evolution": "faiston_sga_schema_evolution-Ke1i76BvB0",
+    "equipment_research": "faiston_sga_equipment_research-xs7hxg2SfS",
+}
 
 
 def _get_httpx():
@@ -140,18 +167,18 @@ class A2AClient:
     """
     Client for A2A (Agent-to-Agent) protocol communication.
 
-    100% A2A Architecture Implementation:
+    100% A2A Architecture Implementation (NO SSM):
     - Agent Card Discovery via /.well-known/agent-card.json (A2A Protocol)
     - JSON-RPC 2.0 message formatting (message/send method)
     - SigV4 authentication for AgentCore Runtime
-    - Fallback to SSM Parameter Store for bootstrap URLs
+    - Hardcoded runtime IDs (stable, immutable - NO SSM LOOKUPS)
     - X-Ray tracing integration
 
     Discovery Flow (A2A Protocol Compliant):
-    1. Get bootstrap URL from SSM (one-time for each agent)
-    2. Fetch Agent Card from /.well-known/agent-card.json
+    1. Get runtime URL from hardcoded RUNTIME_IDS mapping
+    2. Optionally fetch Agent Card from /.well-known/agent-card.json
     3. Cache Agent Card with TTL for subsequent calls
-    4. Use authoritative URL from Agent Card for invocations
+    4. Use URL for invocations with SigV4 signing
 
     Example:
         client = A2AClient()
@@ -161,53 +188,34 @@ class A2AClient:
         if card:
             print(f"Skills: {[s['name'] for s in card.skills]}")
 
-        # Invoke with discovery (recommended)
+        # Invoke agent
         result = await client.invoke_agent("learning", {
             "action": "retrieve_prior_knowledge",
             "filename": "EXPEDIÇÃO_JAN_2026.csv"
-        }, use_discovery=True)
+        })
 
-        # Legacy invocation (SSM-only, no discovery)
-        result = await client.invoke_agent(
-            "validation",
-            {"action": "validate_schema", "columns": ["PN", "QTD"]},
-            session_id="session-123",
-            use_discovery=False
-        )
+        if result.success:
+            prior_knowledge = json.loads(result.response)
 
     Reference: https://a2a-protocol.org/latest/specification/
     """
 
-    # SSM parameter path for agent registry
-    REGISTRY_PARAM = "/{project}/sga/agents/registry"
-
     # Agent Card cache TTL in seconds (5 minutes)
     CARD_CACHE_TTL = 300
 
-    def __init__(self, project_name: Optional[str] = None, use_discovery: bool = True):
+    def __init__(self, use_discovery: bool = True):
         """
         Initialize A2A client with Agent Card discovery support.
 
         Args:
-            project_name: Project name for SSM parameters (default: from env)
             use_discovery: Enable Agent Card discovery by default (100% A2A Architecture)
         """
-        self.project_name = project_name or os.environ.get("PROJECT_NAME", "faiston-one")
         self.region = os.environ.get("AWS_REGION", "us-east-2")
-        self._agent_registry: Optional[Dict] = None
-        self._ssm_client = None
+        self.account_id = os.environ.get("AWS_ACCOUNT_ID", "377311924364")
         self.use_discovery = use_discovery
 
         # Agent Card cache: {agent_id: {"card": AgentCard, "timestamp": float}}
         self._agent_cards: Dict[str, Dict] = {}
-
-    @property
-    def ssm_client(self):
-        """Lazy-load SSM client."""
-        if self._ssm_client is None:
-            boto3 = _get_boto3()
-            self._ssm_client = boto3.client("ssm", region_name=self.region)
-        return self._ssm_client
 
     def _get_session(self):
         """Get boto3 session for credential management."""
@@ -276,28 +284,38 @@ class A2AClient:
 
         return dict(request.headers)
 
-    async def get_agent_registry(self) -> Dict[str, Dict]:
+    def _build_runtime_url(self, agent_id: str) -> Optional[str]:
         """
-        Get agent registry from SSM Parameter Store.
+        Build AgentCore runtime URL from agent ID using hardcoded runtime IDs.
+
+        100% A2A Architecture: NO SSM LOOKUPS. Runtime IDs are stable and
+        immutable - they only change if you delete/recreate the runtime.
+
+        Args:
+            agent_id: Agent identifier (e.g., "learning", "validation")
 
         Returns:
-            Dict mapping agent_id -> agent config (name, url, skills, etc.)
+            AgentCore invocation URL or None if agent not found
         """
-        if self._agent_registry is not None:
-            return self._agent_registry
+        runtime_id = RUNTIME_IDS.get(agent_id)
+        if not runtime_id:
+            logger.warning(f"[A2A] Unknown agent: {agent_id}")
+            return None
 
-        try:
-            param_name = self.REGISTRY_PARAM.format(project=self.project_name)
-            response = self.ssm_client.get_parameter(Name=param_name)
-            self._agent_registry = json.loads(response["Parameter"]["Value"])
-            return self._agent_registry
-        except Exception as e:
-            print(f"[A2A] Failed to load agent registry: {e}")
-            return {}
+        # Build AgentCore invocation URL
+        # Format: https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{encoded_arn}/invocations/
+        arn = f"arn:aws:bedrock-agentcore:{self.region}:{self.account_id}:runtime/{runtime_id}"
+        encoded_arn = urllib.parse.quote(arn, safe='')
+        url = f"https://bedrock-agentcore.{self.region}.amazonaws.com/runtimes/{encoded_arn}/invocations/"
+
+        logger.debug(f"[A2A] Built URL for {agent_id}: {url[:80]}...")
+        return url
 
     async def get_agent_url(self, agent_id: str) -> Optional[str]:
         """
         Get invocation URL for an agent.
+
+        Uses hardcoded runtime IDs (NO SSM) for zero-latency lookups.
 
         Args:
             agent_id: Agent identifier (e.g., "learning", "validation")
@@ -310,13 +328,8 @@ class A2AClient:
         if env_var in os.environ:
             return os.environ[env_var]
 
-        # Look up in registry
-        registry = await self.get_agent_registry()
-        agent_config = registry.get(agent_id)
-        if agent_config:
-            return agent_config.get("url")
-
-        return None
+        # Build URL from hardcoded runtime ID
+        return self._build_runtime_url(agent_id)
 
     async def get_agent_card(
         self,
@@ -614,9 +627,9 @@ class A2AClient:
 
         This is the main method for cross-agent communication.
 
-        100% A2A Architecture: When use_discovery=True (default), performs Agent
-        Card discovery first to validate the target agent exists and has required
-        capabilities. Uses the authoritative URL from the Agent Card.
+        100% A2A Architecture: Uses hardcoded runtime IDs (NO SSM) for
+        zero-latency lookups. When use_discovery=True (default), performs
+        Agent Card discovery first to validate the target agent exists.
 
         Args:
             agent_id: ID of the agent to invoke (e.g., "learning", "validation")
@@ -625,21 +638,17 @@ class A2AClient:
             timeout: Request timeout in seconds
             use_discovery: If True, performs Agent Card discovery first (A2A compliant).
                           If None, uses instance default (self.use_discovery).
-                          If False, uses SSM lookup only (legacy mode).
+                          If False, uses direct URL lookup (faster).
 
         Returns:
             A2AResponse with success status and response text
 
         Example:
-            # With discovery (recommended - 100% A2A Architecture)
             result = await client.invoke_agent("learning", {
                 "action": "retrieve_prior_knowledge",
                 "filename_pattern": "EXPEDIÇÃO_*.csv",
                 "columns": ["PN", "QTD", "DESCRICAO"]
-            }, use_discovery=True)
-
-            # Legacy mode (SSM only)
-            result = await client.invoke_agent("validation", payload, use_discovery=False)
+            })
 
             if result.success:
                 prior_knowledge = json.loads(result.response)
@@ -670,13 +679,13 @@ class A2AClient:
                 agent_url = agent_card.url
                 logger.debug(f"[A2A] Using URL from Agent Card: {agent_url}")
             else:
-                # Discovery failed - fall back to SSM lookup
+                # Discovery failed - use hardcoded runtime URL
                 logger.warning(
                     f"[A2A] Agent Card discovery failed for '{agent_id}', "
-                    f"falling back to SSM lookup"
+                    f"using hardcoded runtime URL"
                 )
 
-        # Fall back to SSM registry if discovery disabled or failed
+        # Use hardcoded runtime URL if discovery disabled or failed
         if not agent_url:
             agent_url = await self.get_agent_url(agent_id)
 
@@ -923,7 +932,7 @@ class LocalA2AClient(A2AClient):
     A2A Client for local development and testing.
 
     Connects to locally running Strands A2AServer instances without
-    SSM Parameter Store or AWS authentication.
+    AWS authentication. Uses hardcoded local ports instead of AgentCore URLs.
 
     Example:
         # Start local server: python main_a2a.py
