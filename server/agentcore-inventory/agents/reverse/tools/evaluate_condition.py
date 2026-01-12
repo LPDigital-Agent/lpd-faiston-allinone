@@ -9,7 +9,6 @@ from datetime import datetime
 import uuid
 import json
 
-from google.adk.tools import tool
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,6 @@ CONDITION_CRITERIA = {
 # =============================================================================
 
 
-@tool
 async def evaluate_condition_tool(
     serial_number: str,
     inspection_notes: str = "",

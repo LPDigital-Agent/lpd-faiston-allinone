@@ -109,7 +109,7 @@ export type {
   UseAgentRoomStreamReturn,
 } from './useAgentRoomStream';
 
-// Agent Room X-Ray hooks (real-time traces)
+// Agent Room X-Ray hooks (real-time traces - polling fallback)
 export {
   useAgentRoomXRay,
   useXRayHILDecisions,
@@ -120,6 +120,18 @@ export type {
   UseAgentRoomXRayOptions,
   UseAgentRoomXRayReturn,
 } from './useAgentRoomXRay';
+
+// Agent Room WebSocket hooks (TRUE real-time <100ms)
+export {
+  useAgentRoomWebSocket,
+  useWebSocketHILDecisions,
+  useWebSocketSession,
+  useWebSocketAgent,
+} from './useAgentRoomWebSocket';
+export type {
+  UseAgentRoomWebSocketOptions,
+  UseAgentRoomWebSocketReturn,
+} from './useAgentRoomWebSocket';
 
 // Context-based hooks (re-exported from contexts for convenience)
 export {

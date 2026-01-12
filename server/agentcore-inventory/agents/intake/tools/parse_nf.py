@@ -9,7 +9,6 @@ import logging
 from typing import Dict, Any, Optional
 import xml.etree.ElementTree as ET
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -33,7 +32,6 @@ NFE_NS = {
 }
 
 
-@tool
 @trace_tool_call("sga_parse_nf")
 async def parse_nf_tool(
     s3_key: str,

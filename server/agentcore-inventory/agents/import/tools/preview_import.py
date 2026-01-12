@@ -10,7 +10,6 @@ import logging
 from typing import Dict, Any, List, Optional, Tuple
 from difflib import SequenceMatcher
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -57,7 +56,6 @@ COLUMN_PATTERNS = {
 }
 
 
-@tool
 @trace_tool_call("sga_preview_import")
 async def preview_import_tool(
     s3_key: str,
@@ -162,7 +160,6 @@ async def preview_import_tool(
         }
 
 
-@tool
 @trace_tool_call("sga_detect_columns")
 async def detect_columns_tool(
     headers: List[str],
@@ -206,7 +203,6 @@ async def detect_columns_tool(
     }
 
 
-@tool
 @trace_tool_call("sga_match_rows_pn")
 async def match_rows_to_pn(
     rows: List[Dict[str, Any]],

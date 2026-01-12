@@ -8,7 +8,6 @@
 import logging
 from typing import Dict, Any, List, Optional
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -23,7 +22,6 @@ MODEL = get_model(AGENT_ID)  # gemini-3.0-pro (import tool with Thinking)
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_match_items")
 async def match_items_tool(
     items: List[Dict[str, Any]],

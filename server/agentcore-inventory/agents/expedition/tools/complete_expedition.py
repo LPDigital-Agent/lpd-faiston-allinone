@@ -7,7 +7,6 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 import uuid
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -21,7 +20,6 @@ def generate_movement_id() -> str:
     return f"MV_{uuid.uuid4().hex[:12].upper()}"
 
 
-@tool
 @trace_tool_call("sga_complete_expedition")
 async def complete_expedition_tool(
     expedition_id: str,

@@ -8,7 +8,6 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -23,7 +22,6 @@ HIGH_VALUE_THRESHOLD = 5000.0  # R$
 MIN_CONFIDENCE_AUTONOMOUS = 0.80
 
 
-@tool
 @trace_tool_call("sga_process_entry")
 async def process_entry_tool(
     extraction: Dict[str, Any],

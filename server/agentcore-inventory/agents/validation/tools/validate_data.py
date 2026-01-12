@@ -9,7 +9,6 @@ import re
 from typing import Dict, Any, List, Optional
 from decimal import Decimal, InvalidOperation
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -58,7 +57,6 @@ FIELD_VALIDATORS = {
 }
 
 
-@tool
 @trace_tool_call("sga_validate_data")
 async def validate_data_tool(
     rows: List[Dict[str, Any]],

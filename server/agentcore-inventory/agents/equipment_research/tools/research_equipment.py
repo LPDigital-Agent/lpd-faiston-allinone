@@ -12,7 +12,6 @@ from datetime import datetime
 from dataclasses import dataclass, field
 import uuid
 
-from google.adk.tools import tool
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +77,6 @@ class DownloadedDocument:
 # =============================================================================
 
 
-@tool
 async def research_equipment_tool(
     part_number: str,
     description: str,

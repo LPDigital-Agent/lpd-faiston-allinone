@@ -6,12 +6,10 @@
 
 import re
 from typing import Dict, Any, List
-from google.adk.tools import tool
 
 from shared.xray_tracer import trace_tool_call
 
 
-@tool
 @trace_tool_call("sga_infer_column_type")
 async def infer_column_type_tool(
     sample_values: List[str],

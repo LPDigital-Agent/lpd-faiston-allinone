@@ -9,7 +9,6 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -20,7 +19,6 @@ AGENT_ID = "estoque_control"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_process_return")
 async def process_return_tool(
     part_number: str,

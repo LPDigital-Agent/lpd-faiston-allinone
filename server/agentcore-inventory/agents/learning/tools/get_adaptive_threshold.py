@@ -18,7 +18,6 @@ import re
 import logging
 from typing import Dict, Any, List, Optional
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_memory_operation
@@ -121,7 +120,6 @@ async def _query_matching_episodes(
 # Tool Definition
 # =============================================================================
 
-@tool
 @trace_memory_operation("get_adaptive_threshold")
 async def get_adaptive_threshold_tool(
     user_id: str,

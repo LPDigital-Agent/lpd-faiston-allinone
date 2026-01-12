@@ -7,7 +7,6 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import uuid
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -37,7 +36,6 @@ def generate_campaign_id() -> str:
     return f"INV_{uuid.uuid4().hex[:12].upper()}"
 
 
-@tool
 @trace_tool_call("sga_start_campaign")
 async def start_campaign_tool(
     name: str,
@@ -187,7 +185,6 @@ async def _generate_count_items(
     return items
 
 
-@tool
 @trace_tool_call("sga_get_campaign")
 async def get_campaign_tool(
     campaign_id: str,
@@ -211,7 +208,6 @@ async def get_campaign_tool(
         return {"success": False, "error": str(e)}
 
 
-@tool
 @trace_tool_call("sga_get_campaign_items")
 async def get_campaign_items_tool(
     campaign_id: str,
@@ -237,7 +233,6 @@ async def get_campaign_items_tool(
         return {"success": False, "error": str(e), "items": []}
 
 
-@tool
 @trace_tool_call("sga_complete_campaign")
 async def complete_campaign_tool(
     campaign_id: str,

@@ -5,7 +5,6 @@
 import logging
 from typing import Dict, Any, Optional
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -23,7 +22,6 @@ class DivergenceType:
 SIGNIFICANT_DIVERGENCE_THRESHOLD = 0.10
 
 
-@tool
 @trace_tool_call("sga_analyze_divergences")
 async def analyze_divergences_tool(
     campaign_id: str,

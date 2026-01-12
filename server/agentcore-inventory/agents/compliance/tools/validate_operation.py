@@ -6,7 +6,6 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -24,7 +23,6 @@ MAX_MOVEMENTS_PER_HOUR = 10
 RESTRICTED_LOCATIONS = {"COFRE", "QUARENTENA", "DESCARTE"}
 
 
-@tool
 @trace_tool_call("sga_validate_operation")
 async def validate_operation_tool(
     operation_type: str,

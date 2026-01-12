@@ -7,7 +7,6 @@
 import logging
 from typing import Dict, Any, Optional
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -75,7 +74,6 @@ These columns are created on-demand when new data patterns are detected.
 """
 
 
-@tool
 @trace_tool_call("sga_get_schema_context")
 async def get_schema_context_tool(
     target_table: str = "pending_entry_items",

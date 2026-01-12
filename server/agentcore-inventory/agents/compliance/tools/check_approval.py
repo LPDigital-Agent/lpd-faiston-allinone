@@ -4,7 +4,6 @@
 
 import logging
 from typing import Dict, Any, Optional
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -13,7 +12,6 @@ AGENT_ID = "compliance"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_check_approval")
 async def check_approval_status_tool(
     entity_type: str,

@@ -7,7 +7,6 @@
 import logging
 from typing import Dict, Any, Optional
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -18,7 +17,6 @@ AGENT_ID = "estoque_control"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_query_balance")
 async def query_balance_tool(
     part_number: str,
@@ -73,7 +71,6 @@ async def query_balance_tool(
         }
 
 
-@tool
 @trace_tool_call("sga_query_asset_location")
 async def query_asset_location_tool(
     serial_number: str,

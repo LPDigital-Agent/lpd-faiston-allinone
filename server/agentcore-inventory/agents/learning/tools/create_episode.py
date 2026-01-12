@@ -21,7 +21,6 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field, asdict
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_memory_operation
@@ -173,7 +172,6 @@ def _get_memory_client():
 # Tool Definition
 # =============================================================================
 
-@tool
 @trace_memory_operation("create_episode")
 async def create_episode_tool(
     user_id: str,

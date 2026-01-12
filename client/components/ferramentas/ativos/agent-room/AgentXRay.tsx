@@ -12,7 +12,11 @@
  * - Duration badges
  * - Expandable JSON details
  * - HIL inline actions
- * - Real-time updates (1s polling)
+ * - TRUE real-time via WebSocket (<100ms latency) OR fallback to polling (1s)
+ *
+ * Connection Modes:
+ * - WebSocket: Set NEXT_PUBLIC_AGENTROOM_WS_URL for true real-time
+ * - Polling: Fallback when WebSocket URL not configured
  */
 
 import { useState, useMemo } from 'react';
@@ -40,13 +44,23 @@ import {
   AlertCircle,
   ChevronDown,
   AlertTriangle,
-  Activity,
-  Send,
+  Zap,
 } from 'lucide-react';
 import { useAgentRoomXRay } from '@/hooks/ativos';
+import { useAgentRoomWebSocket } from '@/hooks/ativos/useAgentRoomWebSocket';
 import { XRaySessionGroup } from './XRaySessionGroup';
 import { XRayEventCard } from './XRayEventCard';
-import type { XRayEvent, XRayEventType } from '@/lib/ativos/agentRoomTypes';
+import type { XRayEventType } from '@/lib/ativos/agentRoomTypes';
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+/**
+ * Determines which real-time mode to use.
+ * WebSocket provides TRUE real-time (<100ms), polling is fallback (1000ms).
+ */
+const USE_WEBSOCKET = !!process.env.NEXT_PUBLIC_AGENTROOM_WS_URL;
 
 // =============================================================================
 // Constants
@@ -160,8 +174,14 @@ function EmptyState({ isFiltered }: EmptyStateProps) {
 // =============================================================================
 
 export function AgentXRay() {
+  // Use WebSocket for true real-time, fallback to polling
+  const pollingHook = useAgentRoomXRay({ enabled: !USE_WEBSOCKET });
+  const websocketHook = useAgentRoomWebSocket({ enabled: USE_WEBSOCKET });
+
+  // Select the active hook based on configuration
+  const activeHook = USE_WEBSOCKET ? websocketHook : pollingHook;
+
   const {
-    events,
     sessions,
     noSessionEvents,
     filteredEvents,
@@ -171,15 +191,15 @@ export function AgentXRay() {
     filter,
     setFilter,
     hilPendingCount,
-    totalEvents,
     refetch,
-    isPaused,
-    setPaused,
     expandedSessions,
     toggleSessionExpanded,
     expandedEvents,
     toggleEventExpanded,
-  } = useAgentRoomXRay();
+  } = activeHook;
+
+  // WebSocket-specific: latency indicator
+  const latency = USE_WEBSOCKET ? (websocketHook as { latency: number | null }).latency : null;
 
   const [showFilters, setShowFilters] = useState(false);
 
@@ -224,6 +244,16 @@ export function AgentXRay() {
                   {hilPendingCount} HIL
                 </span>
               </motion.div>
+            )}
+
+            {/* Latency Indicator (WebSocket only) */}
+            {USE_WEBSOCKET && latency !== null && connectionStatus === 'connected' && (
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20">
+                <Zap className="w-3 h-3 text-cyan-400" />
+                <span className="text-[10px] text-cyan-400 font-mono">
+                  {latency < 1000 ? `${latency}ms` : `${(latency / 1000).toFixed(1)}s`}
+                </span>
+              </div>
             )}
 
             {/* Filter Button */}

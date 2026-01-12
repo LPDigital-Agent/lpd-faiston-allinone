@@ -7,7 +7,6 @@
 import logging
 from typing import Dict, Any, List, Optional, Set
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -18,7 +17,6 @@ AGENT_ID = "validation"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_check_constraints")
 async def check_constraints_tool(
     rows: List[Dict[str, Any]],

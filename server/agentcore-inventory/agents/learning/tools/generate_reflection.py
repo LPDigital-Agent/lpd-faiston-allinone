@@ -16,7 +16,6 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_memory_operation
@@ -107,7 +106,6 @@ async def _query_episodes_for_pattern(filename_pattern: str) -> List[Dict[str, A
 # Tool Definition
 # =============================================================================
 
-@tool
 @trace_memory_operation("generate_reflection")
 async def generate_reflection_tool(
     user_id: str,

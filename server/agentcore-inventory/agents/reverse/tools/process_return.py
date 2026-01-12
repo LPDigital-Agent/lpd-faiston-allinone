@@ -8,7 +8,6 @@ from typing import Any, Dict, Optional
 from datetime import datetime
 import uuid
 
-from google.adk.tools import tool
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,6 @@ def get_db_client():
 # =============================================================================
 
 
-@tool
 async def process_return_tool(
     serial_number: str,
     reason: str,

@@ -8,7 +8,6 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -19,7 +18,6 @@ AGENT_ID = "estoque_control"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_create_reservation")
 async def create_reservation_tool(
     part_number: str,
@@ -161,7 +159,6 @@ async def create_reservation_tool(
         }
 
 
-@tool
 @trace_tool_call("sga_cancel_reservation")
 async def cancel_reservation_tool(
     reservation_id: str,

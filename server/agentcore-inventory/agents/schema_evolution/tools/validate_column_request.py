@@ -5,7 +5,6 @@
 # =============================================================================
 
 from typing import Dict, Any, List
-from google.adk.tools import tool
 
 from shared.xray_tracer import trace_tool_call
 
@@ -31,7 +30,6 @@ ALLOWED_TYPES = frozenset({
 })
 
 
-@tool
 @trace_tool_call("sga_validate_column_request")
 async def validate_column_request_tool(
     table_name: str,

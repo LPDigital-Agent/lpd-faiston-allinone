@@ -6,12 +6,10 @@
 
 import re
 from typing import Dict, Any
-from google.adk.tools import tool
 
 from shared.xray_tracer import trace_tool_call
 
 
-@tool
 @trace_tool_call("sga_sanitize_column_name")
 async def sanitize_column_name_tool(
     raw_name: str,

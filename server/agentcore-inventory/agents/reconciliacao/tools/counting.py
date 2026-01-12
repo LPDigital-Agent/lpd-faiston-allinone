@@ -7,7 +7,6 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import uuid
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -30,7 +29,6 @@ class DivergenceType:
     LOCATION_MISMATCH = "LOCATION_MISMATCH"
 
 
-@tool
 @trace_tool_call("sga_submit_count")
 async def submit_count_tool(
     campaign_id: str,

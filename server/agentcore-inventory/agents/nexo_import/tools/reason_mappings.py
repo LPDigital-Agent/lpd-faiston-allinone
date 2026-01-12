@@ -7,7 +7,6 @@
 import logging
 from typing import Dict, Any, List, Optional
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -18,7 +17,6 @@ AGENT_ID = "nexo_import"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_reason_mappings")
 async def reason_mappings_tool(
     file_analysis: Dict[str, Any],

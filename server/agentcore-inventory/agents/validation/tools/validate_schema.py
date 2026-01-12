@@ -7,7 +7,6 @@
 import logging
 from typing import Dict, Any, List, Optional, Set
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -51,7 +50,6 @@ AUTO_FIELDS: Set[str] = {"id", "created_at", "updated_at"}
 SPECIAL_VALUES: Set[str] = {"_skip", "_create_new", "_select_other"}
 
 
-@tool
 @trace_tool_call("sga_validate_schema")
 async def validate_schema_tool(
     column_mappings: Dict[str, str],

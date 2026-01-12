@@ -7,7 +7,6 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -170,7 +169,6 @@ def _get_ai_recommendation(
     }
 
 
-@tool
 @trace_tool_call("sga_get_quotes")
 async def get_quotes_tool(
     origin_cep: str,

@@ -18,7 +18,6 @@ import re
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_memory_operation
@@ -261,7 +260,6 @@ async def _get_relevant_reflections(filename_pattern: str) -> List[Dict[str, Any
 # Tool Definition
 # =============================================================================
 
-@tool
 @trace_memory_operation("retrieve_prior_knowledge")
 async def retrieve_prior_knowledge_tool(
     user_id: str,

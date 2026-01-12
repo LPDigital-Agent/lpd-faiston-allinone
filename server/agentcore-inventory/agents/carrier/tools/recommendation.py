@@ -5,7 +5,6 @@
 import logging
 from typing import Dict, Any, Optional
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -14,7 +13,6 @@ AGENT_ID = "carrier"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
-@tool
 @trace_tool_call("sga_recommend_carrier")
 async def recommend_carrier_tool(
     urgency: str,

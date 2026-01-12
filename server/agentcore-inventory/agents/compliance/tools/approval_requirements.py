@@ -4,7 +4,6 @@
 
 import logging
 from typing import Dict, Any, Optional
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -47,7 +46,6 @@ APPROVAL_REQUIREMENTS = {
 }
 
 
-@tool
 @trace_tool_call("sga_get_approval_requirements")
 async def get_approval_requirements_tool(
     operation_type: str,

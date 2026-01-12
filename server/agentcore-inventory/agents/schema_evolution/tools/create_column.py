@@ -11,7 +11,6 @@ import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -215,7 +214,6 @@ def _get_db_adapter():
 # Tool Definition
 # =============================================================================
 
-@tool
 @trace_tool_call("sga_create_column")
 async def create_column_tool(
     table_name: str,

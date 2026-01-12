@@ -5,7 +5,6 @@
 import logging
 from typing import Dict, Any, List, Optional
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -79,7 +78,6 @@ def format_sap_copyable(sap_data_list: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-@tool
 @trace_tool_call("sga_generate_sap_data")
 async def generate_sap_data_tool(
     expedition_id: str,

@@ -5,7 +5,6 @@
 import logging
 from typing import Dict, Any, Optional
 
-from google.adk.tools import tool
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
 
@@ -101,7 +100,6 @@ async def verify_stock_item(
         }
 
 
-@tool
 @trace_tool_call("sga_verify_stock")
 async def verify_stock_tool(
     pn_id: str,

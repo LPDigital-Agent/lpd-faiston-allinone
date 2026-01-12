@@ -7,7 +7,6 @@
 import logging
 from typing import Dict, Any, List, Optional, Set
 
-from google.adk.tools import tool
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -53,7 +52,6 @@ SPECIAL_VALUES: Set[str] = {
 }
 
 
-@tool
 @trace_tool_call("sga_validate_mappings")
 async def validate_mappings_tool(
     column_mappings: Dict[str, str],

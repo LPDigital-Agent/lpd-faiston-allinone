@@ -6,7 +6,6 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from google.adk.tools import tool
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,6 @@ DOCUMENT_TYPES = {
 # =============================================================================
 
 
-@tool
 async def generate_queries_tool(
     part_number: str,
     description: str,

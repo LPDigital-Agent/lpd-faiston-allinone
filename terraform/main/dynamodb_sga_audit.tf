@@ -37,6 +37,14 @@ resource "aws_dynamodb_table" "sga_audit_log" {
   deletion_protection_enabled = true
 
   # =============================================================================
+  # DynamoDB Streams for Real-Time Agent Room Events
+  # =============================================================================
+  # Enables real-time event streaming to EventBridge Pipes → WebSocket
+  # NEW_IMAGE: Only captures new items (audit is append-only, no updates)
+  stream_enabled   = true
+  stream_view_type = "NEW_IMAGE"
+
+  # =============================================================================
   # Point-in-time Recovery (PITR)
   # =============================================================================
   # MANDATORY for audit compliance
@@ -187,4 +195,9 @@ output "sga_audit_log_table_name" {
 output "sga_audit_log_table_arn" {
   description = "DynamoDB table ARN for SGA Audit Log"
   value       = aws_dynamodb_table.sga_audit_log.arn
+}
+
+output "sga_audit_log_stream_arn" {
+  description = "DynamoDB Streams ARN for real-time Agent Room events"
+  value       = aws_dynamodb_table.sga_audit_log.stream_arn
 }
