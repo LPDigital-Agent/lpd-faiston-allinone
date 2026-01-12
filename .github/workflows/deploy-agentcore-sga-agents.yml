@@ -193,17 +193,14 @@ jobs:
             cp "agents/$AGENT/requirements.txt" "$PACKAGE_DIR/requirements.txt"
           fi
 
-          # Ensure requirements.txt exists with all needed dependencies
+          # Ensure requirements.txt exists with minimal dependencies
+          # NOTE: boto3, botocore, httpx, anyio, pydantic are PRE-INSTALLED on AgentCore Runtime
           if [ ! -f "$PACKAGE_DIR/requirements.txt" ]; then
-            echo "Creating default requirements.txt"
+            echo "Creating default requirements.txt (minimal)"
             cat > "$PACKAGE_DIR/requirements.txt" << 'EOF'
           bedrock-agentcore>=0.1.0
           google-adk>=0.3.0
-          boto3>=1.35.0
-          httpx>=0.27.0
           aws-xray-sdk>=2.14.0
-          anyio>=4.0.0
-          pydantic>=2.0.0
           EOF
           fi
 
@@ -214,22 +211,56 @@ jobs:
           # Platform: linux_aarch64 / manylinux2014_aarch64
           # Size limit: 250 MB zipped, 750 MB unzipped
           #
-          # Use uv for fast cross-platform dependency resolution:
-          # - Downloads ARM64-compatible wheels (manylinux2014_aarch64)
-          # - Resolves transitive dependencies correctly
-          # - Much faster than pip or Docker QEMU
+          # CRITICAL: AgentCore Runtime PRE-INSTALLS these packages:
+          #   boto3, botocore, httpx, requests, tenacity, pydantic, anyio
+          # We MUST NOT include them in our ZIP to avoid 115MB bloat!
+          #
+          # Strategy:
+          #   1. Install google-adk and aws-xray-sdk normally (no boto3 deps)
+          #   2. Install bedrock-agentcore with --no-deps (it requires boto3)
+          #   3. Install bedrock-agentcore's non-pre-installed deps manually
           # =========================================================================
-          echo "Installing ARM64 dependencies using uv..."
+          echo "Installing ARM64 dependencies using uv (multi-step to exclude pre-installed)..."
 
-          $HOME/.local/bin/uv pip install \
-            --python-platform aarch64-manylinux2014 \
-            --python-version 3.13 \
-            --target "$PACKAGE_DIR" \
-            --only-binary=:all: \
-            -r "$PACKAGE_DIR/requirements.txt"
+          # Common uv flags for ARM64 cross-compilation
+          UV_FLAGS="--python-platform aarch64-manylinux2014 --python-version 3.13 --target $PACKAGE_DIR --only-binary=:all:"
+
+          # Step 1: Install google-adk and aws-xray-sdk (these don't depend on boto3)
+          echo "Step 1: Installing google-adk and aws-xray-sdk..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS google-adk aws-xray-sdk
+
+          # Step 2: Install bedrock-agentcore WITHOUT its dependencies
+          # (bedrock-agentcore depends on boto3/botocore which are PRE-INSTALLED)
+          echo "Step 2: Installing bedrock-agentcore (--no-deps)..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS --no-deps bedrock-agentcore
+
+          # Step 3: Install bedrock-agentcore's NON-PRE-INSTALLED dependencies
+          # bedrock-agentcore requires: boto3, botocore (PRE-INSTALLED), pydantic (PRE-INSTALLED),
+          #   starlette, typing-extensions, urllib3, uvicorn, websockets (MUST INSTALL)
+          echo "Step 3: Installing bedrock-agentcore's non-pre-installed deps..."
+          $HOME/.local/bin/uv pip install $UV_FLAGS starlette typing-extensions urllib3 uvicorn websockets
+
+          # Step 4: Install any agent-specific dependencies from requirements.txt
+          # (Skip known packages we already installed)
+          echo "Step 4: Installing agent-specific dependencies..."
+          if [ -f "$PACKAGE_DIR/requirements.txt" ]; then
+            # Filter out packages we already installed or are pre-installed
+            grep -v -E "^(bedrock-agentcore|google-adk|aws-xray-sdk|boto3|botocore|httpx|anyio|pydantic|requests|tenacity)" \
+              "$PACKAGE_DIR/requirements.txt" > "$PACKAGE_DIR/requirements-filtered.txt" || true
+            if [ -s "$PACKAGE_DIR/requirements-filtered.txt" ]; then
+              echo "Installing additional packages:"
+              cat "$PACKAGE_DIR/requirements-filtered.txt"
+              $HOME/.local/bin/uv pip install $UV_FLAGS -r "$PACKAGE_DIR/requirements-filtered.txt"
+            fi
+            rm -f "$PACKAGE_DIR/requirements-filtered.txt"
+          fi
 
           echo "Dependencies installed for ARM64"
-          ls -la "$PACKAGE_DIR" | head -20
+          echo "Package contents:"
+          ls -la "$PACKAGE_DIR" | head -30
+          echo ""
+          echo "Checking for boto3/botocore (should NOT be present):"
+          ls -d "$PACKAGE_DIR/boto"* 2>/dev/null && echo "WARNING: boto3/botocore found!" || echo "OK: boto3/botocore not in package"
 
           # =========================================================================
           # Set POSIX permissions (required by AgentCore Runtime)
