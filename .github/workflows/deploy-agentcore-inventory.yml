@@ -130,8 +130,12 @@ jobs:
 
           DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+          # Use Terraform-managed IAM role with A2A permissions
+          # Role ARN: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+          # This role includes bedrock-agentcore:InvokeAgentRuntime for A2A protocol
           echo "y" | agentcore deploy --agent ${{ matrix.agent }} \
             --auto-update-on-conflict \
+            --execution-role arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
             --env INVENTORY_TABLE=faiston-one-sga-inventory-prod \
             --env HIL_TASKS_TABLE=faiston-one-sga-hil-tasks-prod \
