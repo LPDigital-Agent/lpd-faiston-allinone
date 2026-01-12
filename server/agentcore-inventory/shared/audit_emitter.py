@@ -106,7 +106,8 @@ class AgentAuditEmitter:
         """Lazy-load DynamoDB table resource."""
         if self._dynamodb is None:
             import boto3
-            self._dynamodb = boto3.resource("dynamodb").Table(self._table_name)
+            # Explicitly set region to ensure consistency across all environments
+            self._dynamodb = boto3.resource("dynamodb", region_name="us-east-2").Table(self._table_name)
         return self._dynamodb
 
     def emit(self, event: AuditEvent) -> bool:

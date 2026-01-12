@@ -28,7 +28,8 @@ def _get_dynamodb_resource():
     global _dynamodb_resource
     if _dynamodb_resource is None:
         import boto3
-        _dynamodb_resource = boto3.resource("dynamodb")
+        # Explicitly set region to ensure consistency across all environments
+        _dynamodb_resource = boto3.resource("dynamodb", region_name="us-east-2")
     return _dynamodb_resource
 
 

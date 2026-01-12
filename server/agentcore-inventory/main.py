@@ -722,16 +722,16 @@ async def _search_assets(payload: dict) -> dict:
         assets = db.get_assets_by_location(location_id, limit=limit)
     elif project_id:
         assets = db.query_gsi(
-            index_name="GSI3",
-            pk=f"{EntityPrefix.PROJECT}{project_id}",
+            gsi_name="GSI3-ProjectQuery",
+            pk_value=f"{EntityPrefix.PROJECT}{project_id}",
             sk_prefix="ASSET#",
             limit=limit,
         )
     else:
         # Query all assets by status
         assets = db.query_gsi(
-            index_name="GSI4",
-            pk="STATUS#IN_STOCK",
+            gsi_name="GSI4-StatusQuery",
+            pk_value="STATUS#IN_STOCK",
             limit=limit,
         )
 
