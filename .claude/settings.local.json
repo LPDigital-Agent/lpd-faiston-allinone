@@ -360,7 +360,8 @@
       "Bash(Linux ARM64\" errors because pip downloaded x86_64 wheels.\n\nChanged runs-on from ubuntu-latest to ubuntu-24.04-arm64 to ensure\nnative ARM64 wheel downloads compatible with AgentCore Runtime.\n\nRoot cause: Architecture mismatch \\(x86_64 → ARM64\\)\nFix: Native ARM64 compilation on GitHub ARM64 runner\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(sort:*)",
       "Bash(cd /Users/fabio.santos/LPD Repos/lpd-faiston-allinone && git log:*)",
-      "mcp__bedrock-agentcore-mcp-server__manage_agentcore_runtime"
+      "mcp__bedrock-agentcore-mcp-server__manage_agentcore_runtime",
+      "Bash(git status --short server/agentcore-inventory/agents/*/main.py)"
     ],
     "deny": [],
     "ask": []

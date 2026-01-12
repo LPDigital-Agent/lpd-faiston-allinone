@@ -39,15 +39,12 @@ CLAUDE.md is the only source of truth for architecture, infra, security, and AI 
 | **Product**        | Faiston NEXO                             |
 | **Type**           | AI-First, 100% Agentic Intranet Platform |
 | **AI Orchestrator**| NEXO                                     |
-| **Phase**          | Phase 1 — Foundation                     |
+| **Phase**          | Phase 2 — SGA Module                     |
 
-### Load PRD (Preview Only)
+### Current Focus
 
-```bash
-cat product-development/current-feature/PRD.md | head -120
-```
-
-If deeper requirements are needed, open the PRD fully on demand.
+SGA (Sistema de Gestão de Ativos) - Inventory Management with 14 AgentCore agents.
+For requirements, see `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md`.
 
 ---
 
@@ -108,6 +105,30 @@ This defines what is currently in progress.
 
 ---
 
+## Phase 4.5: AgentCore Runtime Status (MANDATORY)
+
+Use AgentCore CLI to check critical agent status:
+
+```bash
+echo "=== AGENTCORE RUNTIME STATUS ==="
+echo "(CLI Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/api-reference/cli.html)"
+echo ""
+
+# Check main orchestrator (nexo_import) status
+cd server/agentcore-inventory/agents/nexo_import 2>/dev/null && agentcore status 2>&1 | head -15 || echo "AgentCore CLI not available or agent not configured"
+cd - > /dev/null 2>&1 || true
+```
+
+**Key AgentCore CLI Commands:**
+| Command | Purpose |
+|---------|---------|
+| `agentcore status` | Deployment state, memory config, endpoint readiness |
+| `agentcore invoke` | Send JSON payload to test agent |
+| `agentcore memory list` | List provisioned memory resources |
+| `agentcore destroy` | Remove agent resources (use with caution)
+
+---
+
 ## Phase 5: Architecture Snapshot (CONCEPTUAL)
 
 ```text
@@ -155,8 +176,8 @@ Detailed diagrams live in `docs/architecture/`.
 
 | Document | When to Read |
 |----------|--------------|
-| `docs/prd_modulo_gestao_estoque_faiston_sga2.md` | SGA 2.0 PRD, requirements, KPIs |
 | `docs/Faiston_Investory_Mamagement.md` | Strategic vision, As-Is/To-Be architecture |
+| `docs/architecture/SGA_ESTOQUE_ARCHITECTURE.md` | Current SGA patterns, hooks, agent flows |
 
 ### Quick Reference Commands
 

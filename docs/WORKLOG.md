@@ -4,6 +4,29 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-12 04:15:00 UTC
+
+**User asked:** Fix AgentCore cold start timeout (30s) for SGA agents
+
+**Assistant did:**
+- **Root Cause**: ZIP packages ~115MB due to including pre-installed deps (boto3, botocore, httpx, anyio)
+- **Discovery 1**: `bedrock-agentcore` has boto3/botocore as transitive dependencies
+- **Discovery 2**: `aws-xray-sdk` depends on botocore
+
+**PRs Merged:**
+- **PR #5**: Removed direct deps from 12 agent requirements.txt
+- **PR #6**: Install bedrock-agentcore with `--no-deps`
+- **PR #7**: Install aws-xray-sdk with `--no-deps`, add wrapt manually
+
+**Result:**
+- ZIP size: 115MB → 95.5MB (~17% reduction)
+- 7 SGA agents now READY (nexo_import, validation, observation, reconciliacao, reverse, learning, schema_evolution)
+- Cold start completes within 30s limit
+
+**Key File Changed**: `.github/workflows/deploy-agentcore-sga-agents.yml`
+
+---
+
 ## 2026-01-12 03:15:00 UTC
 
 **User asked:** /sync-project - Synchronize project state after WebSocket deployment
@@ -557,6 +580,94 @@ Automatically maintained by Claude Code hooks.
 ---
 
 ## Turn Log — 2026-01-12 02:49:29 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 02:51:49 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 03:24:54 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 03:41:21 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 03:50:20 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 03:54:51 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 03:59:34 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 04:03:31 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 04:07:38 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 04:08:20 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 04:14:16 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 04:21:11 UTC
 
 **User:** (no user message captured)
 

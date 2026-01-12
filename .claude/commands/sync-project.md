@@ -103,6 +103,29 @@ else
 fi
 ```
 
+### 1.6 AgentCore Runtime Status (MANDATORY)
+
+Use AgentCore CLI to check all deployed agent runtimes:
+
+```bash
+echo "=== AGENTCORE RUNTIME STATUS ==="
+echo ""
+echo "Checking agent runtime status via AgentCore CLI..."
+echo "(Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/api-reference/cli.html)"
+echo ""
+
+# Check status for each SGA agent runtime
+for agent in nexo_import validation observation reconciliacao reverse learning schema_evolution carrier compliance equipment_research estoque_control expedition import intake; do
+  echo "--- Agent: $agent ---"
+  cd server/agentcore-inventory/agents/$agent 2>/dev/null && agentcore status 2>&1 | head -20 || echo "Agent directory not found or agentcore CLI not available"
+  cd - > /dev/null 2>&1 || true
+done
+```
+
+**AgentCore CLI Commands Used:**
+- `agentcore status` - Shows deployment status, memory config, endpoint readiness, VPC details
+- `agentcore invoke` - Test agent with JSON payload (use for validation)
+
 ---
 
 ## Phase 2: Load and Analyze Existing Documentation
