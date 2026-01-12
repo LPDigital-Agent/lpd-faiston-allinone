@@ -1,19 +1,33 @@
 # =============================================================================
-# AgentCore Deployment Workflow - Faiston SGA Inventory (Gestão de Estoque)
+# AgentCore Deployment Workflow - Faiston SGA Multi-Agent System
 # =============================================================================
-# Deploys Python agents to AWS Bedrock AgentCore Runtime
+# Deploys 14 Python agents to AWS Bedrock AgentCore Runtime
 # Uses Google ADK with native Gemini 3.0 Pro models
+#
+# Architecture:
+# - 1 Orchestrator: faiston_asset_management (HTTP protocol, JWT auth)
+# - 13 Specialists: faiston_sga_* (A2A protocol, SigV4 auth)
 #
 # Framework: Google ADK (Agent Development Kit)
 # Model: All agents use gemini-3-pro-preview exclusively
 # AWS Account: 377311924364 (Faiston One)
 #
 # Agents:
-# - EstoqueControlAgent: Core +/- inventory movements
-# - IntakeAgent: NF reading (PDF/XML extraction)
-# - ReconciliacaoAgent: Divergence detection and inventory counts
-# - ComplianceAgent: Policy validation and approval workflows
-# - ComunicacaoAgent: Notifications and technician communication
+# - faiston_asset_management: Main orchestrator (receives frontend requests)
+# - faiston_sga_nexo_import: Intelligent file import
+# - faiston_sga_learning: Episodic memory and pattern learning
+# - faiston_sga_validation: Schema and data validation
+# - faiston_sga_schema_evolution: Dynamic schema evolution
+# - faiston_sga_intake: NF reader (PDF/XML)
+# - faiston_sga_import: Bulk import (spreadsheets, CSV)
+# - faiston_sga_estoque_control: Inventory control
+# - faiston_sga_compliance: Regulatory compliance
+# - faiston_sga_reconciliacao: SAP reconciliation
+# - faiston_sga_expedition: Shipment management
+# - faiston_sga_carrier: Carrier management
+# - faiston_sga_reverse: Reverse logistics
+# - faiston_sga_observation: Monitoring and alerting
+# - faiston_sga_equipment_research: Equipment KB
 # =============================================================================
 
 name: Deploy AgentCore Inventory
@@ -36,17 +50,51 @@ on:
           - deploy
           - undeploy
           - status
+      agent:
+        description: 'Agent to deploy (leave empty for all)'
+        required: false
+        type: string
 
 env:
   AWS_REGION: us-east-2
   PYTHON_VERSION: '3.11'
-  AGENT_NAME: faiston_asset_management
+  # Cognito configuration for JWT Authorizer (orchestrator only)
+  COGNITO_USER_POOL_ID: us-east-2_lkBXr4kjy
+  COGNITO_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg
 
 jobs:
-  deploy:
-    name: Deploy to AgentCore Runtime
+  # ===========================================================================
+  # Deploy All Agents (Matrix Strategy)
+  # ===========================================================================
+  deploy-agents:
+    name: Deploy ${{ matrix.agent }}
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status' }}
+    strategy:
+      matrix:
+        agent:
+          # Orchestrator (HTTP protocol, JWT auth from frontend)
+          - faiston_asset_management
+          # Specialist agents (A2A protocol, SigV4 auth)
+          - faiston_sga_nexo_import
+          - faiston_sga_learning
+          - faiston_sga_validation
+          - faiston_sga_schema_evolution
+          - faiston_sga_intake
+          - faiston_sga_import
+          - faiston_sga_estoque_control
+          - faiston_sga_compliance
+          - faiston_sga_reconciliacao
+          - faiston_sga_expedition
+          - faiston_sga_carrier
+          - faiston_sga_reverse
+          - faiston_sga_observation
+          - faiston_sga_equipment_research
+      max-parallel: 3  # Deploy 3 agents at a time to avoid AWS rate limits
+      fail-fast: false  # Continue deploying other agents if one fails
+
+    outputs:
+      orchestrator_runtime_id: ${{ steps.get-runtime-id.outputs.runtime_id }}
 
     steps:
       - name: Checkout code
@@ -71,67 +119,18 @@ jobs:
           source $HOME/.local/bin/env 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
           uv --version
           # Install agentcore CLI
-          pip install bedrock-agentcore-starter-toolkit --quiet
+          pip install bedrock-agentcore-starter-toolkit boto3 --quiet
           agentcore --version || echo "AgentCore CLI installed"
 
-      - name: Update AgentCore config for CI/CD
+      - name: Deploy Agent ${{ matrix.agent }}
         working-directory: server/agentcore-inventory
         run: |
-          # Update paths in config to use CI/CD workspace
-          # Use Terraform-managed IAM role with S3, DynamoDB, SSM permissions
-          # See: terraform/main/iam_sga_agentcore.tf
-          cat > .bedrock_agentcore.yaml << 'EOF'
-          default_agent: faiston_asset_management
-          agents:
-            faiston_asset_management:
-              name: faiston_asset_management
-              entrypoint: main.py
-              deployment_type: direct_code_deploy
-              runtime_type: PYTHON_3_11
-              platform: linux/arm64
-              container_runtime: null
-              source_path: .
-              aws:
-                account: '377311924364'
-                region: us-east-2
-                execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
-                network_configuration:
-                  network_mode: PUBLIC
-                  network_mode_config: null
-                protocol_configuration:
-                  server_protocol: HTTP
-                observability:
-                  enabled: true
-                lifecycle_configuration:
-                  idle_runtime_session_timeout: null
-                  max_lifetime: null
-              memory:
-                mode: STM_AND_LTM
-                memory_id: nexo_agent_mem-Z5uQr8CDGf
-                memory_name: nexo_agent_mem
-          EOF
-
-      - name: Show agent files
-        working-directory: server/agentcore-inventory
-        run: |
-          echo "=== Agent Files ==="
-          find . -name "*.py" -type f | head -30
-          echo ""
-          echo "=== Config ==="
-          cat .bedrock_agentcore.yaml
-
-      - name: Deploy to AgentCore Runtime
-        working-directory: server/agentcore-inventory
-        run: |
-          # Ensure uv is in PATH
           export PATH="$HOME/.local/bin:$PATH"
-          echo "=== Deploying AgentCore Agent ==="
-          # Environment variables for agents
-          # PostgreSQL MCP Gateway (Sprint 4 migration - currently disabled)
-          # Set USE_POSTGRES_MCP=true to enable PostgreSQL via Gateway
-          # GIT_COMMIT_SHA and DEPLOYED_AT for version tracking in health_check
+          echo "=== Deploying ${{ matrix.agent }} ==="
+
           DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          echo "y" | agentcore deploy --agent ${{ env.AGENT_NAME }} \
+
+          echo "y" | agentcore deploy --agent ${{ matrix.agent }} \
             --auto-update-on-conflict \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
             --env INVENTORY_TABLE=faiston-one-sga-inventory-prod \
@@ -144,60 +143,84 @@ jobs:
             --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp \
             --env GIT_COMMIT_SHA=${{ github.sha }} \
             --env DEPLOYED_AT=$DEPLOY_TIMESTAMP \
-            --env AGENTCORE_MEMORY_ID=nexo_agent_mem-Z5uQr8CDGf 2>&1 || {
-            echo "::warning::Deploy command returned non-zero exit code. Checking status..."
+            --env AGENTCORE_MEMORY_ID=nexo_agent_mem-Z5uQr8CDGf \
+            --env PROJECT_NAME=faiston-one \
+            --env AGENT_ID=${{ matrix.agent }} 2>&1 || {
+            echo "::warning::Deploy command returned non-zero exit code for ${{ matrix.agent }}"
           }
 
       - name: Check deployment status
         working-directory: server/agentcore-inventory
         run: |
-          echo "=== Checking AgentCore Status ==="
-          agentcore status --agent ${{ env.AGENT_NAME }} 2>&1 || true
+          echo "=== Checking Status for ${{ matrix.agent }} ==="
+          agentcore status --agent ${{ matrix.agent }} 2>&1 || true
+
+      - name: Get Runtime ID
+        id: get-runtime-id
+        if: matrix.agent == 'faiston_asset_management'
+        run: |
+          pip install boto3 --quiet
+          RUNTIME_ID=$(python3 -c "
+          import boto3
+          client = boto3.client('bedrock-agentcore-control', region_name='us-east-2')
+          runtimes = client.list_agent_runtimes()
+          for rt in runtimes.get('agentRuntimeSummaries', []):
+              if rt['agentRuntimeName'] == 'faiston_asset_management':
+                  print(rt['agentRuntimeId'])
+                  break
+          ")
+          echo "runtime_id=$RUNTIME_ID" >> $GITHUB_OUTPUT
+          echo "Orchestrator Runtime ID: $RUNTIME_ID"
 
       # =========================================================================
-      # Configure JWT Authorizer for Cognito Authentication
-      # =========================================================================
-      # The agentcore CLI does NOT apply authorizerConfiguration from YAML.
-      # We must call UpdateAgentRuntime API directly to enable JWT Bearer token
-      # authentication from the frontend.
+      # Configure JWT Authorizer (Orchestrator Only)
       # =========================================================================
       - name: Configure JWT Authorizer
-        env:
-          # Faiston One Cognito - HARDCODED to ensure consistency
-          # These are NOT secrets - they appear in frontend JS and JWT tokens
-          # faiston-users-prod / faiston-client-prod
-          COGNITO_USER_POOL_ID: us-east-2_lkBXr4kjy
-          COGNITO_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg
-          # Known runtime ID from successful deployment
-          AGENT_RUNTIME_ID: faiston_asset_management-uSuLPsFQNH
+        if: matrix.agent == 'faiston_asset_management'
         run: |
           pip install boto3 --quiet
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import os
+          import time
 
           REGION = "us-east-2"
           COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
           COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
-          # Use known runtime ID directly (avoids name lookup issues)
-          agent_runtime_id = os.environ.get("AGENT_RUNTIME_ID")
 
-          print(f"Configuring JWT Authorizer for runtime: {agent_runtime_id}")
+          print(f"Configuring JWT Authorizer for orchestrator...")
           print(f"  Cognito Pool: {COGNITO_POOL_ID}")
           print(f"  Cognito Client: {COGNITO_CLIENT_ID}")
 
-          # Use boto3 client which handles SigV4 signing automatically
           client = boto3.client("bedrock-agentcore-control", region_name=REGION)
+
+          # Find the orchestrator runtime
+          runtimes = client.list_agent_runtimes()
+          agent_runtime_id = None
+          for rt in runtimes.get("agentRuntimeSummaries", []):
+              if rt["agentRuntimeName"] == "faiston_asset_management":
+                  agent_runtime_id = rt["agentRuntimeId"]
+                  break
+
+          if not agent_runtime_id:
+              print("ERROR: Orchestrator runtime not found!")
+              exit(1)
 
           print(f"  Runtime ID: {agent_runtime_id}")
 
-          # Step 1: Get current runtime configuration
-          try:
-              current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
-              print(f"  Current status: {current_config.get('status')}")
-          except Exception as e:
-              print(f"ERROR: Failed to get runtime config: {e}")
-              exit(1)
+          # Wait for runtime to be ready
+          for attempt in range(10):
+              try:
+                  current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
+                  status = current_config.get("status")
+                  print(f"  Current status: {status}")
+                  if status == "ACTIVE":
+                      break
+                  print(f"  Waiting for ACTIVE state... (attempt {attempt + 1}/10)")
+                  time.sleep(10)
+              except Exception as e:
+                  print(f"  Waiting... {e}")
+                  time.sleep(10)
 
           # Check current authorizer config
           existing_auth = current_config.get("authorizerConfiguration", {})
@@ -206,17 +229,12 @@ jobs:
               existing_clients = existing_jwt.get("allowedClients", [])
               print(f"  Existing allowedClients: {existing_clients}")
               if COGNITO_CLIENT_ID in existing_clients:
-                  print("  ✅ JWT Authorizer already has correct client ID - skipping update")
+                  print("  ✅ JWT Authorizer already configured - skipping")
                   exit(0)
-              else:
-                  print("  ⚠️  Updating JWT Authorizer with correct client ID...")
 
-          # Step 2: Build update payload with JWT authorizer
+          # Build update payload
           discovery_url = f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_POOL_ID}/.well-known/openid-configuration"
 
-          # IMPORTANT: Cognito Access Tokens have "client_id" claim, NOT "aud" claim
-          # The "aud" claim only exists if a Resource Server binding is configured.
-          # We use allowedClients to validate "client_id" and omit allowedAudiences.
           update_params = {
               "agentRuntimeId": agent_runtime_id,
               "agentRuntimeArtifact": current_config.get("agentRuntimeArtifact"),
@@ -238,74 +256,176 @@ jobs:
           if current_config.get("description"):
               update_params["description"] = current_config["description"]
 
-          # Step 3: Update runtime with JWT authorizer
           try:
               client.update_agent_runtime(**update_params)
               print("✅ JWT Authorizer configured successfully!")
               print(f"  Discovery URL: {discovery_url}")
           except client.exceptions.ConflictException:
               print("✅ JWT Authorizer already configured - skipping")
-              print(f"  Discovery URL: {discovery_url}")
           except Exception as e:
               print(f"ERROR: Failed to update runtime: {e}")
               exit(1)
           PYTHON_SCRIPT
 
-      - name: Health check
-        working-directory: server/agentcore-inventory
-        continue-on-error: true
-        run: |
-          echo "=== Running Health Check ==="
-          # Simple invoke test
-          agentcore invoke --agent ${{ env.AGENT_NAME }} '{"action": "health_check"}' 2>&1 || {
-            echo "::warning::Health check invoke failed (may need custom health action)"
-          }
+  # ===========================================================================
+  # Update SSM Registry After All Agents Deploy
+  # ===========================================================================
+  update-registry:
+    name: Update SSM Agent Registry
+    runs-on: ubuntu-latest
+    needs: deploy-agents
+    if: ${{ github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status' }}
 
-      - name: Deployment Summary
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update SSM Registry with Runtime IDs
         run: |
-          echo "## AgentCore Inventory Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          pip install boto3 --quiet
+          python3 << 'PYTHON_SCRIPT'
+          import boto3
+          import json
+          from urllib.parse import quote
+
+          REGION = "us-east-2"
+          PROJECT_NAME = "faiston-one"
+
+          client = boto3.client("bedrock-agentcore-control", region_name=REGION)
+          ssm = boto3.client("ssm", region_name=REGION)
+
+          print("=== Building SSM Agent Registry ===")
+
+          # List all runtimes
+          runtimes = client.list_agent_runtimes()
+
+          registry = {}
+          for rt in runtimes.get("agentRuntimeSummaries", []):
+              name = rt["agentRuntimeName"]
+
+              # Filter for our agents
+              if not (name.startswith("faiston_sga_") or name == "faiston_asset_management"):
+                  continue
+
+              # Get runtime ARN for URL construction
+              runtime_id = rt["agentRuntimeId"]
+              runtime_arn = rt.get("agentRuntimeArn", f"arn:aws:bedrock-agentcore:{REGION}:377311924364:runtime/{runtime_id}")
+
+              # Determine agent_id from name
+              if name == "faiston_asset_management":
+                  agent_id = "asset_management"
+              else:
+                  agent_id = name.replace("faiston_sga_", "")
+
+              # Build invocation URL with URL-encoded ARN (required by InvokeAgentRuntime API)
+              url = f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{quote(runtime_arn, safe='')}/invocations?qualifier=DEFAULT"
+
+              registry[agent_id] = {
+                  "name": name,
+                  "description": rt.get("description", ""),
+                  "runtime_id": runtime_id,
+                  "runtime_arn": runtime_arn,
+                  "url": url,
+                  "status": rt.get("status", "UNKNOWN")
+              }
+
+              print(f"  {agent_id}: {runtime_id} ({rt.get('status', 'UNKNOWN')})")
+
+          # Write to SSM
+          ssm_path = f"/{PROJECT_NAME}/sga/agents/registry"
+          print(f"\n=== Updating SSM: {ssm_path} ===")
+
+          try:
+              ssm.put_parameter(
+                  Name=ssm_path,
+                  Value=json.dumps(registry, indent=2),
+                  Type="String",
+                  Tier="Advanced",  # Required for large JSON
+                  Overwrite=True
+              )
+              print(f"✅ SSM Registry updated with {len(registry)} agents")
+          except Exception as e:
+              print(f"ERROR: Failed to update SSM: {e}")
+              exit(1)
+
+          # Also update individual agent URLs for backward compatibility
+          for agent_id, config in registry.items():
+              try:
+                  ssm.put_parameter(
+                      Name=f"/{PROJECT_NAME}/sga/agents/{agent_id}/url",
+                      Value=config["url"],
+                      Type="String",
+                      Overwrite=True
+                  )
+              except Exception as e:
+                  print(f"  Warning: Could not update {agent_id}/url: {e}")
+
+          print("\n✅ All agent URLs updated in SSM")
+          PYTHON_SCRIPT
+
+  # ===========================================================================
+  # Deployment Summary
+  # ===========================================================================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [deploy-agents, update-registry]
+    if: always() && github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status'
+
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## AgentCore Multi-Agent Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Detail | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Agent Name | \`${{ env.AGENT_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "### Architecture" >> $GITHUB_STEP_SUMMARY
+          echo "| Component | Details |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|---------|" >> $GITHUB_STEP_SUMMARY
           echo "| Framework | Google ADK (native Gemini) |" >> $GITHUB_STEP_SUMMARY
           echo "| Model | gemini-3-pro-preview |" >> $GITHUB_STEP_SUMMARY
-          echo "| Region | \`${{ env.AWS_REGION }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | \`us-east-2\` |" >> $GITHUB_STEP_SUMMARY
           echo "| AWS Account | \`377311924364\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Auth** | **Cognito JWT Bearer Token** |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Authentication:**" >> $GITHUB_STEP_SUMMARY
-          echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| User Pool | \`us-east-2_lkBXr4kjy\` (faiston-users-prod) |" >> $GITHUB_STEP_SUMMARY
-          echo "| Client ID | \`7ovjm09dr94e52mpejvbu9v1cg\` (faiston-client-prod) |" >> $GITHUB_STEP_SUMMARY
+          echo "### Agents Deployed (14)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**PostgreSQL MCP Gateway (ENABLED):**" >> $GITHUB_STEP_SUMMARY
-          echo "| Config | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Gateway ID | \`faiston-one-sga-gateway-prod-qbnlm3ao63\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Target Name | \`SGAPostgresTools\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| USE_POSTGRES_MCP | \`true\` (schema queries via MCP Gateway) |" >> $GITHUB_STEP_SUMMARY
+          echo "**Orchestrator (HTTP/JWT):**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_asset_management\` - Main entry point for frontend" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**5 AI Agents:**" >> $GITHUB_STEP_SUMMARY
-          echo "- EstoqueControlAgent - Core inventory movements" >> $GITHUB_STEP_SUMMARY
-          echo "- IntakeAgent - NF PDF/XML extraction" >> $GITHUB_STEP_SUMMARY
-          echo "- ReconciliacaoAgent - Divergence detection" >> $GITHUB_STEP_SUMMARY
-          echo "- ComplianceAgent - Policy validation" >> $GITHUB_STEP_SUMMARY
-          echo "- ComunicacaoAgent - Notifications" >> $GITHUB_STEP_SUMMARY
+          echo "**Specialist Agents (A2A/SigV4):**" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent | Purpose |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "| nexo_import | Intelligent file import |" >> $GITHUB_STEP_SUMMARY
+          echo "| learning | Episodic memory |" >> $GITHUB_STEP_SUMMARY
+          echo "| validation | Schema validation |" >> $GITHUB_STEP_SUMMARY
+          echo "| schema_evolution | Dynamic schema |" >> $GITHUB_STEP_SUMMARY
+          echo "| intake | NF reader (PDF/XML) |" >> $GITHUB_STEP_SUMMARY
+          echo "| import | Bulk import |" >> $GITHUB_STEP_SUMMARY
+          echo "| estoque_control | Inventory control |" >> $GITHUB_STEP_SUMMARY
+          echo "| compliance | Regulatory compliance |" >> $GITHUB_STEP_SUMMARY
+          echo "| reconciliacao | SAP reconciliation |" >> $GITHUB_STEP_SUMMARY
+          echo "| expedition | Shipment management |" >> $GITHUB_STEP_SUMMARY
+          echo "| carrier | Carrier tracking |" >> $GITHUB_STEP_SUMMARY
+          echo "| reverse | Reverse logistics |" >> $GITHUB_STEP_SUMMARY
+          echo "| observation | Monitoring |" >> $GITHUB_STEP_SUMMARY
+          echo "| equipment_research | Equipment KB |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Key Actions:**" >> $GITHUB_STEP_SUMMARY
-          echo "- \`health_check\` - System health" >> $GITHUB_STEP_SUMMARY
-          echo "- \`search_assets\` - Asset search" >> $GITHUB_STEP_SUMMARY
-          echo "- \`where_is_serial\` - Serial lookup" >> $GITHUB_STEP_SUMMARY
-          echo "- \`get_balance\` - Balance queries" >> $GITHUB_STEP_SUMMARY
-          echo "- \`process_nf_upload\` - NF processing" >> $GITHUB_STEP_SUMMARY
-          echo "- \`create_movement\` - Inventory movements" >> $GITHUB_STEP_SUMMARY
-          echo "- \`start_inventory_count\` - Counting campaigns" >> $GITHUB_STEP_SUMMARY
-          echo "- \`chat\` - NEXO Estoque assistant" >> $GITHUB_STEP_SUMMARY
+          echo "### Authentication" >> $GITHUB_STEP_SUMMARY
+          echo "| Protocol | Auth Method |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend → Orchestrator | JWT Bearer Token (Cognito) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Orchestrator → Agents | SigV4 (IAM) via A2A |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### SSM Registry" >> $GITHUB_STEP_SUMMARY
+          echo "\`/faiston-one/sga/agents/registry\` updated with all runtime URLs" >> $GITHUB_STEP_SUMMARY
 
+  # ===========================================================================
+  # Undeploy All Agents
+  # ===========================================================================
   undeploy:
-    name: Undeploy AgentCore Agent
+    name: Undeploy All Agents
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.action == 'undeploy' }}
 
@@ -329,20 +449,43 @@ jobs:
         run: |
           pip install bedrock-agentcore-starter-toolkit --quiet
 
-      - name: Undeploy agent
+      - name: Undeploy all agents
         working-directory: server/agentcore-inventory
         run: |
-          echo "=== Destroying AgentCore Agent ==="
-          echo "y" | agentcore destroy --agent ${{ env.AGENT_NAME }} 2>&1 || {
-            echo "::warning::Destroy returned non-zero exit code"
-          }
+          AGENTS=(
+            faiston_asset_management
+            faiston_sga_nexo_import
+            faiston_sga_learning
+            faiston_sga_validation
+            faiston_sga_schema_evolution
+            faiston_sga_intake
+            faiston_sga_import
+            faiston_sga_estoque_control
+            faiston_sga_compliance
+            faiston_sga_reconciliacao
+            faiston_sga_expedition
+            faiston_sga_carrier
+            faiston_sga_reverse
+            faiston_sga_observation
+            faiston_sga_equipment_research
+          )
+
+          for agent in "${AGENTS[@]}"; do
+            echo "=== Undeploying $agent ==="
+            echo "y" | agentcore destroy --agent "$agent" 2>&1 || {
+              echo "::warning::Destroy returned non-zero for $agent"
+            }
+          done
 
       - name: Undeploy Summary
         run: |
           echo "## AgentCore Inventory Undeployed 🔴" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Agent \`${{ env.AGENT_NAME }}\` has been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
+          echo "All 14 agents have been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
 
+  # ===========================================================================
+  # Check Status
+  # ===========================================================================
   status:
     name: Check AgentCore Status
     runs-on: ubuntu-latest
@@ -364,18 +507,37 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install AgentCore CLI
+      - name: Install dependencies
         run: |
-          pip install bedrock-agentcore-starter-toolkit --quiet
+          pip install bedrock-agentcore-starter-toolkit boto3 --quiet
 
-      - name: Check status
-        working-directory: server/agentcore-inventory
+      - name: Check all agent status
         run: |
-          echo "=== AgentCore Agent Status ==="
-          agentcore status --agent ${{ env.AGENT_NAME }} 2>&1 || true
+          python3 << 'PYTHON_SCRIPT'
+          import boto3
+
+          client = boto3.client("bedrock-agentcore-control", region_name="us-east-2")
+          runtimes = client.list_agent_runtimes()
+
+          print("=== AgentCore Runtime Status ===\n")
+
+          our_agents = []
+          for rt in runtimes.get("agentRuntimeSummaries", []):
+              name = rt["agentRuntimeName"]
+              if name.startswith("faiston"):
+                  our_agents.append(rt)
+
+          if not our_agents:
+              print("No Faiston agents found.")
+          else:
+              print(f"{'Agent Name':<40} {'Status':<15} {'Runtime ID'}")
+              print("-" * 80)
+              for rt in our_agents:
+                  print(f"{rt['agentRuntimeName']:<40} {rt.get('status', 'UNKNOWN'):<15} {rt['agentRuntimeId']}")
+          PYTHON_SCRIPT
 
       - name: Status Summary
         run: |
-          echo "## AgentCore Inventory Status 📊" >> $GITHUB_STEP_SUMMARY
+          echo "## AgentCore Status 📊" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check the logs above for agent status details." >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for detailed agent status." >> $GITHUB_STEP_SUMMARY

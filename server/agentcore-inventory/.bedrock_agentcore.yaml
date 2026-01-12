@@ -1,5 +1,25 @@
+# =============================================================================
+# Bedrock AgentCore Configuration - Faiston SGA Multi-Agent System
+# =============================================================================
+# 14 Agents deployed via CLI (direct_code_deploy):
+# - 1 Orchestrator: faiston_asset_management (HTTP protocol, JWT auth)
+# - 13 Specialists: faiston_sga_* (A2A protocol, SigV4 auth)
+#
+# Architecture:
+# - Frontend → Orchestrator (JWT Bearer Token)
+# - Orchestrator → Specialists (A2A with SigV4)
+# - All agents use same IAM role: faiston-one-sga-agentcore-role
+#
+# Reference:
+# - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-a2a.html
+# =============================================================================
+
 default_agent: faiston_asset_management
+
 agents:
+  # ===========================================================================
+  # ORCHESTRATOR AGENT (receives frontend requests via HTTP)
+  # ===========================================================================
   faiston_asset_management:
     name: faiston_asset_management
     entrypoint: main.py
@@ -21,7 +41,7 @@ agents:
         network_mode: PUBLIC
         network_mode_config: null
       protocol_configuration:
-        server_protocol: HTTP
+        server_protocol: HTTP  # Frontend uses JWT Bearer Token
       observability:
         enabled: true
       lifecycle_configuration:
@@ -58,3 +78,453 @@ agents:
     api_key_env_var_name: null
     api_key_credential_provider_name: null
     is_generated_by_agentcore_create: false
+
+  # ===========================================================================
+  # SPECIALIST AGENTS (A2A Protocol - called by orchestrator)
+  # ===========================================================================
+
+  # ---------------------------------------------------------------------------
+  # NexoImportAgent - Intelligent file import orchestrator
+  # ---------------------------------------------------------------------------
+  faiston_sga_nexo_import:
+    name: faiston_sga_nexo_import
+    entrypoint: agents/nexo_import/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A  # JSON-RPC 2.0 for inter-agent communication
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+    memory:
+      mode: STM_AND_LTM
+      memory_id: nexo_agent_mem-Z5uQr8CDGf
+      event_expiry_days: 30
+
+  # ---------------------------------------------------------------------------
+  # LearningAgent - Episodic memory and pattern learning
+  # ---------------------------------------------------------------------------
+  faiston_sga_learning:
+    name: faiston_sga_learning
+    entrypoint: agents/learning/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+    memory:
+      mode: STM_AND_LTM
+      memory_id: nexo_agent_mem-Z5uQr8CDGf
+      event_expiry_days: 30
+
+  # ---------------------------------------------------------------------------
+  # ValidationAgent - Schema and data validation
+  # ---------------------------------------------------------------------------
+  faiston_sga_validation:
+    name: faiston_sga_validation
+    entrypoint: agents/validation/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # SchemaEvolutionAgent - Dynamic schema evolution
+  # ---------------------------------------------------------------------------
+  faiston_sga_schema_evolution:
+    name: faiston_sga_schema_evolution
+    entrypoint: agents/schema_evolution/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+    memory:
+      mode: STM_AND_LTM
+      memory_id: nexo_agent_mem-Z5uQr8CDGf
+      event_expiry_days: 30
+
+  # ---------------------------------------------------------------------------
+  # IntakeAgent - NF reader (PDF/XML)
+  # ---------------------------------------------------------------------------
+  faiston_sga_intake:
+    name: faiston_sga_intake
+    entrypoint: agents/intake/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # ImportAgent - Bulk import (spreadsheets, CSV)
+  # ---------------------------------------------------------------------------
+  faiston_sga_import:
+    name: faiston_sga_import
+    entrypoint: agents/import/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # EstoqueControlAgent - Inventory control and balance
+  # ---------------------------------------------------------------------------
+  faiston_sga_estoque_control:
+    name: faiston_sga_estoque_control
+    entrypoint: agents/estoque_control/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # ComplianceAgent - Regulatory compliance and audit
+  # ---------------------------------------------------------------------------
+  faiston_sga_compliance:
+    name: faiston_sga_compliance
+    entrypoint: agents/compliance/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # ReconciliacaoAgent - SAP reconciliation
+  # ---------------------------------------------------------------------------
+  faiston_sga_reconciliacao:
+    name: faiston_sga_reconciliacao
+    entrypoint: agents/reconciliacao/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # ExpeditionAgent - Shipment management
+  # ---------------------------------------------------------------------------
+  faiston_sga_expedition:
+    name: faiston_sga_expedition
+    entrypoint: agents/expedition/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # CarrierAgent - Carrier management and tracking
+  # ---------------------------------------------------------------------------
+  faiston_sga_carrier:
+    name: faiston_sga_carrier
+    entrypoint: agents/carrier/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # ReverseAgent - Reverse logistics
+  # ---------------------------------------------------------------------------
+  faiston_sga_reverse:
+    name: faiston_sga_reverse
+    entrypoint: agents/reverse/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # ObservationAgent - Monitoring and alerting
+  # ---------------------------------------------------------------------------
+  faiston_sga_observation:
+    name: faiston_sga_observation
+    entrypoint: agents/observation/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+
+  # ---------------------------------------------------------------------------
+  # EquipmentResearchAgent - Equipment KB and research
+  # ---------------------------------------------------------------------------
+  faiston_sga_equipment_research:
+    name: faiston_sga_equipment_research
+    entrypoint: agents/equipment_research/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
