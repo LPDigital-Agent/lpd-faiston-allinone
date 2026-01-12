@@ -55,14 +55,10 @@ agents:
       project_name: null
       execution_role: null
       source_bucket: null
+    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
+    # TODO: Create new memory with `agentcore memory create` and update config
     memory:
-      mode: STM_AND_LTM
-      memory_id: nexo_agent_mem-Z5uQr8CDGf
-      memory_arn: null
-      memory_name: null
-      event_expiry_days: 30
-      first_invoke_memory_check_done: false
-      was_created_by_toolkit: false
+      mode: NO_MEMORY
     identity:
       credential_providers: []
       workload: null
@@ -113,10 +109,9 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
+    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
     memory:
-      mode: STM_AND_LTM
-      memory_id: nexo_agent_mem-Z5uQr8CDGf
-      event_expiry_days: 30
+      mode: NO_MEMORY
 
   # ---------------------------------------------------------------------------
   # LearningAgent - Episodic memory and pattern learning
@@ -148,10 +143,9 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
+    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
     memory:
-      mode: STM_AND_LTM
-      memory_id: nexo_agent_mem-Z5uQr8CDGf
-      event_expiry_days: 30
+      mode: NO_MEMORY
 
   # ---------------------------------------------------------------------------
   # ValidationAgent - Schema and data validation
@@ -214,10 +208,9 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
+    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
     memory:
-      mode: STM_AND_LTM
-      memory_id: nexo_agent_mem-Z5uQr8CDGf
-      event_expiry_days: 30
+      mode: NO_MEMORY
 
   # ---------------------------------------------------------------------------
   # IntakeAgent - NF reader (PDF/XML)
