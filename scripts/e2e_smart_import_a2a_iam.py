@@ -48,6 +48,10 @@ NEXO_IMPORT_RUNTIME_ARN = f"arn:aws:bedrock-agentcore:{AWS_REGION}:{AWS_ACCOUNT_
 CSV_FILE_PATH = "data/SOLICITAÇÕES DE EXPEDIÇÃO.csv"
 TARGET_RECORD_COUNT = 1688
 
+# S3 Configuration
+S3_BUCKET = "faiston-one-sga-documents-prod"
+S3_PREFIX = "tmp"  # Temporary uploads go here
+
 # =============================================================================
 # AWS Session & SigV4 Authentication
 # =============================================================================
@@ -65,18 +69,18 @@ def get_credentials():
 # A2A Protocol Invocation (JSON-RPC 2.0 with SigV4)
 # =============================================================================
 
-def invoke_a2a(action: str, payload: dict, session_id: str = None) -> dict:
+def invoke_a2a_natural(message: str, session_id: str = None) -> dict:
     """
-    Invoke AgentCore using A2A protocol (JSON-RPC 2.0) with IAM SigV4 auth.
+    Invoke AgentCore using A2A protocol with NATURAL LANGUAGE messages.
 
-    A2A Protocol:
-    - POST to root path / (not /invocations)
-    - JSON-RPC 2.0 body format with message/send method
-    - Session header: X-Amzn-Bedrock-AgentCore-Runtime-Session-Id
-    - Auth: SigV4 signed request (IAM)
+    Strands A2A Pattern:
+    - Agent's LLM interprets the natural language message
+    - LLM decides which tool to call based on intent
+    - Tools execute and return results
+
+    This is different from action-based routing - the LLM understands context!
     """
-    # Build A2A URL with /invocations/ path (per AWS AgentCore A2A documentation)
-    # Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
+    # Build A2A URL with /invocations/ path
     encoded_arn = quote(NEXO_IMPORT_RUNTIME_ARN, safe='')
     url = f"{AGENTCORE_ENDPOINT}/runtimes/{encoded_arn}/invocations/"
 
@@ -84,12 +88,12 @@ def invoke_a2a(action: str, payload: dict, session_id: str = None) -> dict:
     if not session_id:
         session_id = f"e2e-smart-import-a2a-iam-{uuid.uuid4().hex}"
 
-    # Build JSON-RPC 2.0 request (A2A protocol)
+    # Build JSON-RPC 2.0 request with NATURAL LANGUAGE message
     message_id = f"msg-{uuid.uuid4().hex[:8]}"
     request_id = f"req-{uuid.uuid4().hex[:8]}"
 
-    # Pack action + payload as JSON text in message
-    message_text = json.dumps({"action": action, **payload})
+    # Natural language message - LLM will understand and route to tools
+    message_text = message
 
     json_rpc_request = {
         "jsonrpc": "2.0",
@@ -122,7 +126,7 @@ def invoke_a2a(action: str, payload: dict, session_id: str = None) -> dict:
     credentials = get_credentials()
     SigV4Auth(credentials, 'bedrock-agentcore', AWS_REGION).add_auth(request)
 
-    print(f"  → A2A message/send: {action}")
+    print(f"  → A2A natural message: {message[:80]}...")
 
     try:
         response = requests.post(
@@ -153,48 +157,114 @@ def invoke_a2a(action: str, payload: dict, session_id: str = None) -> dict:
         raise Exception(f"A2A error: {error}")
 
     # Extract result from JSON-RPC response
+    # AgentCore A2A returns response in: result.artifacts[0].parts[0].text
     result = rpc_response.get("result", {})
-    message = result.get("message", {})
-    parts = message.get("parts", [])
 
-    # Combine text parts
+    # Try artifacts first (AgentCore format)
+    artifacts = result.get("artifacts", [])
     response_text = ""
-    for part in parts:
-        if part.get("kind") == "text":
-            response_text += part.get("text", "")
 
-    # Try to parse response as JSON
-    try:
-        parsed_result = json.loads(response_text)
-        print(f"  ✓ A2A response received")
-        return parsed_result, session_id
-    except json.JSONDecodeError:
-        # Return raw text if not JSON
-        print(f"  ✓ A2A response (text): {response_text[:200]}...")
-        return {"raw_response": response_text}, session_id
+    if artifacts:
+        for artifact in artifacts:
+            for part in artifact.get("parts", []):
+                if part.get("kind") == "text":
+                    response_text += part.get("text", "")
+    else:
+        # Fallback to message format (standard A2A)
+        message_resp = result.get("message", {})
+        parts = message_resp.get("parts", [])
+        for part in parts:
+            if part.get("kind") == "text":
+                response_text += part.get("text", "")
+
+    print(f"  ✓ A2A response: {response_text[:300]}...")
+    return {"response": response_text, "raw": result}, session_id
+
+
+def invoke_a2a(action: str, payload: dict, session_id: str = None) -> dict:
+    """
+    DEPRECATED: Use invoke_a2a_natural for Strands agents.
+
+    This function is kept for backward compatibility but converts
+    action-based calls to natural language messages.
+    """
+    # Convert action + payload to natural language message
+    if action == "nexo_analyze_file":
+        s3_key = payload.get('s3_key', '')
+        filename = payload.get('filename', '')
+        message = f"""Analise o arquivo CSV que foi enviado para o S3.
+
+S3 Key: {s3_key}
+Filename: {filename}
+
+Por favor:
+1. Use a ferramenta analyze_file para analisar a estrutura do arquivo
+2. Detecte as colunas e tipos de dados
+3. Sugira mapeamentos para o schema do inventário
+4. Retorne a análise em formato JSON com: columns, total_rows, column_mappings, confidence"""
+
+    elif action == "nexo_execute_import":
+        s3_key = payload.get('s3_key', '')
+        mappings = payload.get('column_mappings', [])
+        message = f"""Execute a importação do arquivo CSV para o banco de dados.
+
+S3 Key: {s3_key}
+Column Mappings: {json.dumps(mappings)}
+
+Por favor:
+1. Use a ferramenta execute_import para processar o arquivo
+2. Aplique os mapeamentos de colunas fornecidos
+3. Insira os registros na tabela pending_entry_items
+4. Retorne o resultado em JSON com: success, rows_imported, errors"""
+
+    elif action == "get_dashboard_summary":
+        message = """Retorne um resumo do dashboard de inventário.
+
+Por favor use a ferramenta health_check para verificar o status do agente."""
+
+    else:
+        # Generic fallback
+        message = f"Execute a ação '{action}' com os parâmetros: {json.dumps(payload)}"
+
+    return invoke_a2a_natural(message, session_id)
+
 
 # =============================================================================
 # E2E Test Steps
 # =============================================================================
 
 def step1_get_upload_url(filename: str):
-    """Step 1: Get presigned URL for file upload via A2A."""
+    """Step 1: Get presigned URL for file upload directly from S3 (no agent needed)."""
     print("\n" + "="*60)
-    print("📤 STEP 1: Get Presigned Upload URL (A2A + SigV4)")
+    print("📤 STEP 1: Get Presigned Upload URL (Direct S3 + boto3)")
     print("="*60)
 
-    result, session_id = invoke_a2a('get_nf_upload_url', {
-        'filename': filename,
-        'content_type': 'text/csv'
-    })
+    # Generate session ID for the entire test flow
+    session_id = f"e2e-smart-import-a2a-iam-{uuid.uuid4().hex}"
 
-    upload_url = result.get('upload_url')
-    s3_key = result.get('s3_key')
+    # Generate S3 key with timestamp for uniqueness
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    s3_key = f"{S3_PREFIX}/{timestamp}_{filename}"
 
-    if not upload_url:
-        raise Exception(f"No upload_url in response: {result}")
+    # Get S3 client with profile
+    session = get_aws_session()
+    s3_client = session.client('s3')
 
+    # Generate presigned URL for PUT operation
+    upload_url = s3_client.generate_presigned_url(
+        ClientMethod='put_object',
+        Params={
+            'Bucket': S3_BUCKET,
+            'Key': s3_key,
+            'ContentType': 'text/csv'
+        },
+        ExpiresIn=3600
+    )
+
+    print(f"  S3 Bucket: {S3_BUCKET}")
     print(f"  S3 Key: {s3_key}")
+    print(f"  Session ID: {session_id[:50]}...")
     print(f"  URL Preview: {upload_url[:80]}...")
 
     return upload_url, s3_key, session_id

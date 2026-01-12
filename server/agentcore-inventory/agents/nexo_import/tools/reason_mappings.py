@@ -211,3 +211,7 @@ def _heuristic_match(col_name: str, schema_context: str) -> tuple:
             return (field, conf * 0.8)  # Lower confidence for partial match
 
     return (None, 0.0)
+
+
+# Alias for backward compatibility with main.py imports
+reason_mappings_impl = reason_mappings_tool

@@ -81,3 +81,7 @@ async def analyze_file_tool(
             "file_analysis": {},
             "sheets": [],
         }
+
+
+# Alias for backward compatibility with main.py imports
+analyze_file_impl = analyze_file_tool

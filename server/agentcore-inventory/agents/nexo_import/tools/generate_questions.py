@@ -234,3 +234,7 @@ def _build_field_options(
     ])
 
     return options
+
+
+# Alias for backward compatibility with main.py imports
+generate_questions_impl = generate_questions_tool

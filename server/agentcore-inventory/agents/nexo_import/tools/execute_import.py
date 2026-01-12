@@ -280,3 +280,7 @@ async def _insert_rows(
             "rows_inserted": 0,
             "error": str(e),
         }
+
+
+# Alias for backward compatibility with main.py imports
+execute_import_impl = execute_import_tool
