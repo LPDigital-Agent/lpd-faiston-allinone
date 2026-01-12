@@ -52,10 +52,10 @@ AGENT_ROLES = {
 }
 
 # Required files for each agent subdirectory
+# NOTE: agent.py REMOVED - legacy Google ADK format. Now using Strands A2A via main.py only.
 REQUIRED_FILES = [
     "__init__.py",
-    "agent.py",
-    "main.py",  # NEW: Each agent has its own main.py with Strands A2AServer
+    "main.py",  # Strands A2AServer entry point (replaced agent.py)
     "Dockerfile",
     "requirements.txt",
 ]
