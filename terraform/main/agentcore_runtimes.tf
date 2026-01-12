@@ -422,23 +422,19 @@ resource "aws_ssm_parameter" "sga_agent_urls" {
 }
 
 # Combined agent registry for runtime lookup
+# NOTE: Simplified to essential fields to stay under SSM 8192 char limit
 resource "aws_ssm_parameter" "sga_agent_registry" {
   name        = "/${var.project_name}/sga/agents/registry"
-  description = "Registry of all SGA agent runtime URLs for A2A discovery"
+  description = "Registry of all SGA agent runtime ARNs for A2A discovery"
   type        = "String"
   tier        = "Advanced"
   value = jsonencode({
     for agent_id, agent_config in local.sga_agents : agent_id => {
-      name        = agent_config.name
-      description = agent_config.description
-      # A2A Protocol: Use root path / instead of /invocations
-      url             = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn)}/?qualifier=DEFAULT"
-      runtime_id      = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_id
-      runtime_arn     = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
-      endpoint_arn    = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents[agent_id].agent_runtime_endpoint_arn
-      skills          = agent_config.skills
-      memory_access   = agent_config.memory_access
-      is_orchestrator = agent_config.is_orchestrator
+      name         = agent_config.name
+      endpoint_arn = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents[agent_id].agent_runtime_endpoint_arn
+      runtime_arn  = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
+      orchestrator = agent_config.is_orchestrator
+      memory       = agent_config.memory_access
     }
   })
 
