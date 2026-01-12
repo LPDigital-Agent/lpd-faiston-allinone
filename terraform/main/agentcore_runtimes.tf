@@ -363,19 +363,48 @@ resource "aws_bedrockagentcore_agent_runtime" "sga_agents" {
 }
 
 # =============================================================================
+# AgentCore Runtime Endpoints - One per Agent Runtime
+# =============================================================================
+# Each runtime needs a DEFAULT endpoint to be invokable.
+# Endpoints provide the entry point for external invocations.
+#
+# Key concepts:
+# - Runtimes are containers/code that run agent logic
+# - Endpoints are the "doors" that allow invocations to reach runtimes
+# - DEFAULT endpoint points to latest runtime version
+#
+# Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agent-runtime-versioning.html
+
+resource "aws_bedrockagentcore_agent_runtime_endpoint" "sga_agents" {
+  for_each = local.sga_agents
+
+  name             = "DEFAULT"
+  agent_runtime_id = aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_id
+  description      = "Default endpoint for ${each.value.name}"
+
+  tags = merge(local.common_tags, {
+    Name      = "${local.name_prefix}-sga-${each.key}-endpoint"
+    Module    = "SGA"
+    Feature   = "AgentCore Runtime Endpoint"
+    AgentID   = each.key
+    AgentName = each.value.name
+  })
+}
+
+# =============================================================================
 # SSM Parameters for Agent Discovery
 # =============================================================================
-# Store runtime URLs for cross-agent communication (A2A client uses these)
+# Store endpoint ARNs for cross-agent communication (A2A client uses these)
 
 resource "aws_ssm_parameter" "sga_agent_urls" {
   for_each = local.sga_agents
 
   name        = "/${var.project_name}/sga/agents/${each.key}/url"
-  description = "AgentCore Runtime URL for ${each.value.name}"
+  description = "AgentCore Runtime Endpoint ARN for ${each.value.name}"
   type        = "String"
-  # A2A Protocol: Use root path / instead of /invocations
-  # Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-a2a-protocol-contract.html
-  value = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[each.key].agent_runtime_arn)}/?qualifier=DEFAULT"
+  # Store endpoint ARN (not URL) - callers use this with invoke_agent_runtime API
+  # Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agent-runtime-versioning.html
+  value = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents[each.key].agent_runtime_endpoint_arn
 
   tags = merge(local.common_tags, {
     Name      = "${local.name_prefix}-sga-${each.key}-url"
@@ -400,6 +429,7 @@ resource "aws_ssm_parameter" "sga_agent_registry" {
       url             = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/runtimes/${urlencode(aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn)}/?qualifier=DEFAULT"
       runtime_id      = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_id
       runtime_arn     = aws_bedrockagentcore_agent_runtime.sga_agents[agent_id].agent_runtime_arn
+      endpoint_arn    = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents[agent_id].agent_runtime_endpoint_arn
       skills          = agent_config.skills
       memory_access   = agent_config.memory_access
       is_orchestrator = agent_config.is_orchestrator
@@ -430,6 +460,14 @@ output "sga_agent_runtime_arns" {
   value = {
     for agent_id, runtime in aws_bedrockagentcore_agent_runtime.sga_agents :
     agent_id => runtime.agent_runtime_arn
+  }
+}
+
+output "sga_agent_endpoint_arns" {
+  description = "Map of agent IDs to their AgentCore Runtime Endpoint ARNs"
+  value = {
+    for agent_id, endpoint in aws_bedrockagentcore_agent_runtime_endpoint.sga_agents :
+    agent_id => endpoint.agent_runtime_endpoint_arn
   }
 }
 
