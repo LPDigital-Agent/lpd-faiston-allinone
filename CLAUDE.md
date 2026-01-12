@@ -127,6 +127,16 @@ To be used on web research we are in year 2026.
 
 ---
 
+## 🧠 AGENT EXECUTION FLOW (IMMUTABLE & MEGA MANDATORY)
+
+- ALL agents MUST follow the operational loop: **OBSERVE → THINK → LEARN → ACT (EXECUTE)**.
+- **HUMAN-IN-THE-LOOP (HIL) IS ALWAYS PART OF THE PROCESS**:
+  - Agents MUST request approval when confidence is low, when actions are high-impact, or when policy requires it.
+  - Agents MUST NOT execute irreversible or risky actions without explicit HIL approval.
+- This loop is NOT optional. Any agent behavior that skips OBSERVE/THINK/LEARN or bypasses HIL is **WRONG** and MUST be corrected.
+
+---
+
 ## 🚫 NON-AGENT ARCHITECTURE IS FORBIDDEN
 
 - USING **AI AGENTS IS 100% MANDATORY**.

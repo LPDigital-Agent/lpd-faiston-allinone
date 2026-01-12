@@ -149,7 +149,7 @@ Test via NexoCopilot:
 ```
 Import Equipment → EquipmentResearchAgent
                            ↓
-               Gemini 3.0 + google_search
+               Gemini 3.0 Flash + google_search
                            ↓
                Download PDFs/datasheets
                            ↓
@@ -166,8 +166,24 @@ User query → knowledge_base_retrieval_tool
                NexoCopilot displays results
 ```
 
+### LLM Model Selection
+
+The EquipmentResearchAgent uses **Gemini 3.0 Flash** per [ADR-003](architecture/ADR-003-gemini-model-selection.md):
+- Model: `gemini-3.0-flash`
+- Thinking Mode: None (operational agent)
+- Purpose: Web search and document retrieval
+
+See [AGENT_CATALOG.md](AGENT_CATALOG.md) for complete agent specifications.
+
+## References
+
+- [AGENT_CATALOG.md](AGENT_CATALOG.md) - EquipmentResearchAgent specifications
+- [ADR-003](architecture/ADR-003-gemini-model-selection.md) - Model selection (Gemini 3.0 Flash for this agent)
+- [SGA_ESTOQUE_ARCHITECTURE.md](architecture/SGA_ESTOQUE_ARCHITECTURE.md) - Overall SGA architecture
+
 ---
 
 Created: 2026-01-07
+Updated: 2026-01-12
 Module: SGA - Gestão de Estoque
 Feature: Equipment Documentation Knowledge Base

@@ -35,7 +35,7 @@ NEXO's LearningAgent captures import experiences (episodes) to improve future im
 We chose **GLOBAL namespace** (`/strategy/import/company`) for all agent memory operations.
 
 ```python
-# From: server/agentcore-inventory/agents/learning/tools/create_episode.py:34
+# From: server/agentcore-inventory/dist/learning/tools/create_episode.py
 MEMORY_NAMESPACE = "/strategy/import/company"  # GLOBAL!
 ```
 
@@ -154,12 +154,12 @@ results = await query(namespaces=[f"/user/{user_id}", "/company"])
 
 ### Code References
 
-| File | Line | Purpose |
-|------|------|---------|
-| `create_episode.py` | 34 | Namespace constant definition |
-| `create_episode.py` | 254 | Event creation with namespace |
-| `retrieve_prior_knowledge.py` | 31 | Namespace constant definition |
-| `retrieve_prior_knowledge.py` | 218-222 | Query with namespace |
+| File | Purpose |
+|------|---------|
+| `dist/learning/tools/create_episode.py` | Namespace constant + event creation |
+| `dist/learning/tools/retrieve_prior_knowledge.py` | Namespace constant + query logic |
+
+> **Note:** Agent code resides in `server/agentcore-inventory/dist/` folder.
 
 ### Configuration
 

@@ -88,6 +88,27 @@ Mandatory for:
 - Write-off/Disposal (BAD → Disposal) and losses/missing.
 - Creation/modification of Part Number when it impacts tax/contracts.
 
+### 4.4 Technology Stack (Mandatory)
+
+The following technology stack is **MANDATORY** and **NON-NEGOTIABLE** for the Inventory Management Module:
+
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| Agent Framework | AWS Strands Agents + Google ADK v1.0 | Open-source multi-agent orchestration framework aligned with AWS best practices |
+| Runtime | AWS Bedrock AgentCore | Serverless agent execution with built-in memory, observability, and lifecycle management |
+| LLM (Critical Agents) | Gemini 3.0 Pro + Thinking HIGH | File analysis, schema understanding, complex reasoning (NexoImport, Intake, Import, Learning, SchemaEvolution) |
+| LLM (Operational Agents) | Gemini 3.0 Flash | Simple queries, status updates, routine operations (EstoqueControl, Validation, Reconciliacao, etc.) |
+| Memory System | AgentCore Memory (STM + LTM + RAG) | Human-like learning and context retention across sessions |
+| Primary Datastore | Aurora PostgreSQL (RDS) | ACID transactions, relational integrity for inventory data (part_numbers, assets, movements, balances) |
+| Secondary Datastore | DynamoDB | HIL tasks, audit logs, agent sessions, temporary state (NOT inventory data) |
+| Inter-Agent Protocol | A2A (JSON-RPC 2.0) | Agent-to-agent communication via AWS Strands framework |
+| Observability | CloudWatch Logs + AgentCore Traces | End-to-end traceability and debugging |
+
+**CRITICAL CLARIFICATION:**
+- **Aurora PostgreSQL** is the **SINGLE SOURCE OF TRUTH** for all inventory data (part numbers, assets, balances, movements, locations).
+- **DynamoDB** is used **ONLY** for transient operational data (HIL tasks, audit logs, agent session state).
+- Any design that stores inventory balances or movements in DynamoDB is **INCORRECT** and must be rejected.
+
 ---
 
 ## 5) Scope
@@ -560,7 +581,34 @@ Ensure access control and complete logs.
 
 > The module is "AI-First": agents are not decoration; they are the flow engine.
 
+**Complete Agent Catalog:** This PRD describes the conceptual agent roles. For the **complete technical implementation**, including LLM selection, memory configuration, A2A protocols, and deployment details, see:
+- [AGENT_CATALOG.md](./AGENT_CATALOG.md) — Complete catalog of 14 deployed agents
+- [SGA_ESTOQUE_ARCHITECTURE.md](./architecture/SGA_ESTOQUE_ARCHITECTURE.md) — Multi-agent architecture and flow diagrams
+- [ADR-003: Gemini Model Selection](./architecture/ADR-003-gemini-model-selection.md) — LLM selection rationale
+
+### Agent Categories (14 Total)
+
+**Import/Analysis Agents (Gemini 3.0 Pro + Thinking HIGH):**
+1. **NexoImportAgent** — Smart import orchestrator (A2A coordinator)
+2. **IntakeAgent** — NF-e/PDF/image processing and extraction
+3. **ImportAgent** — Spreadsheet import and schema mapping
+4. **LearningAgent** — Memory consolidation and pattern learning
+5. **SchemaEvolutionAgent** — Dynamic schema evolution and adaptation
+
+**Operational Agents (Gemini 3.0 Flash):**
+6. **EstoqueControlAgent** — Main inventory orchestrator (balance, movements, locations)
+7. **ValidationAgent** — Data validation and consistency checks
+8. **ComplianceAgent** — Regulatory compliance (Gemini 3.0 Pro, Thinking disabled)
+9. **ReconciliacaoAgent** — SAP reconciliation and divergence detection
+10. **ObservationAgent** — Field observations and anomaly detection
+11. **EquipmentResearchAgent** — Equipment knowledge base and recommendations
+12. **CarrierAgent** — Carrier integration and tracking
+13. **ExpeditionAgent** — Dispatch coordination
+14. **ReverseAgent** — Reverse logistics and asset returns
+
 ### 12.1 Agent — Inventory Control (+/–) (Core)
+
+**Implementation:** `EstoqueControlAgent` (see AGENT_CATALOG.md)
 
 **Observes**
 - ticket events (part request, update, closure)
@@ -589,6 +637,8 @@ Ensure access control and complete logs.
 
 ### 12.2 Agent — Intake (Invoice/Documents by Voice/PDF)
 
+**Implementation:** `IntakeAgent` (see AGENT_CATALOG.md)
+
 **Observes**
 - uploads, monitored emails, voice recordings, attachments.
 
@@ -608,6 +658,8 @@ Ensure access control and complete logs.
 ---
 
 ### 12.3 Agent — Reconciliation (SAP/Spreadsheets/Inventory)
+
+**Implementation:** `ReconciliacaoAgent` (see AGENT_CATALOG.md)
 
 **Observes**
 - exports, reports, and counts,
@@ -629,6 +681,8 @@ Ensure access control and complete logs.
 
 ### 12.4 Agent — Compliance (Policies and Contracts)
 
+**Implementation:** `ComplianceAgent` (see AGENT_CATALOG.md)
+
 **Observes**
 - sensitive transfers,
 - adjustments, disposals, "missing",
@@ -649,6 +703,8 @@ Ensure access control and complete logs.
 
 ### 12.5 Agent — Technician Communication (WhatsApp / App)
 
+**Implementation:** Distributed across `ExpeditionAgent`, `ReverseAgent`, and `ObservationAgent` (see AGENT_CATALOG.md)
+
 **Observes**
 - pending confirmations and reverse,
 - critical events (delays, wrong item, etc.)
@@ -668,14 +724,30 @@ Ensure access control and complete logs.
 
 ## 13) Human-in-the-Loop (HIL) Matrix
 
-| Action | Default Autonomy | Exceptions |
-|---|---:|---|
-| Create new PN | HIL | Autonomous only if category already exists and low risk |
-| Inbound by Invoice with high confidence | Executes with review | HIL if high value or critical serial |
-| Reservation by ticket | Autonomous | HIL if transferring between projects |
-| Transfer between bases of same project | Autonomous | HIL if "restricted location" or "third-party stock" |
-| Inventory adjustment | Mandatory HIL | Never autonomous |
-| Disposal / missing | Mandatory HIL | Never autonomous |
+| Action | Default Autonomy | Exceptions | Confidence Threshold |
+|---|---:|---|:---:|
+| Create new PN | HIL | Autonomous only if category already exists and low risk | N/A |
+| Inbound by Invoice with high confidence | Executes with review | HIL if high value or critical serial | ≥ 0.80 |
+| Reservation by ticket | Autonomous | HIL if transferring between projects | N/A |
+| Transfer between bases of same project | Autonomous | HIL if "restricted location" or "third-party stock" | N/A |
+| Inventory adjustment | Mandatory HIL | Never autonomous | N/A |
+| Disposal / missing | Mandatory HIL | Never autonomous | N/A |
+
+### Agent-Specific Confidence Thresholds
+
+The following agents use confidence scoring to determine when to escalate to HIL:
+
+| Agent | Confidence Threshold | Rationale |
+|---|:---:|---|
+| **NexoImportAgent** | ≥ 0.80 | Orchestrator must be highly confident before delegating; lower = escalate to HIL |
+| **IntakeAgent** | ≥ 0.80 | Document extraction (NF-e, PDF, images) requires high precision; uncertain fields escalate |
+| **ImportAgent** | ≥ 0.75 | Spreadsheet schema mapping has more variability; slightly lower threshold acceptable |
+| **ReconciliacaoAgent** | ≥ 0.85 | Reconciliation divergences are high-risk; require highest confidence before auto-adjustment |
+
+**Threshold Interpretation:**
+- **≥ threshold:** Agent executes autonomously (or with review, per autonomy level)
+- **< threshold:** Agent escalates to HIL with recommendation + evidence
+- **Confidence = 0:** Agent flags as "unable to process" and creates investigation task
 
 ---
 
@@ -879,3 +951,28 @@ Even before the complete "Dashboards Module", inventory needs to have:
   - human (name/user),
   - or agent (agent name + autonomy A/B/C)
 - Timestamp + audit trail
+
+---
+
+## References
+
+### Architecture Documentation
+- [AGENT_CATALOG.md](./AGENT_CATALOG.md) — Complete catalog of 14 deployed agents with technical specifications
+- [SGA_ESTOQUE_ARCHITECTURE.md](./architecture/SGA_ESTOQUE_ARCHITECTURE.md) — Multi-agent architecture, flow diagrams, and integration patterns
+- [NEXO_MEMORY_ARCHITECTURE.md](./architecture/NEXO_MEMORY_ARCHITECTURE.md) — AgentCore memory architecture (STM, LTM, RAG)
+
+### Architecture Decision Records (ADRs)
+- [ADR-003: Gemini Model Selection](./architecture/ADR-003-gemini-model-selection.md) — Rationale for Gemini 3.0 Pro + Thinking for critical agents
+- [ADR-XXX: Aurora PostgreSQL as Primary Datastore](./architecture/) — Why Aurora PostgreSQL is mandatory for inventory data
+
+### External References
+- [AWS Strands Agents Documentation](https://strandsagents.com/latest/) — Official framework documentation
+- [AWS Bedrock AgentCore Memory](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/memory.html) — Memory system reference
+- [Gemini 3.0 API Documentation](https://ai.google.dev/gemini-api/docs/gemini-3) — LLM capabilities and configuration
+- [Gemini Thinking Mode](https://ai.google.dev/gemini-api/docs/thinking) — Extended reasoning documentation
+
+---
+
+**Document Version:** v0.2
+**Last Updated:** 2026-01-12
+**Next Review:** After MVP Phase 1 completion

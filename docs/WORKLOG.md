@@ -4,6 +4,43 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-12 18:30:00 UTC
+
+**User asked:** Complete SGA documentation update + /sync-project
+
+**Assistant did:** Comprehensive documentation update across all 4 tiers (11 documents):
+
+**Tier 1-2 (Critical)**
+- `AGENT_CATALOG.md` - Updated paths to `dist/`, added LLM models and Thinking mode columns
+- `SGA_ESTOQUE_ARCHITECTURE.md` - Clarified PostgreSQL=PRIMARY, DynamoDB=HIL only
+- `prd_modulo_gestao_estoque_faiston_sga2.md` - Added Technology Stack section
+- `NEXO_MEMORY_ARCHITECTURE.md` - Updated code paths, AgentCore config references
+- `DATABASE_SCHEMA.md` - Emphasized PostgreSQL PRIMARY datastore
+
+**Tier 3 (Support)**
+- `INFRASTRUCTURE.md` - Added Technology Stack, PostgreSQL=PRIMARY
+- `Faiston_Investory_Mamagement.md` - **CRITICAL FIX**: Removed incorrect "Two-Cloud Philosophy", replaced with correct AWS + Gemini API architecture
+- `SGA_EQUIPMENT_KB_SETUP.md` - Added LLM Model Selection section
+
+**Tier 4 (ADRs)**
+- `ADR-001-global-namespace.md` - Fixed paths from `agents/` to `dist/`
+- `ADR-002-self-managed-strategy.md` - Fixed paths, added AGENT_CATALOG reference
+
+**Major Refactoring:**
+- **Renamed skill:** `.claude/skills/adk-agentcore-architect/` → `.claude/skills/strands-agent-architect/`
+- **Rewrote SKILL.md:** Strands now emphasized as PRIMARY (per CLAUDE.md mandatory rules)
+- **Removed:** `docs/agents/ADK_AGENTCORE_ARCHITECT.md` (redundant with skill)
+
+**Key Terminology Standardized:**
+| CORRECT | INCORRECT |
+|---------|-----------|
+| AWS Strands Agents (PRIMARY) | "ADK-first" |
+| Gemini 3.0 Family | Gemini 2.x |
+| Aurora PostgreSQL (PRIMARY) | DynamoDB for inventory |
+| A2A Protocol | REST API between agents |
+
+---
+
 ## 2026-01-12 04:15:00 UTC
 
 **User asked:** Fix AgentCore cold start timeout (30s) for SGA agents
@@ -780,6 +817,62 @@ Automatically maintained by Claude Code hooks.
 ---
 
 ## Turn Log — 2026-01-12 14:42:11 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 15:45:58 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 15:50:03 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 16:15:26 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 16:16:37 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 16:19:48 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 16:25:08 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 16:36:02 UTC
 
 **User:** (no user message captured)
 

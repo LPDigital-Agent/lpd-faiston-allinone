@@ -64,17 +64,37 @@ The inefficiencies, data fragmentation, and operational risks described in this 
 
 2. The Future Vision ("To Be"): An Autonomous, AI-Driven System
 
-The "To Be" vision represents a strategic shift from the manual, reactive state to a proactive, intelligent, and autonomous logistics operation. This vision is enabled by a sophisticated two-cloud architecture where transactional microservices (AWS) serve as the robust foundation for a layer of intelligent, autonomous AI agents (Google Cloud) that observe, decide, and act on behalf of the logistics team.
+The "To Be" vision represents a strategic shift from the manual, reactive state to a proactive, intelligent, and autonomous logistics operation. This vision is enabled by an **AI-First, Agentic architecture** built entirely on AWS infrastructure, where intelligent AI agents (powered by AWS Strands Agents Framework + Gemini 3.0 LLM) observe, reason, decide, and act autonomously on behalf of the logistics team.
 
-2.1. The Architectural Foundation: A Two-Cloud Philosophy
+> **Implementation Note:** The agents described in sections 2.2-2.4 represent the future roadmap and vision. The current implementation consists of **14 specialized agents** documented in [AGENT_CATALOG.md](AGENT_CATALOG.md), which form the foundation for this vision. Agent names and descriptions below reflect future-state planning.
 
-The core architectural principle is to use the best cloud for the job, leveraging the distinct strengths of AWS and Google Cloud to create a powerful, resilient, and intelligent system.
+2.1. The Architectural Foundation: AI-First on AWS
 
-Cloud Platform	Role & Responsibility	Rationale
-AWS	Transactional Core	Handles core operations like inventory movements, expeditions, and reverse logistics via serverless, event-driven microservices.
-Google Cloud	Intelligence & Agentic Layer	Hosts the AI agents (built on Vertex AI, Gemini, ADK) that perform reasoning, prediction, reconciliation, and orchestration.
+The core architectural principle is an **AI-First, Agentic architecture** built entirely on AWS infrastructure, leveraging Google's Gemini 3.0 LLM family via API for advanced reasoning capabilities.
 
-Communication between the two cloud environments is managed asynchronously via signed events (EventBridge ↔ Pub/Sub), ensuring the system is loosely coupled, scalable, and resilient.
+**Current Technology Stack (Mandatory per CLAUDE.md)**
+
+| Component | Technology |
+|-----------|------------|
+| **Agent Framework** | AWS Strands Agents + Google ADK v1.0 |
+| **LLM** | Gemini 3.0 Family (Pro with Thinking for critical agents, Flash for operational agents) |
+| **Agent Runtime** | AWS Bedrock AgentCore |
+| **Primary Datastore** | Aurora PostgreSQL (inventory data) |
+| **Secondary Datastore** | DynamoDB (HIL tasks, audit logs, sessions) |
+| **Inter-Agent Protocol** | A2A (Agent-to-Agent) - JSON-RPC 2.0 on port 9000 |
+| **Event System** | AWS EventBridge |
+| **Infrastructure** | 100% AWS (no Google Cloud Platform services) |
+
+> **Note:** See [ADR-003](architecture/ADR-003-gemini-model-selection.md) for LLM model selection rationale.
+> See [AGENT_CATALOG.md](AGENT_CATALOG.md) for the complete list of 14 implemented agents.
+
+**Key Architectural Principles:**
+- **AI-First**: Agents are the primary execution model, not traditional microservices
+- **AWS Strands Agents Framework**: All agents built using AWS Strands + Google ADK
+- **Agent-to-Agent (A2A) Communication**: Inter-agent communication via A2A protocol (JSON-RPC 2.0)
+- **Event-Driven**: AWS EventBridge for asynchronous event orchestration
+- **Memory-Aware**: Agents use AWS Bedrock AgentCore Memory (Session, STM, LTM)
+- **Gemini API Integration**: Google's Gemini 3.0 LLM accessed via API (not GCP infrastructure)
 
 2.2. Autonomous Core Operations and Logistics Execution
 
@@ -121,11 +141,32 @@ This document has journeyed from a manual, fragmented present to an automated, i
 The following table directly contrasts the current and future states for key functions and clarifies your mission in building the bridge between them.
 
 Feature Area	From: "As Is" (Human-Driven)	To: "To Be" (Agent-Driven)	The Developer's Mission
-Stock Entry	Manual, dual-system entry in SAP and SGA based on emails and NFs.	Stock Reconciliation Agent automatically processes Stock.Updated events to adjust inventory.	Build the robust, transactional Inventory Service (AWS) with clear APIs for adding, removing, and transferring stock that the agent can use as a tool.
-Carrier Selection	Manual process of emailing/calling carriers for quotes and selecting based on cost/time.	Dispatch Orchestrator Agent makes an optimal choice based on pre-defined rules and real-time data.	Implement the Expeditions Service (AWS) to expose a unified select_carrier function that abstracts away the complexities of multiple carrier APIs (BestLog, Gollog, etc.) into a single, consistent interface for the agent.
-Shipment Tracking	Manual checks on carrier websites, twice daily. Data is copied to Excel.	Tracking Agent polls APIs continuously and publishes Tracking.StatusChanged events.	Develop the Tracking Service (AWS) to consolidate disparate carrier statuses ('RETIDO_FISCAL', 'Em trânsito', etc.) into a canonical, standardized Tracking.StatusChanged event model.
-SLA Monitoring	Reactive alerts in Tiflux or WhatsApp after a problem has occurred.	SLA Monitor Agent proactively predicts and alerts on potential SLA violations.	Ensure all services (Inventory, Expeditions, Reverse) publish clear, timestamped events to EventBridge, providing the raw data the agent needs to monitor cycle times.
+Stock Entry	Manual, dual-system entry in SAP and SGA based on emails and NFs.	Stock Reconciliation Agent (see reconciliacao agent in AGENT_CATALOG) automatically processes Stock.Updated events to adjust inventory.	Build agents using AWS Strands framework with tools/capabilities for inventory operations. Agents observe EventBridge events, reason using Gemini 3.0, and execute via MCP tools (Aurora PostgreSQL updates). NOT traditional REST microservices.
+Carrier Selection	Manual process of emailing/calling carriers for quotes and selecting based on cost/time.	Dispatch Orchestrator Agent (see expedition agent in AGENT_CATALOG) makes optimal choices based on reasoning and real-time data.	Implement agent tools (MCP) that abstract carrier APIs (BestLog, Gollog, etc.). Agent uses Gemini 3.0 reasoning to evaluate options and A2A protocol to coordinate with other agents.
+Shipment Tracking	Manual checks on carrier websites, twice daily. Data is copied to Excel.	Tracking Agent (see carrier agent in AGENT_CATALOG) polls APIs continuously and publishes Tracking.StatusChanged events.	Build agent with carrier API integration tools, event publishing capabilities via EventBridge, and AgentCore Memory to track shipment state. Agent uses A2A to notify other agents of status changes.
+SLA Monitoring	Reactive alerts in Tiflux or WhatsApp after a problem has occurred.	SLA Monitor Agent (future - see compliance agent in AGENT_CATALOG for current implementation) proactively predicts and alerts on potential SLA violations.	Build agents that consume EventBridge events, use Gemini 3.0 reasoning to analyze patterns, leverage AgentCore LTM for historical context, and emit alerts via A2A to coordination agents.
 
 3.2. Conclusion: Building the Foundation for Intelligence
 
-As a developer on this project, your primary role is to construct the collection of reliable, event-driven, and highly performant AWS microservices—such as the Inventory Service, Expeditions Service, and Tracking Service. These AWS services are the system's "hands and eyes"—the high-fidelity sensors that perceive the state of our physical logistics and the reliable actuators that act upon it. The Google Cloud agents are the "brain" that directs them. Your work building this transactional foundation is what makes intelligence possible. Through this carefully designed two-cloud architecture, you are building the bedrock upon which a truly autonomous, intelligent, and predictive logistics operation will be realized.
+As a developer on this project, your primary role is to construct **intelligent, autonomous AI agents** using the AWS Strands Agents Framework. These agents are **not traditional microservices**—they are cognitive entities that reason, learn, and make decisions using the Gemini 3.0 LLM.
+
+**Key Development Principles:**
+- **AI-First Architecture**: Design agent capabilities, not REST endpoints
+- **Agent-to-Agent (A2A) Communication**: Agents collaborate via A2A protocol, not direct API calls
+- **Event-Driven**: Agents observe and emit events via AWS EventBridge
+- **Memory-Aware**: Leverage AWS Bedrock AgentCore Memory (Session, STM, LTM) for context retention
+- **Tool-Based Execution**: Agents use tools (MCP, AWS services) to interact with external systems
+- **AWS Strands Framework**: All agents built using AWS Strands + Google ADK v1.0
+
+The current implementation features **14 specialized agents** (see [AGENT_CATALOG.md](AGENT_CATALOG.md)) that form the foundation for the autonomous logistics vision described in this document.
+
+---
+
+## References
+
+- [AGENT_CATALOG.md](AGENT_CATALOG.md) - Complete list of 14 SGA agents (current implementation)
+- [ADR-003](architecture/ADR-003-gemini-model-selection.md) - Gemini 3.0 model selection rationale
+- [SGA_ESTOQUE_ARCHITECTURE.md](architecture/SGA_ESTOQUE_ARCHITECTURE.md) - Technical architecture documentation
+- [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) - Database design (Aurora PostgreSQL + DynamoDB)
+- [AWS Strands Agents Documentation](https://strandsagents.com/latest/) - Official framework documentation
+- [Agent-to-Agent (A2A) Protocol](https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/agent-to-agent/) - Inter-agent communication

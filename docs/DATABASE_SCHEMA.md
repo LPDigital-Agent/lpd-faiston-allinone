@@ -39,6 +39,15 @@ Complete database architecture for the Faiston NEXO platform, covering Aurora Po
 
 ### Data Store Responsibilities
 
+**CRITICAL: Database Responsibilities**
+
+| Data Store | Role | Data Types |
+|------------|------|------------|
+| **Aurora PostgreSQL** | **PRIMARY** (MANDATORY for inventory) | part_numbers, assets, locations, movements, balances, reservations |
+| **DynamoDB** | **SECONDARY** (events/workflow only) | HIL tasks, audit logs, sessions, Academy data |
+
+**⚠️ Per CLAUDE.md mandate: Inventory data MUST live in Aurora PostgreSQL. DO NOT USE DynamoDB for inventory data.**
+
 | Data Store | Purpose | Use Cases |
 |------------|---------|-----------|
 | **Aurora PostgreSQL** | ACID transactions, complex queries | Inventory master data, movements, reconciliation |
@@ -51,12 +60,19 @@ Complete database architecture for the Faiston NEXO platform, covering Aurora Po
 | **Aurora Cluster** | `faiston-one-sga-postgres-prod` |
 | **Database Name** | `sga_inventory` |
 | **Port** | 5432 |
-| **RDS Proxy** | `faiston-one-sga-proxy-prod` |
+| **RDS Proxy** | `faiston-one-sga-proxy-prod` (connection pooling for Lambda-based agents, IAM Auth enabled) |
 | **Engine** | Aurora PostgreSQL Serverless v2 (15.x) |
+
+### Architecture References
+
+- [SGA Architecture](./architecture/SGA_ESTOQUE_ARCHITECTURE.md)
+- [ADR-003: Gemini Model Selection](./architecture/ADR-003-gemini-model-selection.md)
 
 ---
 
 ## 2. Aurora PostgreSQL Schema
+
+**Aurora PostgreSQL - PRIMARY Inventory Datastore**
 
 ### Entity Relationship Diagram
 
@@ -373,6 +389,8 @@ FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 ## 3. DynamoDB Tables
 
+**DynamoDB - Secondary (HIL/Audit/Sessions Only)**
+
 ### Table: `faiston-one-sga-inventory-prod`
 
 Event sourcing table for inventory events.
@@ -509,6 +527,23 @@ response = table.query(
 ---
 
 ## 5. Access Patterns
+
+### Agent Access Patterns by Datastore
+
+**PostgreSQL Access (Inventory Operations):**
+- EstoqueControlAgent
+- IntakeAgent
+- ImportAgent
+- NexoImportAgent
+- ReconciliacaoAgent
+- ValidationAgent
+- SchemaEvolutionAgent
+
+**DynamoDB Access (Workflow/Audit):**
+- All agents (for audit logging)
+- HIL-generating agents (for task creation)
+- ObservationAgent (session tracking)
+- LearningAgent (training data)
 
 ### PostgreSQL Queries
 

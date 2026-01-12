@@ -17,6 +17,17 @@ Complete AWS infrastructure documentation for the Faiston NEXO AI-First platform
 
 ## 1. Overview
 
+### Technology Stack
+
+| Layer | Technology |
+|-------|------------|
+| **Agent Framework** | AWS Strands Agents + Google ADK v1.0 |
+| **LLM** | Gemini 3.0 Family (Pro/Flash) |
+| **Agent Runtime** | AWS Bedrock AgentCore |
+| **Primary Datastore** | Aurora PostgreSQL Serverless v2 |
+| **Secondary Datastore** | DynamoDB (HIL, audit, sessions, CDC) |
+| **Inter-Agent Protocol** | A2A (Agent-to-Agent) - JSON-RPC 2.0 |
+
 ### Architecture Diagram
 
 ```mermaid
@@ -49,10 +60,10 @@ flowchart TB
 
         subgraph Data ["Data Layer"]
             subgraph VPC_SGA ["VPC: SGA (10.0.0.0/16)"]
-                AURORA[Aurora PostgreSQL<br/>Serverless v2]
+                AURORA[Aurora PostgreSQL<br/>Serverless v2<br/>PRIMARY DATASTORE]
                 RDS_PROXY[RDS Proxy]
             end
-            DYNAMO_INV[DynamoDB: SGA Inventory]
+            DYNAMO_INV[DynamoDB: SGA Inventory<br/>Event Sourcing/CDC]
             DYNAMO_HIL[DynamoDB: SGA HIL Tasks]
             DYNAMO_AUDIT[DynamoDB: SGA Audit]
             DYNAMO_ACAD[DynamoDB: Academy Trainings]
@@ -119,11 +130,13 @@ flowchart TB
 
 ### AgentCore Runtimes
 
-| Runtime | ID | Purpose | Agents |
-|---------|-----|---------|--------|
-| **Inventory** | `faiston_asset_management-uSuLPsFQNH` | SGA Inventory management | 14 |
-| **Academy** | `faiston_academy_agents-ODNvP6HxCD` | Learning platform | 6 |
-| **Portal** | `faiston_portal_agents-PENDING` | Central orchestrator | 2 |
+| Runtime | ID | Purpose | Agents | LLM |
+|---------|-----|---------|--------|-----|
+| **Inventory** | `faiston_asset_management-uSuLPsFQNH` | SGA Inventory management | 14 | Gemini 3.0 Pro/Flash |
+| **Academy** | `faiston_academy_agents-ODNvP6HxCD` | Learning platform | 6 | Gemini 3.0 Pro/Flash |
+| **Portal** | `faiston_portal_agents-PENDING` | Central orchestrator | 2 | Gemini 3.0 Pro/Flash |
+
+> **Note:** All agents use **Gemini 3.0 Family** LLMs (per ADR-003). Critical inventory agents use Gemini 3.0 Pro with thinking enabled. See [Agent Catalog](AGENT_CATALOG.md) for complete agent list and LLM assignments.
 
 ### AgentCore Gateway
 
@@ -154,7 +167,9 @@ flowchart TB
 
 ## 4. Database Infrastructure
 
-### Aurora PostgreSQL (SGA Inventory)
+> **CRITICAL:** Aurora PostgreSQL is the **PRIMARY DATASTORE** for all inventory data (assets, movements, balances, locations). DynamoDB is used **ONLY** for event sourcing, CDC, HIL tasks, audit logs, and sessions. See [Database Schema](DATABASE_SCHEMA.md) for details.
+
+### Aurora PostgreSQL (SGA Inventory - PRIMARY DATASTORE)
 
 | Setting | Value |
 |---------|-------|
@@ -165,6 +180,7 @@ flowchart TB
 | **Min ACU** | 0.5 (scales to zero when idle) |
 | **Max ACU** | 8.0 |
 | **Port** | 5432 |
+| **Purpose** | **PRIMARY inventory datastore** |
 
 **Features:**
 - Serverless v2 automatic scaling
@@ -173,6 +189,13 @@ flowchart TB
 - Performance Insights for monitoring
 - KMS encryption at rest
 - IAM authentication for Lambda
+
+**Schema:**
+- `assets` - Serialized inventory items
+- `movements` - Immutable event log
+- `balances` - Aggregate stock projections
+- `locations` - Stock locations
+- See [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md) for complete schema
 
 ### RDS Proxy
 
@@ -187,11 +210,13 @@ flowchart TB
 - Reduced database connection overhead
 - Automatic failover handling
 
-### DynamoDB Tables
+### DynamoDB Tables (Secondary Datastores)
+
+> **CRITICAL NOTE:** DynamoDB tables are **SECONDARY** datastores. They do NOT hold primary inventory data. Primary inventory queries go to Aurora PostgreSQL.
 
 | Table | Purpose | Billing | Keys |
 |-------|---------|---------|------|
-| `faiston-one-sga-inventory-prod` | Event sourcing inventory | On-Demand | PK, SK |
+| `faiston-one-sga-inventory-prod` | **Event sourcing / CDC only** (NOT primary queries) | On-Demand | PK, SK |
 | `faiston-one-sga-hil-tasks-prod` | Human-in-Loop tasks | On-Demand | task_id |
 | `faiston-one-sga-audit-log-prod` | Audit trail | On-Demand | PK, SK |
 | `faiston-one-sga-sessions-prod` | AgentCore sessions | On-Demand | session_id |
@@ -391,8 +416,11 @@ Infrastructure changes are deployed via GitHub Actions:
 
 ## Related Documentation
 
+- [Agent Catalog](AGENT_CATALOG.md) - Complete list of all agents and their LLM assignments
+- [Database Schema](DATABASE_SCHEMA.md) - PostgreSQL schema and data model
 - [AgentCore Implementation Guide](AgentCore/IMPLEMENTATION_GUIDE.md)
 - [SGA Architecture](architecture/SGA_ESTOQUE_ARCHITECTURE.md)
+- [ADR-003: Gemini Model Selection](architecture/ADR-003-gemini-model-selection.md)
 - [Troubleshooting](TROUBLESHOOTING.md)
 
 ---

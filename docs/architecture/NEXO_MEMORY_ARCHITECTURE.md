@@ -266,7 +266,23 @@ async def _recall_similar_answer(
     return None
 ```
 
-### 3.3 Integração com AgentCore Memory
+### 3.3 AgentCore Memory Configuration
+
+**Technical Details:**
+
+```
+Memory ID: nexo_agent_mem-Z5uQr8CDGf
+Namespace: /strategy/import/company (GLOBAL)
+Scope: Company-wide (not per-user)
+Strategy: Self-managed (custom consolidation)
+```
+
+**Rationale:**
+- **GLOBAL namespace** enables collective learning across all company users (see ADR-001)
+- **Self-managed strategy** provides full control over consolidation logic (see ADR-002)
+- **Single memory ID** ensures consistent knowledge base across all import sessions
+
+### 3.4 Integração com AgentCore Memory
 
 NEXO utiliza as APIs **oficiais** do AWS Bedrock AgentCore Memory SDK:
 
@@ -317,7 +333,68 @@ for ref in reflections:
     confidence = ref.confidence     # Confiança do padrão
 ```
 
-### 3.4 Arquitetura de Memória: Self-Managed Strategy
+### 3.5 LLM Model Selection for Memory Operations
+
+**Gemini 3.0 Family Configuration (per ADR-003):**
+
+Memory operations use appropriate Gemini 3.0 models with extended reasoning capabilities:
+
+| Agent | Model | Thinking Mode | Use Case |
+|-------|-------|---------------|----------|
+| **LearningAgent** | `gemini-3.0-pro` | HIGH | Memory consolidation, pattern extraction, schema evolution |
+| **NexoImportAgent** | `gemini-3.0-pro` | HIGH | Recall operations, mapping decisions, confidence scoring |
+
+**Why Thinking Mode for Memory?**
+
+Thinking mode enhances memory operations through:
+- **Deep reasoning** for pattern extraction from multiple episodes
+- **Chain-of-thought** for complex mapping decisions (e.g., ambiguous column names)
+- **Better confidence scoring** via step-by-step similarity analysis
+- **Reduced hallucination** when aggregating historical data
+
+Example: When consolidating 20 past import episodes, Thinking mode allows the LearningAgent to:
+1. Identify common patterns across file structures
+2. Detect edge cases and exceptions
+3. Assign confidence scores based on consistency
+4. Generate actionable reflections with reasoning traces
+
+**Reference:** [ADR-003: Gemini Model Selection](./ADR-003-gemini-model-selection.md)
+
+**Thinking Mode Integration in Memory Workflows:**
+
+```python
+# LearningAgent: Memory Consolidation with Thinking
+from strands_agents import LLM
+
+llm = LLM(
+    model="gemini-3.0-pro",
+    thinking={
+        "mode": "HIGH",  # Extended reasoning for pattern extraction
+        "budget": "medium",  # Balance speed vs. depth
+    }
+)
+
+# Example: Consolidating 20 import episodes
+# Thinking mode enables:
+# 1. Multi-step pattern recognition across episodes
+# 2. Confidence scoring via reasoning chains
+# 3. Detection of conflicting mappings with explanations
+# 4. Generation of actionable reflections with justifications
+```
+
+**Practical Impact:**
+
+Without Thinking mode:
+- Simple similarity matching (embeddings only)
+- Confidence scores based on frequency
+- May miss context-dependent patterns
+
+With Thinking mode:
+- Reasoning chains analyze WHY patterns succeed/fail
+- Confidence includes context similarity + success rate + edge cases
+- Auto-detects schema evolution and filters stale mappings
+
+### 3.6 Arquitetura de Memória: Self-Managed Strategy
 
 NEXO implementa um **self-managed strategy pattern** para controle total sobre a consolidação de memória:
 
@@ -517,15 +594,19 @@ Ao criar novos agentes ou features que usam memória:
 - [SGA Estoque Architecture](./SGA_ESTOQUE_ARCHITECTURE.md)
 - [AgentCore Implementation Guide](../AgentCore/IMPLEMENTATION_GUIDE.md)
 - [Agent Catalog](../AGENT_CATALOG.md)
+- [ADR-001: GLOBAL Namespace](./ADR-001-global-namespace.md)
+- [ADR-002: Self-Managed Strategy](./ADR-002-self-managed-strategy.md)
+- [ADR-003: Gemini Model Selection](./ADR-003-gemini-model-selection.md)
 
 ### 6.3 Implementation Files
 
-- **NexoImportAgent**: `server/agentcore-inventory/agents/nexo_import/agent.py`
-- **LearningAgent**: `server/agentcore-inventory/agents/learning/agent.py`
-- **LearningAgent Entry**: `server/agentcore-inventory/agents/learning/main.py`
-- **Create Episode Tool**: `server/agentcore-inventory/agents/learning/tools/create_episode.py`
-- **Retrieve Prior Knowledge**: `server/agentcore-inventory/agents/learning/tools/retrieve_prior_knowledge.py`
-- **Generate Reflection Tool**: `server/agentcore-inventory/agents/learning/tools/generate_reflection.py`
+- **NexoImportAgent**: `server/agentcore-inventory/dist/nexo_import/agent.py`
+- **LearningAgent**: `server/agentcore-inventory/dist/learning/agent.py`
+- **Create Episode Tool**: `server/agentcore-inventory/dist/learning/tools/create_episode.py`
+- **Retrieve Prior Knowledge**: `server/agentcore-inventory/dist/learning/tools/retrieve_prior_knowledge.py`
+- **Generate Reflection Tool**: `server/agentcore-inventory/dist/learning/tools/generate_reflection.py`
+
+> **Note:** All agent implementations now live in `dist/` (build artifacts) following the Strands A2A migration. Source files are no longer maintained in `agents/`.
 
 ### 6.4 Architecture Decision Records (ADRs)
 

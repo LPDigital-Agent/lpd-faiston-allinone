@@ -46,7 +46,9 @@
 
 | Document | Purpose |
 |----------|---------|
-| [ADK_AGENTCORE_ARCHITECT.md](agents/ADK_AGENTCORE_ARCHITECT.md) | Agent architecture specialist guide |
+| [AGENT_CATALOG.md](AGENT_CATALOG.md) | Complete catalog of all 14 SGA agents with LLM specifications |
+
+> **Note:** The `strands-agent-architect` Claude Code skill (in `.claude/skills/`) provides guidance for designing and building agents.
 
 ### Architecture Documentation
 

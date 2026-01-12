@@ -216,10 +216,13 @@ memory:
 
 | File | Purpose |
 |------|---------|
-| `agents/learning/tools/create_episode.py` | Episode storage |
-| `agents/learning/tools/retrieve_prior_knowledge.py` | Prior knowledge retrieval |
-| `agents/learning/tools/generate_reflection.py` | Pattern consolidation |
-| `agents/learning/main.py` | LearningAgent entry point |
+| `dist/learning/tools/create_episode.py` | Episode storage |
+| `dist/learning/tools/retrieve_prior_knowledge.py` | Prior knowledge retrieval |
+| `dist/learning/tools/generate_reflection.py` | Pattern consolidation |
+| `dist/learning/agent.py` | LearningAgent entry point |
+
+> **Note:** Agent code resides in `server/agentcore-inventory/dist/` folder.
+> See [AGENT_CATALOG.md](../AGENT_CATALOG.md) for complete agent specifications.
 
 ### A2A Delegation Pattern
 
