@@ -12,8 +12,6 @@
 #   https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-preinstalled.html
 # =============================================================================
 
-# Google ADK (Agent Development Kit)
-google-adk>=0.2.0
 
 # AWS Bedrock AgentCore SDK
 bedrock-agentcore>=0.1.0

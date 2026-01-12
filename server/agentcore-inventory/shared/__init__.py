@@ -12,7 +12,7 @@
 #   from shared.a2a_client import A2AClient, delegate_to_learning
 #   from shared.xray_tracer import trace_a2a_call, init_xray_tracing
 #
-# Architecture: Google ADK + AWS Bedrock AgentCore (100% Agentic)
+# Architecture: AWS Strands Agents + AWS Bedrock AgentCore (100% Agentic)
 # =============================================================================
 
 # Audit Emitter exports

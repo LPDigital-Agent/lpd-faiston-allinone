@@ -8,8 +8,6 @@
 # AWS Bedrock AgentCore Runtime SDK
 bedrock-agentcore>=0.1.0
 
-# Google ADK (Agent Development Kit)
-google-adk>=0.3.0
 
 # X-Ray tracing
 aws-xray-sdk>=2.14.0
