@@ -202,7 +202,15 @@ AI transparency dashboard for non-technical users to see what agents do "behind 
 - **Workflow Timeline**: Visual progress of current operations
 
 **Design**: Apple TV frosted dark glass (NEXO Copilot pattern)
-**Architecture**: TanStack Query polling (5s for main data, 1s for X-Ray)
+**Architecture**:
+- **Real-Time (WebSocket)**: EventBridge Pipe streams DynamoDB audit events → WebSocket (<100ms latency)
+- **Fallback (Polling)**: TanStack Query (5s for main data, 1s for X-Ray)
+
+**Real-Time Infrastructure** (Deployed Jan 2026):
+- **WebSocket API**: `wss://wts0zmjxv5.execute-api.us-east-2.amazonaws.com/production`
+- **EventBridge Pipe**: DynamoDB Streams → Enrichment Lambda → Broadcast Lambda → WebSocket
+- **Connections Table**: DynamoDB with 24h TTL for connection tracking
+
 **Backend Actions**:
 - `get_agent_room_data` - Main panel data
 - `get_xray_events` - Real-time agent traces with event enrichment
@@ -220,7 +228,10 @@ AI transparency dashboard for non-technical users to see what agents do "behind 
 - Backend: `server/agentcore-inventory/tools/humanizer.py` (Portuguese messages)
 - Frontend: `client/hooks/ativos/useAgentRoomStream.ts` (main polling hook)
 - Frontend: `client/hooks/ativos/useAgentRoomXRay.ts` (X-Ray 1s polling hook)
+- Frontend: `client/hooks/ativos/useAgentRoomWebSocket.ts` (TRUE real-time WebSocket hook)
 - Frontend: `client/components/ferramentas/ativos/agent-room/` (UI components)
+- Terraform: `terraform/main/apigateway_websocket_agentroom.tf` (WebSocket API)
+- Terraform: `terraform/main/eventbridge_pipe_agentroom.tf` (EventBridge Pipe + Lambdas)
 - Frontend: `client/lib/ativos/agentRoomConstants.ts` (agent profiles + technical metadata)
 
 **Location**: `/ferramentas/ativos/agent-room/`

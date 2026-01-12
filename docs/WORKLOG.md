@@ -4,6 +4,23 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-12 03:15:00 UTC
+
+**User asked:** /sync-project - Synchronize project state after WebSocket deployment
+
+**Assistant did:** Executed /sync-project to update documentation and MCP memory after successful WebSocket real-time architecture deployment:
+- Updated docs/CONTEXT_SNAPSHOT.md with deployment status
+- Updated docs/README.md with WebSocket architecture details
+- Created MCP memory entities: AgentRoom_WebSocket_Architecture, EventBridge_Pipe_AgentRoom, WebSocket_API_Gateway_AgentRoom
+- Created relations between entities
+
+**Key Deployment (Jan 2026):**
+- WebSocket API: wss://wts0zmjxv5.execute-api.us-east-2.amazonaws.com/production
+- EventBridge Pipe: faiston-one-prod-agentroom-events
+- Performance: <100ms latency (vs 1000ms polling before)
+
+---
+
 ## 2026-01-11 17:25:01 UTC
 
 **User asked:** Test user message for hooks verification
@@ -500,6 +517,46 @@ Automatically maintained by Claude Code hooks.
 ---
 
 ## Turn Log — 2026-01-12 02:28:24 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 02:30:01 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 02:35:30 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 02:36:22 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 02:45:26 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-12 02:49:29 UTC
 
 **User:** (no user message captured)
 
