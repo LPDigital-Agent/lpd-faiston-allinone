@@ -6,18 +6,18 @@
 # This is the MAIN ORCHESTRATOR that coordinates the import flow:
 # - Delegates to LearningAgent for memory operations (via A2A)
 # - Delegates to SchemaEvolutionAgent for column creation (via A2A)
-# - Uses ADK tools for file analysis and import execution
+# - Uses Strands tools for file analysis and import execution
 #
 # Architecture:
 # - Runtime: Dedicated AgentCore Runtime (1 runtime = 1 agent)
 # - Protocol: A2A (JSON-RPC 2.0) for inter-agent communication
-# - Memory: Delegates to LearningAgent (no direct memory access)
+# - Entry Point: main.py with Strands A2AServer
 # =============================================================================
 
-from agents.nexo_import.agent import create_nexo_import_agent, AGENT_ID, AGENT_NAME
+from agents.nexo_import.main import create_agent, AGENT_ID, AGENT_NAME
 
 __all__ = [
-    "create_nexo_import_agent",
+    "create_agent",
     "AGENT_ID",
     "AGENT_NAME",
 ]

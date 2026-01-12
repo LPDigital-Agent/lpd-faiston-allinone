@@ -13,12 +13,13 @@
 # Architecture:
 # - Runtime: Dedicated AgentCore Runtime (1 runtime = 1 agent)
 # - Protocol: A2A (JSON-RPC 2.0) for inter-agent communication
+# - Entry Point: main.py with Strands A2AServer
 # =============================================================================
 
-from agents.import.agent import create_import_agent, AGENT_ID, AGENT_NAME
+from agents.import.main import create_agent, AGENT_ID, AGENT_NAME
 
 __all__ = [
-    "create_import_agent",
+    "create_agent",
     "AGENT_ID",
     "AGENT_NAME",
 ]

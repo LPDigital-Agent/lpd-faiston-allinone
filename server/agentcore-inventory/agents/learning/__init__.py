@@ -3,7 +3,7 @@
 # =============================================================================
 # Episodic memory agent for import intelligence.
 #
-# Architecture: 100% Agentic (Google ADK + AWS Bedrock AgentCore)
+# Architecture: AWS Strands Agents + AWS Bedrock AgentCore
 # Protocol: A2A (JSON-RPC 2.0)
 # Memory: AgentCore Memory with GLOBAL namespace
 #
@@ -16,14 +16,13 @@
 #       "file_analysis": {...}
 #   })
 #
-#   # Direct import (for development/testing only):
-#   from agents.learning.agent import create_learning_agent, AGENT_ID
+#   # Entry Point: main.py with Strands A2AServer
 # =============================================================================
 
-from agents.learning.agent import create_learning_agent, AGENT_ID, AGENT_NAME
+from agents.learning.main import create_agent, AGENT_ID, AGENT_NAME
 
 __all__ = [
-    "create_learning_agent",
+    "create_agent",
     "AGENT_ID",
     "AGENT_NAME",
 ]
