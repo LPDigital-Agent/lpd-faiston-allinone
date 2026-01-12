@@ -191,7 +191,8 @@ jobs:
 
       - name: Update SSM Registry with Runtime IDs
         run: |
-          pip install boto3 --quiet
+          # Install latest boto3 with bedrock-agentcore-control support
+          pip install --upgrade boto3 botocore --quiet
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import json
@@ -280,6 +281,7 @@ jobs:
       # =========================================================================
       - name: Configure JWT Authorizer for Orchestrator
         run: |
+          # boto3 already upgraded in previous step
           python3 << 'PYTHON_SCRIPT'
           import boto3
           import os
