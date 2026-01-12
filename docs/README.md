@@ -196,21 +196,32 @@ Asset/inventory management system with **100% A2A Agentic Architecture**:
 
 AI transparency dashboard for non-technical users to see what agents do "behind the scenes":
 - **Live Feed**: Real-time humanized messages in Portuguese (first-person)
-- **Agent Team**: Visual cards showing all 14 AI agents with friendly names and status
+- **Agent Team**: Visual cards showing all 14 AI agents with friendly names, status, and technical metadata
 - **Learning Stories**: What agents have learned from interactions
+- **X-Ray Panel**: Real-time agent activity traces with session grouping, expandable JSON details, performance metrics, and inline HIL actions
 - **Workflow Timeline**: Visual progress of current operations
-- **Pending Decisions**: HIL tasks requiring human input
 
 **Design**: Apple TV frosted dark glass (NEXO Copilot pattern)
-**Architecture**: TanStack Query polling (5s) with backend aggregation
-**Backend Action**: `get_agent_room_data` (single endpoint returns all data)
-**Event System**: `emit_agent_event()` writes AGENT_ACTIVITY events to DynamoDB audit log
+**Architecture**: TanStack Query polling (5s for main data, 1s for X-Ray)
+**Backend Actions**:
+- `get_agent_room_data` - Main panel data
+- `get_xray_events` - Real-time agent traces with event enrichment
+
+**Agent Detail Panel Features**:
+- Friendly name + AgentCore technical ID
+- Google ADK framework indicator
+- Gemini model version (Pro vs Flash)
+- Thinking mode badge (for deep reasoning agents)
+- Special capabilities tags (Vision AI, A2A, MCP Gateway, etc.)
 
 **Key Files**:
 - Backend: `server/agentcore-inventory/tools/agent_room_service.py` (emit, aggregate)
+- Backend: `server/agentcore-inventory/tools/sse_stream.py` (X-Ray event streaming)
 - Backend: `server/agentcore-inventory/tools/humanizer.py` (Portuguese messages)
-- Frontend: `client/hooks/ativos/useAgentRoomStream.ts` (polling hook)
+- Frontend: `client/hooks/ativos/useAgentRoomStream.ts` (main polling hook)
+- Frontend: `client/hooks/ativos/useAgentRoomXRay.ts` (X-Ray 1s polling hook)
 - Frontend: `client/components/ferramentas/ativos/agent-room/` (UI components)
+- Frontend: `client/lib/ativos/agentRoomConstants.ts` (agent profiles + technical metadata)
 
 **Location**: `/ferramentas/ativos/agent-room/`
 
