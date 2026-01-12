@@ -88,7 +88,22 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
 - Reference: https://ai.google.dev/gemini-api/docs/thinking
 - Root cause: BUG-009 was WRONG PARAMETER NAME, not missing support
 - Correct fix: Use `thinking_budget: -1` for Gemini 2.5 (dynamic allocation)
-- Status: DEPLOYING - Committing correct fix
+- Status: FIXED - thinking_budget working in logs
+
+### Iteration 9 (2026-01-12)
+- E2E test still returns empty response
+- CloudWatch shows NEW error - inter-agent delegation failing:
+  - nexo_import tries to delegate to faiston_sga_import
+  - HTTP 404: URL uses /?qualifier=DEFAULT (wrong format)
+  - Correct format: /invocations/ path
+- Root cause: BUG-010 - a2a_client.py uses wrong URL path
+  - SSM stores URLs with /?qualifier=DEFAULT (endpoint ARN format)
+  - But InvokeAgentRuntime API requires /invocations/ path
+  - The _normalize_url function was stripping /invocations instead of adding it
+- Fix: Updated _normalize_url to:
+  - Remove ?qualifier=DEFAULT suffix
+  - Add /invocations/ path for AgentCore Runtime API
+- Status: DEPLOYING - Committing fix
 
 ## Bug Fixes Applied This Session
 1. BUG-004: Missing AgentCore runtime endpoints (FIXED - Terraform import)
@@ -97,6 +112,7 @@ Import 1,688 expedition records via A2A protocol (E2E Smart Import test)
 4. BUG-007: Strands SDK thoughtSignature incompatibility (WORKAROUND - Gemini 2.5)
 5. BUG-008: Blocking GeminiModel initialization (FIXED - LazyGeminiModel wrapper)
 6. BUG-009: Wrong thinking parameter for Gemini 2.5 (FIXED - use thinking_budget:-1)
+7. BUG-010: A2A client URL path wrong (FIXED - use /invocations/ instead of /?qualifier=)
 
 ## Next Steps
 1. Commit BUG-008 fix (LazyGeminiModel)

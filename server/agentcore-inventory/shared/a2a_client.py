@@ -380,22 +380,33 @@ class A2AClient:
 
     def _normalize_url(self, url: str) -> str:
         """
-        Normalize agent URL for A2A protocol.
+        Normalize agent URL for AgentCore Runtime invocation.
 
-        Ensures URL is properly formatted for A2A (root path, no /invocations).
+        BUG-010 FIX: The correct path for invoking AgentCore A2A runtimes is
+        /invocations/ (not /? or root path). The SSM parameters store URLs
+        with /?qualifier=DEFAULT format, but the actual invocation API expects
+        /invocations/ path.
+
+        Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/user-guide/runtime/a2a.md
 
         Args:
-            url: Raw URL from registry
+            url: Raw URL from registry (may have /?qualifier=DEFAULT suffix)
 
         Returns:
-            Normalized URL for A2A protocol
+            Normalized URL with /invocations/ path for AgentCore API
         """
-        # Remove /invocations suffix if present (legacy HTTP format)
-        if "/invocations" in url:
-            url = url.replace("/invocations", "/")
+        # Remove ?qualifier=DEFAULT suffix if present (endpoint format, not invocation)
+        if "?qualifier=" in url:
+            url = url.split("?")[0]
 
-        # Ensure trailing slash for A2A root path
-        if not url.endswith("/") and "?" not in url:
+        # Remove trailing slash for clean base URL
+        url = url.rstrip("/")
+
+        # Ensure URL ends with /invocations/ for AgentCore Runtime API
+        # This is required for InvokeAgentRuntime API calls
+        if not url.endswith("/invocations"):
+            url = url + "/invocations/"
+        elif not url.endswith("/"):
             url = url + "/"
 
         return url
