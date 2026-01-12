@@ -179,10 +179,9 @@ resource "aws_lambda_function" "websocket_connect" {
   }
 
   tags = {
-    Name        = "${local.name_prefix}-agentroom-ws-connect"
-    Module      = "SGA"
-    Feature     = "Agent Room Real-Time"
-    Description = "Handles WebSocket $connect route"
+    Name    = "${local.name_prefix}-agentroom-ws-connect"
+    Module  = "SGA"
+    Feature = "Agent Room Real-Time"
   }
 }
 
@@ -244,10 +243,9 @@ resource "aws_lambda_function" "websocket_disconnect" {
   }
 
   tags = {
-    Name        = "${local.name_prefix}-agentroom-ws-disconnect"
-    Module      = "SGA"
-    Feature     = "Agent Room Real-Time"
-    Description = "Handles WebSocket $disconnect route"
+    Name    = "${local.name_prefix}-agentroom-ws-disconnect"
+    Module  = "SGA"
+    Feature = "Agent Room Real-Time"
   }
 }
 

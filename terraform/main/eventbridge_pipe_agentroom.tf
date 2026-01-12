@@ -475,10 +475,9 @@ resource "aws_pipes_pipe" "agent_room_events" {
   }
 
   tags = {
-    Name        = "${local.name_prefix}-agentroom-events"
-    Module      = "SGA"
-    Feature     = "Agent Room Real-Time"
-    Description = "EventBridge Pipe: DynamoDB Streams -> WebSocket Broadcast"
+    Name    = "${local.name_prefix}-agentroom-events"
+    Module  = "SGA"
+    Feature = "Agent Room Real-Time"
   }
 
   depends_on = [
