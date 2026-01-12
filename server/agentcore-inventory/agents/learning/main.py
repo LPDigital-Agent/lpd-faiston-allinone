@@ -323,5 +323,5 @@ Based on historical success rates, determine the appropriate threshold."""
 
 if __name__ == "__main__":
     # Run the AgentCore app
-    # Port 9000 is MANDATORY for A2A protocol
-    app.run(host="0.0.0.0", port=9000)
+    # Port 8080 for HTTP protocol (BedrockAgentCoreApp serves at /invocations)
+    app.run(host="0.0.0.0", port=8080)

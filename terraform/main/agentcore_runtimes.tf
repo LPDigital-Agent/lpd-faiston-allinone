@@ -2,17 +2,20 @@
 # AgentCore Runtimes for SGA Inventory - 14 Separate Agents
 # =============================================================================
 # Each agent runs in its own dedicated AgentCore Runtime for:
-# - Unique A2A identity (Agent Cards)
 # - Independent scaling and lifecycle
-# - Cross-agent communication via A2A protocol
+# - Cross-agent communication via A2A client (SigV4 signed HTTP calls)
 #
 # Architecture (100% Agentic - Google ADK + AWS Bedrock AgentCore):
 # - 14 runtimes (one per agent)
-# - A2A protocol (JSON-RPC 2.0, port 9000)
+# - HTTP protocol (port 8080, /invocations endpoint) - uses BedrockAgentCoreApp
 # - AgentCore Memory (global namespace)
 # - AgentCore Identity for cross-agent auth
 #
-# Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-a2a.html
+# NOTE: We use HTTP protocol because BedrockAgentCoreApp serves at /invocations.
+# A2A inter-agent communication is handled by the A2A client (SigV4 signed),
+# not by the protocol_configuration (which defines the server's listen mode).
+#
+# Reference: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime.html
 # =============================================================================
 
 # =============================================================================
@@ -299,14 +302,16 @@ resource "aws_bedrockagentcore_agent_runtime" "sga_agents" {
     }
   }
 
-  # Network configuration (PUBLIC for A2A communication)
+  # Network configuration (PUBLIC for cross-agent communication)
   network_configuration {
     network_mode = "PUBLIC"
   }
 
-  # A2A Protocol configuration (JSON-RPC 2.0, port 9000)
+  # HTTP Protocol configuration (REST-like, port 8080 → /invocations)
+  # NOTE: Changed from A2A to HTTP because BedrockAgentCoreApp serves at /invocations
+  # A2A protocol expects root path / but BedrockAgentCoreApp uses /invocations
   protocol_configuration {
-    server_protocol = "A2A"
+    server_protocol = "HTTP"
   }
 
   # Environment variables for the agent
@@ -341,9 +346,9 @@ resource "aws_bedrockagentcore_agent_runtime" "sga_agents" {
 }
 
 # =============================================================================
-# SSM Parameters for Agent Discovery (Agent Cards)
+# SSM Parameters for Agent Discovery
 # =============================================================================
-# Store runtime URLs for A2A discovery
+# Store runtime URLs for cross-agent communication (A2A client uses these)
 
 resource "aws_ssm_parameter" "sga_agent_urls" {
   for_each = local.sga_agents
