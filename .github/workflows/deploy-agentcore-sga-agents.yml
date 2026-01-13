@@ -95,7 +95,8 @@ jobs:
         id: detect
         run: |
           if [ "${{ github.event.inputs.agents }}" = "all" ] || [ -z "${{ github.event.inputs.agents }}" ]; then
-            AGENTS="learning,validation,schema_evolution,nexo_import,intake,import,estoque_control,compliance,reconciliacao,expedition,carrier,reverse,observation,equipment_research"
+            # NOTE: "data_import" renamed from "import" (Python reserved keyword)
+            AGENTS="learning,validation,schema_evolution,nexo_import,intake,data_import,estoque_control,compliance,reconciliacao,expedition,carrier,reverse,observation,equipment_research"
           else
             AGENTS="${{ github.event.inputs.agents }}"
           fi
@@ -116,13 +117,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # NOTE: "data_import" renamed from "import" (Python reserved keyword)
         agent:
           - learning
           - validation
           - schema_evolution
           - nexo_import
           - intake
-          - import
+          - data_import
           - estoque_control
           - compliance
           - reconciliacao
@@ -407,10 +409,10 @@ jobs:
           REGION = os.environ.get("AWS_REGION", "us-east-2")
           NAME_PREFIX = "faiston-one"
 
-          # List of all agents
+          # List of all agents (NOTE: "data_import" renamed from "import" - Python reserved word)
           AGENTS = [
               "learning", "validation", "schema_evolution", "nexo_import",
-              "intake", "import", "estoque_control", "compliance",
+              "intake", "data_import", "estoque_control", "compliance",
               "reconciliacao", "expedition", "carrier", "reverse",
               "observation", "equipment_research"
           ]
