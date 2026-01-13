@@ -455,7 +455,7 @@ jobs:
           echo "| schema_evolution | Dynamic schema | agentcore/agents/schema_evolution/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "| nexo_import | Orchestrator | agentcore/agents/nexo_import/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "| intake | NF reader | agentcore/agents/intake/agent.zip |" >> $GITHUB_STEP_SUMMARY
-          echo "| import | Bulk import | agentcore/agents/import/agent.zip |" >> $GITHUB_STEP_SUMMARY
+          echo "| data_import | Bulk import | agentcore/agents/data_import/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "| estoque_control | Stock control | agentcore/agents/estoque_control/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "| compliance | Policy validation | agentcore/agents/compliance/agent.zip |" >> $GITHUB_STEP_SUMMARY
           echo "| reconciliacao | Inventory counting | agentcore/agents/reconciliacao/agent.zip |" >> $GITHUB_STEP_SUMMARY

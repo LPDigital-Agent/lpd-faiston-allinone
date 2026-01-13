@@ -29,7 +29,7 @@ AGENT_FRIENDLY_NAMES = {
     "intake": "Leitor de Notas",
     "intake_agent": "Leitor de Notas",
     "ImportAgent": "Importador",
-    "import": "Importador",
+    "data_import": "Importador",  # Renamed from "import" (Python reserved word)
     "import_agent": "Importador",
 
     # Validation & Compliance

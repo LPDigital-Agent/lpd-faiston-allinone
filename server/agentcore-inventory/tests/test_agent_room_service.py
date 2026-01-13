@@ -556,7 +556,7 @@ class TestEmitAgentEvent:
             mock_audit_logger.log_event.return_value = False
 
             result = agent_room_service.emit_agent_event(
-                agent_id="import",
+                agent_id="data_import",  # Renamed from "import" (Python reserved word)
                 status="problema",
                 message="Erro ao importar",
             )

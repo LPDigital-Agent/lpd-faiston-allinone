@@ -16,13 +16,14 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 
 # Expected agents
+# NOTE: "data_import" because "import" is a Python reserved keyword (SyntaxError)
 EXPECTED_AGENTS = [
     "carrier",
     "compliance",
+    "data_import",  # Renamed from "import" - Python reserved word
     "equipment_research",
     "estoque_control",
     "expedition",
-    "import",
     "intake",
     "learning",
     "nexo_import",
@@ -34,10 +35,11 @@ EXPECTED_AGENTS = [
 ]
 
 # Agent roles for documentation
+# NOTE: "data_import" renamed from "import" (Python reserved keyword)
 AGENT_ROLES = {
     "nexo_import": "ORCHESTRATOR",
     "intake": "SPECIALIST (NF Parsing)",
-    "import": "SPECIALIST (Spreadsheet)",
+    "data_import": "SPECIALIST (Spreadsheet)",  # Renamed from "import"
     "estoque_control": "SPECIALIST (Inventory Control)",
     "learning": "SPECIALIST (Memory/Learning)",
     "observation": "SUPPORT (Audit Trail)",

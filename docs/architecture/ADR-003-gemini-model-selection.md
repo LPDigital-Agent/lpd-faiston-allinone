@@ -209,10 +209,10 @@ MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.0-flash")
 
 **Import Agents (Pro + Thinking)**:
 ```
-agents/nexo_import/agent.py      → get_model("nexo_import")
-agents/intake/agent.py           → get_model("intake")
-agents/import/agent.py           → get_model("import")
-agents/learning/agent.py         → get_model("learning")
+agents/nexo_import/agent.py       → get_model("nexo_import")
+agents/intake/agent.py            → get_model("intake")
+agents/data_import/agent.py       → get_model("data_import")  # Renamed from import (Python reserved)
+agents/learning/agent.py          → get_model("learning")
 agents/schema_evolution/agent.py → get_model("schema_evolution")
 agents/intake/tools/match_items.py → gemini-3.0-pro
 agents/intake/tools/parse_nf.py    → gemini-3.0-pro

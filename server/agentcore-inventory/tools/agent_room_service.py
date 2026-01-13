@@ -49,7 +49,7 @@ def emit_agent_event(
     Call this whenever an agent starts, progresses, or completes work.
 
     Args:
-        agent_id: Agent identifier (e.g., "nexo_import", "intake", "import")
+        agent_id: Agent identifier (e.g., "nexo_import", "intake", "data_import")
         status: Current status (e.g., "trabalhando", "esperando_voce", "disponivel")
         message: Human-readable message describing what agent is doing
         session_id: Optional session ID for tracking

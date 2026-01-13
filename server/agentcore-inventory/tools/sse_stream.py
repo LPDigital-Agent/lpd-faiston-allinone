@@ -33,7 +33,7 @@ from tools.humanizer import (
 AGENT_NAMES: Dict[str, str] = {
     "nexo_import": "NEXO",
     "intake": "Leitor de Notas",
-    "import": "Importador",
+    "data_import": "Importador",  # Renamed from "import" (Python reserved word)
     "estoque_control": "Controlador",
     "compliance": "Validador",
     "reconciliacao": "Reconciliador",
