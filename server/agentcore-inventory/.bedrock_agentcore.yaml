@@ -257,10 +257,12 @@ agents:
 
   # ---------------------------------------------------------------------------
   # ImportAgent - Bulk import (spreadsheets, CSV)
+  # NOTE: Runtime name is faiston_sga_import (AWS immutable), but code is in agents/data_import/
+  # because "import" is a Python reserved keyword (SyntaxError when used as module name)
   # ---------------------------------------------------------------------------
   faiston_sga_import:
     name: faiston_sga_import
-    entrypoint: agents/import/main.py
+    entrypoint: agents/data_import/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
