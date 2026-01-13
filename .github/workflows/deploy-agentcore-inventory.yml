@@ -2,13 +2,13 @@
 # AgentCore Deployment Workflow - Faiston SGA Multi-Agent System
 # =============================================================================
 # Deploys 15 Python agents to AWS Bedrock AgentCore Runtime
-# Uses Google ADK with native Gemini 3.0 Pro models
+# Uses AWS Strands Agents Framework with Gemini 3.0 Pro
 #
 # Architecture:
 # - 1 Orchestrator: faiston_asset_management (HTTP protocol, JWT auth)
 # - 13 Specialists: faiston_sga_* (A2A protocol, SigV4 auth)
 #
-# Framework: Google ADK (Agent Development Kit)
+# Framework: AWS Strands Agents
 # Model: All agents use gemini-3-pro-preview exclusively
 # AWS Account: 377311924364 (Faiston One)
 #
