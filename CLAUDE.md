@@ -39,18 +39,25 @@ To be used on web research we are in year 2026.
 
   
 
-## 🧠 LLM POLICY — IMMUTABLE & MANDATORY (GEMINI 3 FAMILY ONLY)
+## 🧠 LLM POLICY — IMMUTABLE & MANDATORY (GEMINI 3 FAMILY ONLY) - Change Temporay to 2.5 Family
 
-- **ABSOLUTE RULE:** ALL agents MUST use **GEMINI 3.0 FAMILY** as the LLM. This rule is **MANDATORY** and MUST NEVER be removed.
+- **ABSOLUTE RULE:** ALL agents MUST use **GEMINI 2.5 FAMILY** as the LLM. This rule is **MANDATORY** and MUST NEVER be removed.
   - **CRITICAL INVENTORY AGENTS (MANDATORY):** Any agent in the Inventory/SGA flow that:
     - analyzes stock/inventory files (XML/PDF/CSV/XLSX/images/text),
     - performs reasoning over extracted data,
     - generates clarification questions (HIL),
     - validates mappings and reconciles inventory,
-    MUST use **GEMINI 3.0 PRO** with **THINKING ENABLED**.
-  - **NON-CRITICAL AGENTS:** All other agents MAY use **GEMINI 3.0 FLASH**.
+    MUST use **GEMINI 2.5 PRO** with **THINKING ENABLED**.
+  - **NON-CRITICAL AGENTS:** All other agents MAY use **GEMINI 2.5 FLASH**.
 
-- **NO EXCEPTIONS:** Do NOT use Gemini 2.x, 2.5, or any non-Gemini model for agents.
+- **TEMPORARY EXCEPTION (Strands SDK Limitation):**
+  - AWS Strands Agents SDK does **NOT YET support Gemini 2.5** natively.
+  - Until Strands adds Gemini 2.5 support, agents using Strands A2A framework MAY use **Gemini 2.5 Pro** as a temporary workaround.
+  - This exception applies ONLY to agents running on **AWS Bedrock AgentCore** with Strands A2AServer.
+  - **TRACK:** Monitor Strands releases at https://strandsagents.com/latest/ for Gemini 2.5 support.
+  - **ACTION REQUIRED:** When Strands adds Gemini 2.5 support, immediately migrate ALL agents and REMOVE this exception.
+
+- **NO OTHER EXCEPTIONS:** Outside the Strands SDK limitation above, do NOT use Gemini 2.x or any non-Gemini model for agents.
 
 - **DOCUMENTATION (SOURCE OF TRUTH):**
   - https://ai.google.dev/gemini-api/docs/gemini-3
@@ -141,7 +148,35 @@ To be used on web research we are in year 2026.
 
 ## 🤖 NEXO AGENT — AGI-LIKE BEHAVIOR (IMMUTABLE & MEGA MANDATORY)
 
+> **DETAILED ARCHITECTURE**: See `docs/SMART_IMPORT_ARCHITECTURE.md` for complete flow diagrams, runtime IDs, and code locations.
+
 > This section defines the **MANDATORY behavior** for NEXO and ALL inventory import agents. Any implementation that deviates from this is **WRONG** and MUST be corrected.
+
+### CRITICAL: Authentication Protocol Architecture
+
+> **DETAILED DOCUMENTATION**: See `docs/AUTHENTICATION_ARCHITECTURE.md` for complete auth flow, troubleshooting, and ADRs.
+
+```
+Frontend (JWT) → faiston_asset_management (HTTP) → faiston_sga_* (A2A/SigV4)
+```
+
+**Protocol Rules:**
+- **NEVER** call `faiston_sga_*` agents directly from frontend
+- Frontend MUST call `faiston_asset_management-uSuLPsFQNH` (HTTP orchestrator)
+- Orchestrator routes to specialist agents via A2A protocol
+- Calling A2A agent with JWT → "Empty response payload" (auth mismatch)
+
+**JWT Authorizer Configuration (MANDATORY):**
+- JWT config MUST be in `.bedrock_agentcore.yaml` (NOT just workflow)
+- **WHY:** AgentCore deployment is ASYNC - post-deploy config gets overwritten
+- **Config Location:** `/server/agentcore-inventory/.bedrock_agentcore.yaml` line 76
+- **Cognito Pool:** `us-east-2_lkBXr4kjy`
+- **Cognito Client:** `7ovjm09dr94e52mpejvbu9v1cg`
+
+**Troubleshooting 403 Errors:**
+1. Check if `authorizerConfiguration` is empty in AWS runtime
+2. Verify JWT config exists in `.bedrock_agentcore.yaml`
+3. Redeploy if config was reset by async processing
 
 ### Core Principle: Multi-Round Iterative HIL Dialogue
 

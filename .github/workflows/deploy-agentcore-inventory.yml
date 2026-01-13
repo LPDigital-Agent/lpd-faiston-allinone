@@ -177,8 +177,21 @@ jobs:
           echo "Orchestrator Runtime ID: $RUNTIME_ID"
 
   # ===========================================================================
-  # Configure Orchestrator JWT Authorizer
+  # Configure Orchestrator JWT Authorizer (BACKUP/VERIFICATION)
   # ===========================================================================
+  # IMPORTANT: JWT config is now PRIMARY in .bedrock_agentcore.yaml
+  #
+  # WHY: AgentCore deployments are ASYNC. When deploying via CLI:
+  #   1. Workflow deploys agent → returns immediately
+  #   2. AWS continues processing async (~20 minutes)
+  #   3. Async completion RESETS config to what's in YAML
+  #
+  # PROBLEM: Previously, this job ran AFTER deploy and set JWT config.
+  #          But AWS async completion (20 min later) would RESET it to null!
+  #
+  # SOLUTION: JWT authorizer config is now in .bedrock_agentcore.yaml
+  #           This job remains as a backup/verification step.
+  #
   # NOTE: SSM Registry update REMOVED (100% A2A Architecture)
   # Agent runtime IDs are now hardcoded in a2a_client.py - no SSM lookup needed
   # ===========================================================================
