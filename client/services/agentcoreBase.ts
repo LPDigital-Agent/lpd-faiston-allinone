@@ -15,7 +15,7 @@
 // - Proper error handling with user-friendly messages
 // =============================================================================
 
-import { getAccessToken } from './authService';
+import { ensureValidToken } from '@/utils/tokenRefresh';
 import { AGENTCORE_ENDPOINT } from '@/lib/config/agentcore';
 
 // =============================================================================
@@ -173,8 +173,8 @@ export function createAgentCoreService(config: AgentCoreServiceConfig) {
       : options;
     const { useSession = true, signal } = opts;
 
-    // Get JWT token from authService
-    const token = await getAccessToken();
+    // Get JWT token - ensures token is valid and refreshes if expiring soon
+    const token = await ensureValidToken();
     if (!token) {
       throw new Error('Nao autenticado. Por favor, faca login novamente.');
     }
