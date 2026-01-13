@@ -241,9 +241,10 @@ TRACKED_ACTIONS = {
     "confirm_nf_entry": ("intake", "Confirmando entrada da NF..."),
     "process_scanned_nf_upload": ("intake", "Lendo NF escaneada..."),
     # Smart Import
-    "smart_import_upload": ("import", "Processando arquivo..."),
-    "preview_import": ("import", "Analisando dados..."),
-    "execute_import": ("import", "Importando dados..."),
+    # NOTE: "data_import" because "import" is a Python reserved keyword
+    "smart_import_upload": ("data_import", "Processando arquivo..."),
+    "preview_import": ("data_import", "Analisando dados..."),
+    "execute_import": ("data_import", "Importando dados..."),
     # Movements (EstoqueControlAgent)
     "create_movement": ("estoque_control", "Registrando movimentação..."),
     "create_transfer": ("estoque_control", "Processando transferência..."),
@@ -1276,7 +1277,7 @@ async def _preview_sap_import(payload: dict, user_id: str, session_id: str = "de
         return {"success": False, "error": "file_content is required"}
 
     return await _invoke_agent_a2a(
-        agent_id="import",
+        agent_id="data_import",
         action="preview_import",
         payload={
             "file_content": file_content_b64,
@@ -1317,7 +1318,7 @@ async def _execute_sap_import(payload: dict, user_id: str, session_id: str = "de
         return {"success": False, "error": "import_id is required"}
 
     result = await _invoke_agent_a2a(
-        agent_id="import",
+        agent_id="data_import",
         action="execute_sap_import",
         payload={
             "import_id": import_id,
@@ -1822,7 +1823,7 @@ async def _preview_import(payload: dict, user_id: str, session_id: str = "defaul
         return {"success": False, "error": "file_content_base64 is required"}
 
     return await _invoke_agent_a2a(
-        agent_id="import",
+        agent_id="data_import",
         action="preview_import",
         payload={
             "file_content": file_content_b64,
@@ -1893,7 +1894,7 @@ async def _execute_import(payload: dict, user_id: str, session_id: str = "defaul
     # Agent Room: emit start event
     from tools.agent_room_service import emit_agent_event
     emit_agent_event(
-        agent_id="import",
+        agent_id="data_import",
         status="trabalhando",
         message=f"Iniciando importação de {filename}...",
         details={"import_id": import_id, "filename": filename},
@@ -2069,7 +2070,7 @@ async def _execute_import(payload: dict, user_id: str, session_id: str = "defaul
     # Agent Room: emit completion event
     if len(failed_rows) > 0:
         emit_agent_event(
-            agent_id="import",
+            agent_id="data_import",
             status="disponivel",
             message=f"Importação concluída: {len(created_movements)} itens ok, {len(failed_rows)} com erro.",
             details={
@@ -2080,7 +2081,7 @@ async def _execute_import(payload: dict, user_id: str, session_id: str = "defaul
         )
     else:
         emit_agent_event(
-            agent_id="import",
+            agent_id="data_import",
             status="disponivel",
             message=f"Importação concluída com sucesso! {len(created_movements)} itens importados.",
             details={"count": len(created_movements), "filename": filename},
@@ -2127,7 +2128,7 @@ async def _validate_pn_mapping(payload: dict, session_id: str = "default") -> di
     # A2A Protocol (100% Agentic Architecture)
     # =================================================================
     return await _invoke_agent_a2a(
-        agent_id="import",
+        agent_id="data_import",
         action="validate_mapping",
         payload={
             "description": description,
@@ -2232,7 +2233,7 @@ async def _smart_import_upload(payload: dict, user_id: str, session_id: str = "d
         file_content_b64 = base64.b64encode(file_data).decode("utf-8")
 
         a2a_result = await _invoke_agent_a2a(
-            agent_id="import",
+            agent_id="data_import",
             action="preview_import",
             payload={
                 "file_content": file_content_b64,
@@ -2260,7 +2261,7 @@ async def _smart_import_upload(payload: dict, user_id: str, session_id: str = "d
             text_content = file_data.decode("latin-1")
 
         a2a_result = await _invoke_agent_a2a(
-            agent_id="import",
+            agent_id="data_import",
             action="process_text_import",
             payload={
                 "file_content": text_content,
