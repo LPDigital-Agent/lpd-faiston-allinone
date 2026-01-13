@@ -14,7 +14,7 @@ from shared.xray_tracer import trace_tool_call
 
 logger = logging.getLogger(__name__)
 
-AGENT_ID = "import"
+AGENT_ID = "data_import"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 
@@ -82,7 +82,7 @@ async def execute_import_tool(
         )
 
         # Download and parse file
-        from agents.import.tools.preview_import import _download_file, _parse_csv, _parse_excel
+        from agents.data_import.tools.preview_import import _download_file, _parse_csv, _parse_excel
 
         file_content, file_type = await _download_file(s3_key)
         if not file_content:

@@ -16,7 +16,7 @@ from shared.xray_tracer import trace_tool_call
 
 logger = logging.getLogger(__name__)
 
-AGENT_ID = "import"
+AGENT_ID = "data_import"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
 # Column mapping patterns (source → target)

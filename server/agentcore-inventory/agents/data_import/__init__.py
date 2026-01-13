@@ -16,7 +16,7 @@
 # - Entry Point: main.py with Strands A2AServer
 # =============================================================================
 
-from agents.import.main import create_agent, AGENT_ID, AGENT_NAME
+from agents.data_import.main import create_agent, AGENT_ID, AGENT_NAME
 
 __all__ = [
     "create_agent",

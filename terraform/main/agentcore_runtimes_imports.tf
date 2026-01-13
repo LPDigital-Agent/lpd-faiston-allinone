@@ -37,7 +37,7 @@ import {
 }
 
 import {
-  to = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents["import"]
+  to = aws_bedrockagentcore_agent_runtime_endpoint.sga_agents["data_import"]
   id = "faiston_sga_import-sM56rCFLIr,DEFAULT"
 }
 

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-AGENT_ID = "import"
+AGENT_ID = "data_import"
 AGENT_NAME = "ImportAgent"
 AGENT_DESCRIPTION = """SPECIALIST Agent for Bulk Spreadsheet Imports.
 
@@ -208,7 +208,7 @@ async def preview_import(
 
     try:
         # Import tool implementation
-        from agents.import.tools.preview_import import preview_import_tool
+        from agents.data_import.tools.preview_import import preview_import_tool
 
         result = await preview_import_tool(
             s3_key=s3_key,
@@ -275,7 +275,7 @@ async def detect_columns(
 
         # Import tool implementation (if exists)
         try:
-            from agents.import.tools.detect_columns import detect_columns_tool
+            from agents.data_import.tools.detect_columns import detect_columns_tool
             result = await detect_columns_tool(
                 columns=columns,
                 sample_data=sample_data,
@@ -365,7 +365,7 @@ async def match_rows_to_pn(
     try:
         # Import tool implementation (if exists)
         try:
-            from agents.import.tools.match_rows import match_rows_to_pn_tool
+            from agents.data_import.tools.match_rows import match_rows_to_pn_tool
             result = await match_rows_to_pn_tool(
                 rows=rows,
                 column_mappings=column_mappings,
@@ -414,7 +414,7 @@ async def execute_import(
 
     try:
         # Import tool implementation
-        from agents.import.tools.execute_import import execute_import_tool
+        from agents.data_import.tools.execute_import import execute_import_tool
 
         result = await execute_import_tool(
             s3_key=s3_key,

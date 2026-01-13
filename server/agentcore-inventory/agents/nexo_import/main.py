@@ -328,7 +328,7 @@ async def execute_import(
 
     try:
         # Delegate to ImportAgent for actual import execution
-        import_response = await a2a_client.invoke_agent("import", {
+        import_response = await a2a_client.invoke_agent("data_import", {
             "action": "execute_import",
             "s3_key": s3_key,
             "column_mappings": column_mappings,
@@ -396,13 +396,13 @@ async def route_to_specialist(
     specialist_map = {
         "NF_XML": "intake",
         "NF_PDF": "intake",
-        "CSV": "import",
-        "XLSX": "import",
-        "XLS": "import",
-        "TEXT": "import",
+        "CSV": "data_import",
+        "XLSX": "data_import",
+        "XLS": "data_import",
+        "TEXT": "data_import",
     }
 
-    specialist = specialist_map.get(file_type.upper(), "import")
+    specialist = specialist_map.get(file_type.upper(), "data_import")
 
     try:
         response = await a2a_client.invoke_agent(specialist, payload, session_id)

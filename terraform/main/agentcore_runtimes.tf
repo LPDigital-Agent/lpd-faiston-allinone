@@ -114,7 +114,7 @@ locals {
       ]
     }
 
-    import = {
+    data_import = {
       name            = "ImportAgent"
       description     = "Bulk import agent for spreadsheets and CSV files"
       entry_point     = ["main.py"]
