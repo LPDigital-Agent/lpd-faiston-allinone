@@ -331,6 +331,82 @@ CREATE INDEX idx_reservation_status ON reservations(status);
 CREATE INDEX idx_reservation_expires ON reservations(expires_at);
 ```
 
+### Table: `pending_entries`
+
+Smart Import batch entries - groups of items imported from CSV/XLSX files.
+
+```sql
+CREATE TABLE pending_entries (
+    entry_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    import_batch_id VARCHAR(100),
+    source_file VARCHAR(255),
+    source_type VARCHAR(50),        -- 'csv', 'xlsx', 'xml', 'pdf'
+    status VARCHAR(50) DEFAULT 'pending',  -- 'pending', 'processing', 'completed', 'failed'
+    total_items INTEGER DEFAULT 0,
+    processed_items INTEGER DEFAULT 0,
+    confidence_score DECIMAL(3,2),
+    hil_task_id UUID,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by VARCHAR(100)
+);
+
+CREATE INDEX idx_pending_entries_batch ON pending_entries(import_batch_id);
+CREATE INDEX idx_pending_entries_status ON pending_entries(status);
+```
+
+### Table: `pending_entry_items`
+
+Individual items within a pending entry batch. Supports Smart Import of expedition CSV files.
+
+```sql
+CREATE TABLE pending_entry_items (
+    item_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entry_id UUID REFERENCES pending_entries(entry_id),
+    pn_id UUID REFERENCES part_numbers(pn_id),
+    pn_code VARCHAR(50),
+    description TEXT,
+    serial_number VARCHAR(100),
+    quantity INTEGER DEFAULT 1,
+    location_code VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'pending',
+    validation_errors JSONB DEFAULT '[]',
+    confidence_score DECIMAL(3,2),
+    metadata JSONB DEFAULT '{}',
+
+    -- Expedition Fields (Migration 007)
+    request_date DATE,              -- DATA SOLICITAÇÃO
+    expedition_date DATE,           -- DATA EXPEDIÇÃO
+    tflux_ticket VARCHAR(50),       -- N° TICKET (TFLUX support ticket)
+    responsible_person VARCHAR(100), -- RESPONSABILIDADE
+    replacement_info VARCHAR(255),   -- REPOSIÇÃO
+    stock_validated VARCHAR(50),     -- VALIDADO NO ESTOQUE
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_pending_entry_items_entry ON pending_entry_items(entry_id);
+CREATE INDEX idx_pending_entry_items_pn ON pending_entry_items(pn_code);
+CREATE INDEX idx_pending_entry_items_serial ON pending_entry_items(serial_number);
+CREATE INDEX idx_pending_entry_items_status ON pending_entry_items(status);
+CREATE INDEX idx_pending_entry_items_tflux ON pending_entry_items(tflux_ticket);
+CREATE INDEX idx_pending_entry_items_request_date ON pending_entry_items(request_date);
+CREATE INDEX idx_pending_entry_items_responsible ON pending_entry_items(responsible_person);
+```
+
+#### Expedition Fields Reference
+
+| CSV Column | DB Column | Type | Description |
+|------------|-----------|------|-------------|
+| DATA SOLICITAÇÃO | `request_date` | DATE | Request date from expedition |
+| DATA EXPEDIÇÃO | `expedition_date` | DATE | Expedition/shipment date |
+| N° TICKET | `tflux_ticket` | VARCHAR(50) | TFLUX support ticket number |
+| RESPONSABILIDADE | `responsible_person` | VARCHAR(100) | Person responsible |
+| REPOSIÇÃO | `replacement_info` | VARCHAR(255) | Replacement information |
+| VALIDADO NO ESTOQUE | `stock_validated` | VARCHAR(50) | Stock validation status |
+
 ### Triggers
 
 ```sql
@@ -617,11 +693,13 @@ Location: `server/agentcore-inventory/schema/`
 
 ```
 schema/
-├── 001_initial_schema.sql
-├── 002_add_reservations.sql
-├── 003_add_audit_columns.sql
-├── 004_add_hil_support.sql
-└── migrations.json
+├── 001_initial_schema.sql       # Base tables, enums, comments
+├── 002_indexes.sql              # B-tree, GIN, and partial indexes
+├── 003_triggers.sql             # Triggers, functions, validation
+├── 004_materialized_views.sql   # Dashboard materialized views
+├── 005_equipment_research.sql   # Equipment research tables
+├── 006_schema_evolution.sql     # Schema evolution support
+└── 007_expedition_fields.sql    # Expedition fields for Smart Import
 ```
 
 ### Migration Lambda
