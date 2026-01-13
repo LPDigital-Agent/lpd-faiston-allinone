@@ -271,7 +271,7 @@ async def _recall_similar_answer(
 **Technical Details:**
 
 ```
-Memory ID: nexo_agent_mem-Z5uQr8CDGf
+Memory ID: nexo_sga_learning_memory-u3ypElEdl1
 Namespace: /strategy/import/company (GLOBAL)
 Scope: Company-wide (not per-user)
 Strategy: Self-managed (custom consolidation)
@@ -290,7 +290,7 @@ NEXO utiliza as APIs **oficiais** do AWS Bedrock AgentCore Memory SDK:
 from bedrock_agentcore.memory import MemoryClient
 
 # Initialize client with memory ID
-memory_client = MemoryClient(memory_id="nexo_agent_mem-Z5uQr8CDGf")
+memory_client = MemoryClient(memory_id="nexo_sga_learning_memory-u3ypElEdl1")
 
 # =============================================================================
 # CreateEvent - A ÚNICA API para armazenar memória

@@ -198,7 +198,7 @@ Use AgentCore Memory resources ONLY if required by the task.
 
 | Memory ID | Runtime | Purpose |
 |-----------|---------|---------|
-| `nexo_agent_mem-Z5uQr8CDGf` | agentcore-inventory | Smart Import episodic learning |
+| `nexo_sga_learning_memory-u3ypElEdl1` | agentcore-inventory | Smart Import episodic learning |
 | `faiston_portal_agents_mem-*` | agentcore-portal | Portal/Academy STM conversation context |
 
 > **Note:** Academy agents were consolidated into `agentcore-portal`. Check Terraform state for current memory IDs.

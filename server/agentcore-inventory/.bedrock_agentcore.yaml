@@ -55,10 +55,11 @@ agents:
       project_name: null
       execution_role: null
       source_bucket: null
-    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
-    # TODO: Create new memory with `agentcore memory create` and update config
+    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
+    # GLOBAL namespace: /strategy/import/company (company-wide learning)
     memory:
-      mode: NO_MEMORY
+      mode: FULL
+      memory_id: nexo_sga_learning_memory-u3ypElEdl1
     identity:
       credential_providers: []
       workload: null
@@ -109,9 +110,10 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
+    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
     memory:
-      mode: NO_MEMORY
+      mode: FULL
+      memory_id: nexo_sga_learning_memory-u3ypElEdl1
 
   # ---------------------------------------------------------------------------
   # LearningAgent - Episodic memory and pattern learning
@@ -143,9 +145,10 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
+    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
     memory:
-      mode: NO_MEMORY
+      mode: FULL
+      memory_id: nexo_sga_learning_memory-u3ypElEdl1
 
   # ---------------------------------------------------------------------------
   # ValidationAgent - Schema and data validation
@@ -208,9 +211,10 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-    # Memory temporarily disabled - memory nexo_agent_mem-Z5uQr8CDGf was deleted
+    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
     memory:
-      mode: NO_MEMORY
+      mode: FULL
+      memory_id: nexo_sga_learning_memory-u3ypElEdl1
 
   # ---------------------------------------------------------------------------
   # IntakeAgent - NF reader (PDF/XML)

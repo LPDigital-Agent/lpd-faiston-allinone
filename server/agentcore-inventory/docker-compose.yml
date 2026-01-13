@@ -33,7 +33,7 @@ services:
     environment:
       <<: *common-env
       AGENT_ID: learning
-      MEMORY_ID: ${MEMORY_ID:-nexo_agent_mem-Z5uQr8CDGf}
+      MEMORY_ID: ${MEMORY_ID:-nexo_sga_learning_memory-u3ypElEdl1}
     volumes:
       - ./shared:/app/shared:ro
     healthcheck:

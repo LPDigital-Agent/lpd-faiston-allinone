@@ -253,7 +253,7 @@ locals {
     AWS_REGION = var.aws_region
 
     # AgentCore Memory (GLOBAL namespace)
-    AGENTCORE_MEMORY_ID        = "nexo_agent_mem-Z5uQr8CDGf"
+    AGENTCORE_MEMORY_ID        = "nexo_sga_learning_memory-u3ypElEdl1"
     AGENTCORE_MEMORY_NAMESPACE = "/strategy/import/company"
 
     # AgentCore Gateway

@@ -49,7 +49,7 @@ ENV AGENT_ID=learning
 ENV AGENT_NAME=LearningAgent
 
 # AgentCore Memory (default, can be overridden)
-ENV AGENTCORE_MEMORY_ID=nexo_agent_mem-Z5uQr8CDGf
+ENV AGENTCORE_MEMORY_ID=nexo_sga_learning_memory-u3ypElEdl1
 
 # Expose A2A port (MANDATORY: port 9000)
 EXPOSE 9000

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Agent configuration
 AGENT_ID = "learning"
-MEMORY_ID = os.environ.get("AGENTCORE_MEMORY_ID", "nexo_agent_mem-Z5uQr8CDGf")
+MEMORY_ID = os.environ.get("AGENTCORE_MEMORY_ID", "nexo_sga_learning_memory-u3ypElEdl1")
 MEMORY_NAMESPACE = "/strategy/import/company"  # GLOBAL!
 
 # Audit emitter

@@ -147,7 +147,7 @@ jobs:
             --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp \
             --env GIT_COMMIT_SHA=${{ github.sha }} \
             --env DEPLOYED_AT=$DEPLOY_TIMESTAMP \
-            --env AGENTCORE_MEMORY_ID=nexo_agent_mem-Z5uQr8CDGf \
+            --env AGENTCORE_MEMORY_ID=nexo_sga_learning_memory-u3ypElEdl1 \
             --env PROJECT_NAME=faiston-one \
             --env AGENT_ID=${{ matrix.agent }}
 

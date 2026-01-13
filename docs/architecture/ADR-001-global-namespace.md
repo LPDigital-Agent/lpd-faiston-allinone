@@ -167,7 +167,7 @@ results = await query(namespaces=[f"/user/{user_id}", "/company"])
 # .bedrock_agentcore.yaml
 memory:
   mode: STM_AND_LTM
-  memory_id: nexo_agent_mem-Z5uQr8CDGf
+  memory_id: nexo_sga_learning_memory-u3ypElEdl1
   event_expiry_days: 30
   # Namespace managed at application level
 ```
