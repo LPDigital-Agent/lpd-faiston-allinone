@@ -383,8 +383,12 @@ function QuestionPanel({
   // State for free text feedback field
   const [freeText, setFreeText] = useState('');
 
-  const criticalQuestions = questions.filter(q => q.importance === 'critical');
-  const optionalQuestions = questions.filter(q => q.importance !== 'critical');
+  // Separate unmapped questions (AGI-like) from regular questions
+  const unmappedQuestions = questions.filter(q => q.topic === 'unmapped');
+  const regularQuestions = questions.filter(q => q.topic !== 'unmapped');
+
+  const criticalQuestions = regularQuestions.filter(q => q.importance === 'critical');
+  const optionalQuestions = regularQuestions.filter(q => q.importance !== 'critical');
 
   // Check if critical questions are answered (including "Outros" with text)
   const allCriticalAnswered = criticalQuestions.every(q => {
@@ -395,6 +399,13 @@ function QuestionPanel({
     }
     return !!answer;
   });
+
+  // Check if all unmapped (blocking) questions are answered
+  // These questions don't have "Outros" option, just the 3 fixed options
+  const allUnmappedAnswered = unmappedQuestions.every(q => !!answers[q.id]);
+
+  // Both critical regular questions AND unmapped questions must be answered
+  const canSubmit = allCriticalAnswered && allUnmappedAnswered;
 
   // Handler for "Outros" text changes
   const handleOtherTextChange = (questionId: string, text: string) => {
@@ -453,7 +464,33 @@ function QuestionPanel({
         <Badge variant="outline">{questions.length} perguntas</Badge>
       </div>
 
-      {/* Critical questions first */}
+      {/* Unmapped columns first (AGI-like - blocking questions) */}
+      {unmappedQuestions.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 p-3 bg-orange-500/10 rounded-lg border border-orange-500/20">
+            <AlertTriangle className="w-5 h-5 text-orange-400" />
+            <div>
+              <p className="text-sm font-medium text-orange-300">
+                {unmappedQuestions.length} coluna(s) não existe(m) no banco de dados
+              </p>
+              <p className="text-xs text-orange-200/70">
+                Escolha o que fazer com cada coluna antes de continuar
+              </p>
+            </div>
+          </div>
+
+          {unmappedQuestions.map((question) => (
+            <UnmappedColumnQuestionItem
+              key={question.id}
+              question={question}
+              answer={answers[question.id]}
+              onAnswer={onAnswer}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Critical questions */}
       {criticalQuestions.length > 0 && (
         <div className="space-y-4">
           <p className="text-sm text-text-muted flex items-center gap-2">
@@ -543,7 +580,7 @@ function QuestionPanel({
         </Button>
         <Button
           onClick={handleSubmit}
-          disabled={!allCriticalAnswered || isSubmitting}
+          disabled={!canSubmit || isSubmitting}
           className="bg-gradient-to-r from-cyan-500 to-purple-500 text-white"
         >
           {isSubmitting ? (
@@ -686,6 +723,131 @@ function QuestionItem({
             rows={3}
           />
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Unmapped Column Question Item - AGI-like UI for columns not in DB schema.
+ * Shows 3 options with visual indicators:
+ * - Ignore (warning) - Data will be lost
+ * - Store in metadata (recommended) - Preserve in JSONB field
+ * - Request DB update (contact_it) - Instruct user to contact IT
+ */
+function UnmappedColumnQuestionItem({
+  question,
+  answer,
+  onAnswer,
+}: {
+  question: NexoQuestion;
+  answer?: string;
+  onAnswer: (questionId: string, answer: string) => void;
+}) {
+  // Check if "request_db_update" is selected to show IT contact info
+  const showItContactNote = answer === 'request_db_update' && question.it_contact_note;
+
+  return (
+    <div className="p-4 bg-orange-500/5 rounded-lg border border-orange-500/20 space-y-4">
+      {/* Header with column name and blocking badge */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="w-4 h-4 text-orange-400" />
+            <Badge className="bg-orange-500/20 text-orange-400 text-xs">
+              Coluna não mapeada
+            </Badge>
+            {question.blocking && (
+              <Badge className="bg-red-500/20 text-red-400 text-xs">
+                Bloqueante
+              </Badge>
+            )}
+          </div>
+          <p className="font-medium text-orange-200">{question.question}</p>
+          {question.context && (
+            <p className="text-sm text-text-muted mt-1">
+              {question.context}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Options with visual indicators */}
+      <RadioGroup
+        value={answer ?? ''}
+        onValueChange={(value: string) => onAnswer(question.id, value)}
+        className="space-y-3"
+      >
+        {question.options.map((option) => {
+          const isWarning = option.warning;
+          const isRecommended = option.recommended;
+          const isContactIt = option.contact_it;
+
+          // Different background styles based on option type
+          const optionBgClass = isWarning
+            ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
+            : isRecommended
+            ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/15'
+            : isContactIt
+            ? 'bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15'
+            : 'bg-white/5 border-white/10 hover:bg-white/10';
+
+          return (
+            <div
+              key={option.value}
+              className={`p-3 rounded-lg border transition-colors ${optionBgClass}`}
+            >
+              <div className="flex items-start space-x-3">
+                <RadioGroupItem
+                  value={option.value}
+                  id={`${question.id}-${option.value}`}
+                  className="mt-1"
+                />
+                <Label
+                  htmlFor={`${question.id}-${option.value}`}
+                  className="flex-1 cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{option.label}</span>
+                    {isWarning && (
+                      <Badge className="bg-red-500/30 text-red-300 text-xs">
+                        ⚠️ Dados perdidos
+                      </Badge>
+                    )}
+                    {isRecommended && (
+                      <Badge className="bg-green-500/30 text-green-300 text-xs">
+                        ✓ Recomendado
+                      </Badge>
+                    )}
+                    {isContactIt && (
+                      <Badge className="bg-blue-500/30 text-blue-300 text-xs">
+                        📧 Contatar TI
+                      </Badge>
+                    )}
+                  </div>
+                  {option.description && (
+                    <p className="text-sm text-text-muted mt-1">{option.description}</p>
+                  )}
+                </Label>
+              </div>
+            </div>
+          );
+        })}
+      </RadioGroup>
+
+      {/* IT Contact Note - shown when "request_db_update" is selected */}
+      {showItContactNote && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20"
+        >
+          <div className="flex items-start gap-2">
+            <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-blue-200">{question.it_contact_note}</p>
+          </div>
+        </motion.div>
       )}
     </div>
   );

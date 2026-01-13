@@ -1090,19 +1090,28 @@ export interface NexoColumnMapping {
 
 /**
  * Clarification question from NEXO.
+ * Supports both regular HIL questions and unmapped column questions (AGI-like behavior).
  */
 export interface NexoQuestion {
   id: string;
   question: string;
   context?: string;
   importance: 'critical' | 'high' | 'medium' | 'low';
-  topic: 'column_mapping' | 'sheet_selection' | 'movement_type' | 'data_validation' | 'other';
+  topic: 'column_mapping' | 'sheet_selection' | 'movement_type' | 'data_validation' | 'unmapped' | 'other';
   options: Array<{
     value: string;
     label: string;
     description?: string;
+    warning?: boolean;      // Show warning indicator (e.g., for "ignore" option)
+    recommended?: boolean;  // Show recommended indicator
+    contact_it?: boolean;   // Show IT contact instructions
   }>;
   default_value?: string;
+  // AGI-like fields for unmapped columns
+  column?: string;           // Source column name (for unmapped questions)
+  suggested_action?: string; // Backend suggested action (ignore, metadata, request_db_update)
+  blocking?: boolean;        // Whether this question blocks import until answered
+  it_contact_note?: string;  // Instructions for contacting IT team
 }
 
 /**
@@ -1135,6 +1144,25 @@ export interface NexoAnalyzeFileResponse {
   column_mappings: NexoColumnMapping[];
   overall_confidence: number;
   questions: NexoQuestion[];
+  // AGI-like: Unmapped columns that don't exist in DB schema (blocking questions)
+  unmapped_questions?: Array<{
+    id: string;
+    type: 'unmapped';
+    column: string;
+    question: string;
+    description?: string;
+    suggested_action: string;
+    options: Array<{
+      value: string;
+      label: string;
+      description?: string;
+      warning?: boolean;
+      recommended?: boolean;
+      contact_it?: boolean;
+    }>;
+    blocking: boolean;
+    it_contact_note?: string;
+  }>;
   reasoning_trace: NexoReasoningStep[];
   user_id?: string;
   session_id?: string;

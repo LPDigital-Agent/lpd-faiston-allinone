@@ -457,17 +457,49 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         updated_at: new Date().toISOString(),
       };
 
+      // Merge regular questions with unmapped column questions (AGI-like behavior)
+      // Unmapped questions have topic='unmapped' and blocking=true
+      const regularQuestions = data.questions || [];
+      const unmappedQuestions: NexoQuestion[] = (data.unmapped_questions || []).map((uq: Record<string, unknown>) => ({
+        id: uq.id as string,
+        question: uq.question as string,
+        context: uq.description as string,
+        importance: 'critical' as const,  // Unmapped columns are critical - they block import
+        topic: 'unmapped' as const,
+        options: (uq.options as Array<Record<string, unknown>>)?.map((opt) => ({
+          value: opt.value as string,
+          label: opt.label as string,
+          description: opt.description as string | undefined,
+          warning: opt.warning as boolean | undefined,
+          recommended: opt.recommended as boolean | undefined,
+          contact_it: opt.contact_it as boolean | undefined,
+        })) || [],
+        // AGI-like fields for unmapped columns
+        column: uq.column as string,
+        suggested_action: uq.suggested_action as string,
+        blocking: uq.blocking as boolean,
+        it_contact_note: uq.it_contact_note as string,
+      }));
+
+      // Combine all questions - unmapped questions first (they're blocking)
+      const allQuestions = [...unmappedQuestions, ...regularQuestions];
+
       // Check if we have questions
-      const hasQuestionsToAsk = data.questions && data.questions.length > 0;
+      const hasQuestionsToAsk = allQuestions.length > 0;
 
       if (hasQuestionsToAsk) {
-        updateProgress('questioning', 70, 'NEXO tem perguntas para você...', 'ask');
+        const unmappedCount = unmappedQuestions.length;
+        const progressMessage = unmappedCount > 0
+          ? `NEXO encontrou ${unmappedCount} coluna(s) não mapeada(s)...`
+          : 'NEXO tem perguntas para você...';
+
+        updateProgress('questioning', 70, progressMessage, 'ask');
         setState(prev => ({
           ...prev,
           stage: 'questioning',
           analysis,
           sessionState,  // STATELESS: Store full session state
-          questions: data.questions,
+          questions: allQuestions,
           progress: { stage: 'questioning', percent: 70, message: 'Aguardando suas respostas...', currentStep: 'ask' },
         }));
       } else {
