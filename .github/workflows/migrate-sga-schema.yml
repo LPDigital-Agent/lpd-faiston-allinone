@@ -6,11 +6,14 @@
 # Why Lambda bridge: GitHub Actions runs on public infrastructure and cannot
 # directly connect to RDS Proxy in a private VPC. We use Lambda as a bridge.
 #
-# Schema Files (applied in order):
+# Schema Files (applied in numeric order from S3):
 #   - 001_initial_schema.sql: Tables, enums, comments
 #   - 002_indexes.sql: B-tree, GIN, and partial indexes
 #   - 003_triggers.sql: Triggers, functions, validation
 #   - 004_materialized_views.sql: Dashboard views
+#   - 005_equipment_research.sql: Equipment research tables
+#   - 006_schema_evolution.sql: Schema evolution support
+#   - 007_expedition_fields.sql: Expedition fields for Smart Import
 #
 # AWS Account: 377311924364 (Faiston One)
 # =============================================================================
@@ -39,6 +42,9 @@ on:
           - '002_indexes.sql'
           - '003_triggers.sql'
           - '004_materialized_views.sql'
+          - '005_equipment_research.sql'
+          - '006_schema_evolution.sql'
+          - '007_expedition_fields.sql'
 
 env:
   AWS_REGION: us-east-2
@@ -106,13 +112,23 @@ jobs:
           AWS_REGION = os.environ.get("AWS_REGION_NAME", "us-east-2")
           S3_BUCKET = os.environ.get("S3_BUCKET", "faiston-one-sga-documents-prod")
 
-          # Schema files in order
-          SCHEMA_FILES = [
-              "001_initial_schema.sql",
-              "002_indexes.sql",
-              "003_triggers.sql",
-              "004_materialized_views.sql",
-          ]
+          def list_schema_files_from_s3() -> list:
+              """List all schema files from S3, sorted by name (numeric prefix)."""
+              print(f"  Listing schema files from S3: s3://{S3_BUCKET}/schema/")
+              s3 = boto3.client("s3", region_name=AWS_REGION)
+              response = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix="schema/")
+
+              files = []
+              for obj in response.get("Contents", []):
+                  key = obj["Key"]
+                  filename = key.replace("schema/", "")
+                  if filename.endswith(".sql") and filename:
+                      files.append(filename)
+
+              # Sort by filename (numeric prefix ensures correct order)
+              files.sort()
+              print(f"  Found {len(files)} schema files: {files}")
+              return files
 
 
           def get_db_credentials():
@@ -290,7 +306,8 @@ jobs:
                           if specific_file:
                               files = [specific_file]
                           else:
-                              files = SCHEMA_FILES
+                              # Dynamically list all schema files from S3
+                              files = list_schema_files_from_s3()
 
                           results = []
                           for filename in files:
