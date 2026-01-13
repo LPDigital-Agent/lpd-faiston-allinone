@@ -624,6 +624,10 @@ async def analyze_file_with_gemini(
                 result.get("analysis_confidence", 0) >= 0.80
             )
 
+        # CRITICAL: Ensure success is explicitly set for successful parse
+        # (Gemini may omit this field even though prompt requests it)
+        result["success"] = True
+
         logger.info(
             f"[GeminiTextAnalyzer] Round {analysis_round} complete: "
             f"confidence={result.get('analysis_confidence', 0):.2f}, "
