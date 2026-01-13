@@ -109,10 +109,9 @@ async def analyze_file_tool(
             )
 
             audit.error(
-                message="Falha na análise com Gemini",
+                message=f"Falha na análise com Gemini: {error_detail}",
                 session_id=session_id,
-                error=error_detail,
-                details={"analysis_keys": analysis_keys},
+                error=f"Keys: {analysis_keys}",
             )
 
             return {
