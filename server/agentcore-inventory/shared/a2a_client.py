@@ -741,8 +741,16 @@ class A2AClient:
                 payload=json.dumps(a2a_request).encode('utf-8')
             )
 
+            # =================================================================
+            # DEBUG: Log full response structure to diagnose "Empty response"
+            # =================================================================
+            logger.info(f"[A2A-DEBUG] Response keys: {list(response.keys())}")
+            logger.info(f"[A2A-DEBUG] Response metadata: {response.get('ResponseMetadata', {})}")
+
             # Read response payload
             response_payload = response.get('payload')
+            logger.info(f"[A2A-DEBUG] Payload type: {type(response_payload)}, truthy: {bool(response_payload)}")
+
             if response_payload:
                 # response_payload is a StreamingBody, read it
                 response_body = response_payload.read().decode('utf-8')
