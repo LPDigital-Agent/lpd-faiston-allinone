@@ -24,7 +24,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 
 # A2A Protocol Types for Agent Card Discovery (100% A2A Architecture)
@@ -547,6 +548,53 @@ def main():
         return {"status": "healthy", "agent": AGENT_ID, "version": AGENT_VERSION}
 
     logger.info(f"[{AGENT_NAME}] Health check endpoint ready: GET /ping")
+
+    # =========================================================================
+    # A2A DEBUG: Request Logging Middleware
+    # =========================================================================
+    # This middleware logs all incoming HTTP requests to help debug the
+    # "Invalid HTTP request received" error from uvicorn.
+    # Key data captured: HTTP version, headers, body preview
+    # TODO: Remove after debugging is complete
+    # =========================================================================
+    class A2ADebugMiddleware(BaseHTTPMiddleware):
+        """Debug middleware to capture raw HTTP request details for A2A troubleshooting."""
+
+        async def dispatch(self, request: Request, call_next):
+            # Log request details BEFORE processing
+            logger.info(f"[A2A-DEBUG] ====== INCOMING REQUEST ======")
+            logger.info(f"[A2A-DEBUG] Method: {request.method}")
+            logger.info(f"[A2A-DEBUG] Path: {request.url.path}")
+            logger.info(f"[A2A-DEBUG] HTTP Version: {request.scope.get('http_version', 'unknown')}")
+            logger.info(f"[A2A-DEBUG] Client: {request.client.host if request.client else 'unknown'}:{request.client.port if request.client else 'unknown'}")
+            logger.info(f"[A2A-DEBUG] Headers: {dict(request.headers)}")
+
+            # Try to read body (careful with streaming)
+            try:
+                body = await request.body()
+                body_len = len(body)
+                logger.info(f"[A2A-DEBUG] Body Length: {body_len} bytes")
+                if body_len > 0:
+                    # Preview first 1000 chars to see JSON-RPC structure
+                    body_preview = body[:1000].decode('utf-8', errors='replace')
+                    logger.info(f"[A2A-DEBUG] Body Preview: {body_preview}")
+            except Exception as e:
+                logger.error(f"[A2A-DEBUG] Error reading body: {type(e).__name__}: {e}")
+
+            logger.info(f"[A2A-DEBUG] ==============================")
+
+            # Continue with request processing
+            try:
+                response = await call_next(request)
+                logger.info(f"[A2A-DEBUG] Response Status: {response.status_code}")
+                return response
+            except Exception as e:
+                logger.error(f"[A2A-DEBUG] Request processing error: {type(e).__name__}: {e}")
+                raise
+
+    # Register debug middleware
+    app.add_middleware(A2ADebugMiddleware)
+    logger.info(f"[{AGENT_NAME}] A2A Debug middleware registered")
 
     # Create agent (uses LazyGeminiModel for deferred initialization)
     agent = create_agent()
