@@ -747,13 +747,14 @@ class A2AClient:
             logger.info(f"[A2A-DEBUG] Response keys: {list(response.keys())}")
             logger.info(f"[A2A-DEBUG] Response metadata: {response.get('ResponseMetadata', {})}")
 
-            # Read response payload
-            response_payload = response.get('payload')
-            logger.info(f"[A2A-DEBUG] Payload type: {type(response_payload)}, truthy: {bool(response_payload)}")
+            # Read response body (boto3 returns StreamingBody in 'response' key, not 'payload')
+            # Reference: https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/bedrock-agentcore/client/invoke_agent_runtime.html
+            response_body_stream = response.get('response')
+            logger.info(f"[A2A-DEBUG] Response type: {type(response_body_stream)}, truthy: {bool(response_body_stream)}")
 
-            if response_payload:
-                # response_payload is a StreamingBody, read it
-                response_body = response_payload.read().decode('utf-8')
+            if response_body_stream:
+                # response_body_stream is a StreamingBody, read it
+                response_body = response_body_stream.read().decode('utf-8')
                 response_data = json.loads(response_body)
                 logger.debug(f"[A2A] Response from {agent_id}: {str(response_data)[:200]}...")
                 return self._parse_a2a_response(response_data, agent_id, message_id)
@@ -763,7 +764,7 @@ class A2AClient:
                     response="",
                     agent_id=agent_id,
                     message_id=message_id,
-                    error="Empty response payload from agent runtime",
+                    error="Empty response body from agent runtime",
                 )
 
         except Exception as e:
