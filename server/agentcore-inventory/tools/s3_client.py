@@ -457,8 +457,13 @@ class SGAS3Client:
             S3 key path in temp folder
         """
         import uuid
+        import unicodedata
+
         unique = str(uuid.uuid4())[:8]
-        return f"temp/uploads/{unique}_{filename}"
+        # NFC normalize filename to prevent S3 NoSuchKey errors
+        # macOS/browsers may use NFD (decomposed), S3 treats keys as raw bytes
+        normalized_filename = unicodedata.normalize("NFC", filename)
+        return f"temp/uploads/{unique}_{normalized_filename}"
 
     def move_from_temp(self, temp_key: str, final_key: str) -> bool:
         """

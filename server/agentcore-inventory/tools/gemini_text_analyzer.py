@@ -513,8 +513,13 @@ async def analyze_file_with_gemini(
 
     try:
         # 1. Download file from S3
+        import unicodedata
+
         s3 = _get_s3_client()
-        response = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+        # NFC normalize S3 key to match how files were uploaded
+        # Prevents NoSuchKey errors with Portuguese characters (Ç, Ã, Õ)
+        normalized_key = unicodedata.normalize("NFC", s3_key)
+        response = s3.get_object(Bucket=S3_BUCKET, Key=normalized_key)
         content = response["Body"].read()
 
         filename = s3_key.split("/")[-1] if "/" in s3_key else s3_key
@@ -643,9 +648,13 @@ async def extract_data_with_gemini(
         # For extraction, we need the full data (not just sample)
         # Use traditional parsing here since Gemini has context limits
         # The AI-First part was the ANALYSIS, extraction is mechanical
+        import unicodedata
 
         s3 = _get_s3_client()
-        response = s3.get_object(Bucket=S3_BUCKET, Key=s3_key)
+        # NFC normalize S3 key to match how files were uploaded
+        # Prevents NoSuchKey errors with Portuguese characters (Ç, Ã, Õ)
+        normalized_key = unicodedata.normalize("NFC", s3_key)
+        response = s3.get_object(Bucket=S3_BUCKET, Key=normalized_key)
         content = response["Body"].read()
 
         filename = s3_key.split("/")[-1] if "/" in s3_key else s3_key
