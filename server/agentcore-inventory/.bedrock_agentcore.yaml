@@ -57,8 +57,9 @@ agents:
       source_bucket: null
     # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
     # GLOBAL namespace: /strategy/import/company (company-wide learning)
+    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
     memory:
-      mode: FULL
+      mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
     identity:
       credential_providers: []
@@ -111,8 +112,9 @@ agents:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
     # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
+    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
     memory:
-      mode: FULL
+      mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
 
   # ---------------------------------------------------------------------------
@@ -146,8 +148,9 @@ agents:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
     # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
+    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
     memory:
-      mode: FULL
+      mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
 
   # ---------------------------------------------------------------------------
@@ -212,8 +215,9 @@ agents:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
     # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
+    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
     memory:
-      mode: FULL
+      mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
 
   # ---------------------------------------------------------------------------
