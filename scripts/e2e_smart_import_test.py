@@ -32,7 +32,8 @@ import boto3
 AWS_REGION = "us-east-2"
 AWS_ACCOUNT_ID = "377311924364"
 AGENTCORE_ENDPOINT = f"https://bedrock-agentcore.{AWS_REGION}.amazonaws.com"
-SGA_RUNTIME_ARN = f"arn:aws:bedrock-agentcore:{AWS_REGION}:{AWS_ACCOUNT_ID}:runtime/faiston_asset_management-uSuLPsFQNH"
+# NEXO Import runtime (specialized for Smart Import HIL dialogue)
+SGA_RUNTIME_ARN = f"arn:aws:bedrock-agentcore:{AWS_REGION}:{AWS_ACCOUNT_ID}:runtime/faiston_sga_nexo_import-0zNtFDAo7M"
 CSV_FILE_PATH = "data/SOLICITAÇÕES DE EXPEDIÇÃO.csv"
 TARGET_RECORD_COUNT = 1688
 

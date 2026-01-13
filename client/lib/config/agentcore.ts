@@ -40,13 +40,17 @@ export const AGENTCORE_ENDPOINT =
 /**
  * Runtime IDs for each AgentCore agent.
  * These are assigned by AWS on first deployment and remain stable.
+ *
+ * IMPORTANT: SGA uses specialized runtimes for different functions:
+ * - nexo_import: Smart Import orchestrator (file analysis, HIL dialogue)
+ * - Other SGA agents: via A2A delegation from nexo_import
  */
 const RUNTIME_IDS = {
   /** Faiston Academy - Learning platform agent */
   academy: 'faiston_academy_agents-ODNvP6HxCD',
 
-  /** SGA Inventory - Asset/Inventory management agent */
-  sga: 'faiston_asset_management-uSuLPsFQNH',
+  /** SGA Inventory - NEXO Import orchestrator (Smart Import) */
+  sga: 'faiston_sga_nexo_import-0zNtFDAo7M',
 
   /** Portal - Central NEXO orchestrator agent */
   portal: 'faiston_portal_agents-PENDING', // TODO: Update after first deployment
