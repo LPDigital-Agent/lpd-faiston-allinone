@@ -634,7 +634,7 @@ class A2AClient:
         agent_id: str,
         payload: Dict[str, Any],
         session_id: Optional[str] = None,
-        timeout: float = 30.0,
+        timeout: float = 300.0,  # 5 minutes for Gemini 3.0 Pro with Thinking mode
         use_discovery: Optional[bool] = None,
     ) -> A2AResponse:
         """

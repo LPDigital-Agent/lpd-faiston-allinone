@@ -18,10 +18,35 @@
 # =============================================================================
 
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import Enum
 from typing import Optional, Dict, Any
 from datetime import datetime
 import os
+
+
+def _convert_floats_to_decimal(obj: Any) -> Any:
+    """
+    Recursively convert float values to Decimal for DynamoDB compatibility.
+
+    DynamoDB does not support Python float type directly - it requires Decimal.
+    This function converts any float values (including nested in dicts/lists)
+    to Decimal using string conversion to preserve precision.
+
+    Args:
+        obj: Any Python object (dict, list, float, or other)
+
+    Returns:
+        Same structure with floats converted to Decimal
+    """
+    if isinstance(obj, float):
+        # Convert via string to preserve precision
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: _convert_floats_to_decimal(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_convert_floats_to_decimal(i) for i in obj]
+    return obj
 
 
 class AgentStatus(Enum):
@@ -165,6 +190,10 @@ class AgentAuditEmitter:
             # Add delegation target if A2A call
             if event.target_agent:
                 item["details"]["target_agent"] = event.target_agent
+
+            # Convert floats to Decimal for DynamoDB compatibility
+            # DynamoDB rejects Python float type - requires Decimal
+            item = _convert_floats_to_decimal(item)
 
             self.dynamodb.put_item(Item=item)
             return True

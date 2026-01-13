@@ -148,6 +148,10 @@ async def analyze_file_tool(
             },
         )
 
+        # Determine if agent should stop and wait for user response
+        # CRITICAL: This flag tells the Strands ReAct loop to pause
+        should_stop = total_pending > 0 or not ready_for_import
+
         return {
             "success": True,
             "file_analysis": analysis,
@@ -165,6 +169,9 @@ async def analyze_file_tool(
             "ready_for_import": ready_for_import,
             "analysis_round": current_round,
             "pending_questions_count": total_pending,
+            # STOP ACTION: Signal Strands ReAct to pause for user response
+            "stop_action": should_stop,
+            "stop_reason": "Aguardando respostas do usuário" if should_stop else None,
             # Legacy fields for compatibility
             "sheet_count": 1,
             "total_rows": row_count,
