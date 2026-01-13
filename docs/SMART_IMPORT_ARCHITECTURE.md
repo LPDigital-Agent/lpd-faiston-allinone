@@ -238,12 +238,21 @@ The `stop_action: true` flag signals the Strands ReAct loop to pause.
 **Cause**: ReAct framework auto-loops without stop signal
 **Solution**: Return `stop_action: true` when HIL questions pending
 
+### 5. "Falha na análise (sem detalhes)"
+
+**Cause**: `gemini_text_analyzer.py` uses `google.genai.Client()` which expects `GOOGLE_API_KEY` env var. This env var is NOT set in AgentCore runtime because the API key is stored in SSM Parameter Store, not as an environment variable.
+
+**Solution (BUG-010 FIX)**: Added SSM loading logic to `_get_genai_client()` in `tools/gemini_text_analyzer.py` to load the API key from `/faiston-one/academy/google-api-key` if not already in environment.
+
+**Note**: The Strands Agent uses `LazyGeminiModel` which already had this SSM loading. The issue was that `gemini_text_analyzer.py` bypassed that and used a direct client.
+
 ---
 
 ## Change History
 
 | Date | Change | Commit |
 |------|--------|--------|
+| 2026-01-13 | BUG-010: Added SSM loading to gemini_text_analyzer.py | pending |
 | 2026-01-13 | Fixed protocol mismatch (reverted wrong runtime ID) | d9b3325 |
 | 2026-01-13 | Added timeout 300s, Decimal conversion, stop_action | 6cdf86e |
 | 2026-01-13 | Fixed S3 Unicode NFC normalization | 374be7b |

@@ -7,8 +7,9 @@
 # TEMPORARY: Using Gemini 2.5 (Strands SDK thoughtSignature issue #1199)
 #
 # API Key Note:
-# GOOGLE_API_KEY is passed via --env at deploy time (not runtime SSM lookup).
-# This follows the AWS official example pattern.
+# GOOGLE_API_KEY is loaded from SSM Parameter Store at runtime (BUG-010 fix).
+# SSM Path: /faiston-one/academy/google-api-key
+# If env var is already set, SSM lookup is skipped.
 # =============================================================================
 
 import json
@@ -184,6 +185,27 @@ class LazyGeminiModel:
             import logging
             logger = logging.getLogger(__name__)
             logger.info(f"[LazyGeminiModel] First request - initializing GeminiModel...")
+
+            # BUG-010 FIX: Load GOOGLE_API_KEY from SSM if not in environment
+            # SSM Parameter: /faiston-one/academy/google-api-key
+            if not os.environ.get("GOOGLE_API_KEY"):
+                logger.info("[LazyGeminiModel] GOOGLE_API_KEY not in env, loading from SSM...")
+                try:
+                    import boto3
+                    ssm = boto3.client("ssm", region_name="us-east-2")
+                    response = ssm.get_parameter(
+                        Name="/faiston-one/academy/google-api-key",
+                        WithDecryption=True
+                    )
+                    api_key = response["Parameter"]["Value"]
+                    os.environ["GOOGLE_API_KEY"] = api_key
+                    logger.info("[LazyGeminiModel] GOOGLE_API_KEY loaded from SSM successfully")
+                except Exception as e:
+                    logger.error(f"[LazyGeminiModel] Failed to load GOOGLE_API_KEY from SSM: {e}")
+                    raise RuntimeError(
+                        "GOOGLE_API_KEY not found in environment and SSM lookup failed. "
+                        f"SSM path: /faiston-one/academy/google-api-key. Error: {e}"
+                    )
 
             # Build params
             params = {

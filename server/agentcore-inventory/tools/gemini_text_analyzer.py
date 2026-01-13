@@ -39,9 +39,35 @@ def _get_genai_client():
 
     Cold start optimization: Only import google.genai when needed.
     This prevents the 30-second AgentCore timeout.
+
+    BUG-010 FIX: Load GOOGLE_API_KEY from SSM Parameter Store if not in env.
+    SSM Path: /faiston-one/academy/google-api-key
     """
     global _genai_client
     if _genai_client is None:
+        import os
+
+        # BUG-010 FIX: Load GOOGLE_API_KEY from SSM if not in environment
+        # Same logic as agents/utils.py LazyGeminiModel._ensure_model()
+        if not os.environ.get("GOOGLE_API_KEY"):
+            logger.info("[GeminiTextAnalyzer] GOOGLE_API_KEY not in env, loading from SSM...")
+            try:
+                import boto3
+                ssm = boto3.client("ssm", region_name=AWS_REGION)
+                response = ssm.get_parameter(
+                    Name="/faiston-one/academy/google-api-key",
+                    WithDecryption=True
+                )
+                api_key = response["Parameter"]["Value"]
+                os.environ["GOOGLE_API_KEY"] = api_key
+                logger.info("[GeminiTextAnalyzer] GOOGLE_API_KEY loaded from SSM successfully")
+            except Exception as e:
+                logger.error(f"[GeminiTextAnalyzer] Failed to load GOOGLE_API_KEY from SSM: {e}")
+                raise RuntimeError(
+                    "GOOGLE_API_KEY not found in environment and SSM lookup failed. "
+                    f"SSM path: /faiston-one/academy/google-api-key. Error: {e}"
+                )
+
         from google import genai
         _genai_client = genai.Client()
         logger.info("[GeminiTextAnalyzer] Gemini client initialized")
