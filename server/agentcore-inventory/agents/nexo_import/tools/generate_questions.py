@@ -1,7 +1,14 @@
 # =============================================================================
-# Generate Questions Tool
+# Generate Questions Tool (AGI-Like Behavior)
 # =============================================================================
-# Generates HIL (Human-in-the-Loop) questions for low-confidence mappings.
+# Generates HIL (Human-in-the-Loop) questions for:
+# - Low-confidence mappings (confidence < 80%)
+# - Unmapped columns (columns not in DB schema)
+#
+# AGI-Like Behavior:
+# - Questions are presented to user for decision
+# - User responses feed back into Gemini for re-analysis
+# - Unmapped columns MUST be decided before import proceeds
 # =============================================================================
 
 import logging
@@ -16,40 +23,73 @@ logger = logging.getLogger(__name__)
 AGENT_ID = "nexo_import"
 audit = AgentAuditEmitter(agent_id=AGENT_ID)
 
+# =============================================================================
+# Unmapped Column Options (AGI-Like - Requires User Decision)
+# =============================================================================
+
+UNMAPPED_OPTIONS = [
+    {
+        "value": "ignore",
+        "label": "Ignorar (dados serão perdidos)",
+        "description": "Esta coluna não será importada. Os dados serão descartados.",
+        "warning": True,
+    },
+    {
+        "value": "metadata",
+        "label": "Guardar em metadata (preservar)",
+        "description": "Os dados serão preservados no campo JSONB 'metadata' para consulta futura.",
+        "recommended": True,
+    },
+    {
+        "value": "request_db_update",
+        "label": "Solicitar criação de campo no DB",
+        "description": "Você deve contatar a equipe de TI da Faiston para criar o campo no PostgreSQL. Após a criação, tente a importação novamente.",
+        "contact_it": True,
+    },
+]
+
 
 @trace_tool_call("sga_generate_questions")
 async def generate_questions_tool(
     needs_clarification: List[Dict[str, Any]],
     schema_context: str,
+    unmapped_columns: Optional[List[Dict[str, Any]]] = None,
     session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Generate HIL questions for columns needing clarification.
+    Generate HIL questions for columns needing clarification (AGI-Like).
 
-    Builds intelligent questions for columns where:
-    - Confidence < 80% (threshold for autonomous action)
-    - No prior knowledge exists
-    - Multiple possible mappings exist
+    Builds intelligent questions for:
+    - Columns with confidence < 80%
+    - Columns with no prior knowledge
+    - Columns with multiple possible mappings
+    - UNMAPPED columns (not in DB schema) - CRITICAL
 
     Args:
         needs_clarification: List of columns needing user input
         schema_context: PostgreSQL schema markdown for context
+        unmapped_columns: List of columns not in DB schema (AGI-like)
         session_id: Optional session ID for audit
 
     Returns:
-        Generated questions for HIL review
+        Generated questions for HIL review (mapping + unmapped)
     """
+    unmapped_columns = unmapped_columns or []
+    total_items = len(needs_clarification) + len(unmapped_columns)
+
     audit.working(
-        message=f"Gerando {len(needs_clarification)} pergunta(s)...",
+        message=f"Gerando {total_items} pergunta(s) (mapeamento: {len(needs_clarification)}, não mapeadas: {len(unmapped_columns)})...",
         session_id=session_id,
     )
 
     try:
         questions = []
+        unmapped_questions = []
 
         # Parse available fields from schema context
         available_fields = _extract_fields_from_schema(schema_context)
 
+        # 1. Generate mapping questions (low confidence)
         for item in needs_clarification:
             column = item.get("column", "")
             suggested_field = item.get("suggested_field")
@@ -71,17 +111,43 @@ async def generate_questions_tool(
             if question:
                 questions.append(question)
 
+        # 2. Generate unmapped column questions (AGI-like - CRITICAL)
+        for item in unmapped_columns:
+            source_name = item.get("source_name", "")
+            description = item.get("description", "")
+            suggested_action = item.get("suggested_action", "metadata")
+
+            if not source_name:
+                continue
+
+            unmapped_q = _build_unmapped_question(
+                column=source_name,
+                description=description,
+                suggested_action=suggested_action,
+            )
+
+            if unmapped_q:
+                unmapped_questions.append(unmapped_q)
+
+        total_questions = len(questions) + len(unmapped_questions)
+
         audit.completed(
-            message=f"Geradas {len(questions)} pergunta(s) para revisão",
+            message=f"Geradas {total_questions} pergunta(s) para revisão",
             session_id=session_id,
-            details={"question_count": len(questions)},
+            details={
+                "mapping_questions": len(questions),
+                "unmapped_questions": len(unmapped_questions),
+                "total_questions": total_questions,
+            },
         )
 
         return {
             "success": True,
             "questions": questions,
-            "total_questions": len(questions),
+            "unmapped_questions": unmapped_questions,
+            "total_questions": total_questions,
             "available_fields": available_fields,
+            "has_unmapped": len(unmapped_questions) > 0,
         }
 
     except Exception as e:
@@ -95,7 +161,57 @@ async def generate_questions_tool(
             "success": False,
             "error": str(e),
             "questions": [],
+            "unmapped_questions": [],
         }
+
+
+def _build_unmapped_question(
+    column: str,
+    description: str,
+    suggested_action: str,
+) -> Dict[str, Any]:
+    """
+    Build a question for an unmapped column (AGI-like behavior).
+
+    These columns don't exist in the PostgreSQL schema and require
+    user decision before import can proceed.
+
+    Args:
+        column: Column name from source file
+        description: Inferred description of the column
+        suggested_action: Suggested action (ignore, metadata, request_db_update)
+
+    Returns:
+        Question dict with options for user decision
+    """
+    question_id = f"uq_{column.lower().replace(' ', '_').replace('°', '').replace('/', '_')}"
+
+    # Build options with suggested one first
+    options = []
+    for opt in UNMAPPED_OPTIONS:
+        option = opt.copy()
+        if opt["value"] == suggested_action:
+            option["label"] = f"{opt['label']} (recomendado)"
+        options.append(option)
+
+    # Reorder to put suggested first
+    options.sort(key=lambda x: 0 if suggested_action in x.get("label", "") else 1)
+
+    return {
+        "id": question_id,
+        "type": "unmapped",
+        "column": column,
+        "question": f"A coluna '{column}' NÃO existe no banco de dados. O que deseja fazer?",
+        "description": description,
+        "suggested_action": suggested_action,
+        "options": options,
+        "blocking": True,  # Import cannot proceed without decision
+        "it_contact_note": (
+            "Se escolher 'Solicitar criação de campo no DB', entre em contato com a "
+            "equipe de Tecnologia da Faiston para preparar o banco de dados. "
+            "Após a criação do campo, tente a importação novamente."
+        ),
+    }
 
 
 def _extract_fields_from_schema(schema_context: str) -> List[str]:

@@ -62,7 +62,7 @@ def _get_s3_client():
 # Portuguese Analysis Prompt for Inventory Data
 # =============================================================================
 
-INVENTORY_ANALYSIS_PROMPT = """Voce e um especialista em analise de dados de inventario e estoque.
+INVENTORY_ANALYSIS_PROMPT = """Voce e um especialista em analise de dados de inventario e estoque com comportamento AGI-like.
 
 ## TAREFA
 Analise o conteudo do arquivo (CSV ou planilha) e:
@@ -70,12 +70,20 @@ Analise o conteudo do arquivo (CSV ou planilha) e:
 2. Sugira mapeamento para o schema do banco de dados PostgreSQL
 3. Calcule confianca do mapeamento (0.0 a 1.0)
 4. Gere perguntas para o usuario se confianca < 0.80
+5. IDENTIFIQUE colunas que NAO existem no schema do DB (unmapped_columns)
+6. Se houver respostas do usuario, RE-ANALISE ajustando seus mapeamentos
 
 ## SCHEMA DO BANCO DE DADOS POSTGRESQL
 {schema_context}
 
 ## PADROES APRENDIDOS (memoria do agente)
 {memory_context}
+
+## RESPOSTAS DO USUARIO (HIL - Human-in-the-Loop)
+{user_responses}
+
+## COMENTARIOS/INSTRUCOES DO USUARIO
+{user_comments}
 
 ## CAMPOS COMUNS DE INVENTARIO (procure ativamente)
 - Part Number / Codigo / SKU / Material / PN / Cod
@@ -98,6 +106,7 @@ Retorne APENAS JSON valido, sem markdown, sem explicacoes:
   "success": true,
   "file_type": "csv",
   "analysis_confidence": 0.85,
+  "analysis_round": 1,
   "quality_issues": [],
   "detected_encoding": "utf-8",
   "detected_delimiter": ";",
@@ -111,23 +120,45 @@ Retorne APENAS JSON valido, sem markdown, sem explicacoes:
       "mapping_confidence": 0.95,
       "data_type": "string",
       "sample_values": ["valor1", "valor2", "valor3"],
-      "is_required": true
+      "is_required": true,
+      "is_unmapped": false
     }}
   ],
   "suggested_mappings": {{
     "Nome Original": "target_field",
     "Outra Coluna": "another_field"
   }},
+  "unmapped_columns": [
+    {{
+      "source_name": "N TICKET",
+      "reason": "Coluna nao existe no schema do banco de dados",
+      "suggested_action": "metadata",
+      "description": "Parece ser numero de chamado/ticket de suporte"
+    }}
+  ],
   "hil_questions": [
     {{
+      "id": "q1",
       "field": "nome_da_coluna",
       "question": "Esta coluna contem numeros de serie ou codigos de lote?",
       "options": ["Numero de Serie", "Codigo de Lote", "Outro"],
-      "reason": "Ambiguidade entre serial e lote"
+      "reason": "Ambiguidade entre serial e lote",
+      "priority": "high"
     }}
   ],
-  "recommended_action": "ready_for_import",
-  "notes": "Arquivo com 1688 registros de expedicao"
+  "unmapped_questions": [
+    {{
+      "id": "uq1",
+      "field": "N TICKET",
+      "question": "A coluna 'N TICKET' nao existe no banco de dados. O que deseja fazer?",
+      "options": ["Ignorar (dados serao perdidos)", "Guardar em metadata (preservar)", "Solicitar criacao de campo no DB"],
+      "reason": "Coluna nao mapeada - requer decisao do usuario"
+    }}
+  ],
+  "all_questions_answered": false,
+  "ready_for_import": false,
+  "recommended_action": "needs_user_input",
+  "notes": "Arquivo com 1688 registros de expedicao. 4 colunas nao mapeadas."
 }}
 
 ## REGRAS IMPORTANTES
@@ -138,7 +169,7 @@ Retorne APENAS JSON valido, sem markdown, sem explicacoes:
 
 2. **Campos obrigatorios para importacao**:
    - part_number (codigo do produto)
-   - quantity (quantidade)
+   - quantity (quantidade) - OU pode ser calculado se houver serial_number
 
 3. **Valores especiais**:
    - Celulas vazias: null
@@ -152,9 +183,38 @@ Retorne APENAS JSON valido, sem markdown, sem explicacoes:
    - <0.60: Incerto - requer HIL
 
 5. **recommended_action**:
-   - "ready_for_import": Todos mapeamentos com confianca >= 0.80
-   - "needs_user_input": Algum mapeamento < 0.80
+   - "ready_for_import": Todos mapeamentos com confianca >= 0.80 E todas perguntas respondidas
+   - "needs_user_input": Algum mapeamento < 0.80 OU colunas nao mapeadas sem decisao
    - "error": Arquivo invalido ou campos obrigatorios faltando
+
+6. **Colunas NAO MAPEADAS (unmapped_columns) - CRITICO**:
+   - Se coluna do arquivo NAO existe no schema PostgreSQL: OBRIGATORIO adicionar em unmapped_columns
+   - OBRIGATORIO gerar pergunta em unmapped_questions com 3 opcoes:
+     a) Ignorar (dados serao perdidos)
+     b) Guardar em metadata (preservar em campo JSONB)
+     c) Solicitar criacao de campo no DB (usuario deve contatar equipe de TI)
+   - Import NAO pode prosseguir ate usuario decidir sobre TODAS colunas nao mapeadas
+
+7. **Re-analise com respostas do usuario (AGI-like)**:
+   - Se user_responses NAO esta vazio: re-analisar mapeamentos considerando as respostas
+   - Ajustar mapeamentos e confidences baseado no feedback do usuario
+   - Se usuario disse "Sim" para uma pergunta: aumentar confidence para 1.0
+   - Continuar gerando perguntas ate TODAS terem confidence >= 0.80
+
+8. **Calculo de quantidade (quantity)**:
+   - Se coluna quantity NAO existe mas serial_number existe:
+     - Agrupar por part_number
+     - Contar serial_numbers unicos = quantity
+     - Cada part_number deve ser UNICO no resultado final
+   - Se usuario instruiu via comentarios: seguir instrucao
+
+9. **all_questions_answered**:
+   - true: Todas perguntas HIL e unmapped foram respondidas
+   - false: Ainda ha perguntas pendentes
+
+10. **ready_for_import**:
+    - true: Condicoes para import: all_questions_answered=true E analysis_confidence >= 0.80
+    - false: Ainda precisa de input do usuario
 
 ## CONTEUDO DO ARQUIVO PARA ANALISE
 {file_content}
@@ -364,6 +424,41 @@ def _extract_json_from_response(response_text: str) -> Optional[Dict]:
 
 
 # =============================================================================
+# User Response Formatting (AGI-Like Multi-Round HIL)
+# =============================================================================
+
+def _format_user_responses(user_responses: List[Dict[str, Any]]) -> str:
+    """
+    Format user responses for inclusion in the Gemini prompt.
+
+    This enables the AGI-like behavior where user responses feed back
+    into the LLM for re-analysis.
+
+    Args:
+        user_responses: List of responses from previous HIL rounds
+                        Format: [{"question_id": "q1", "answer": "Numero de Serie"}]
+
+    Returns:
+        Formatted string for the prompt
+    """
+    if not user_responses:
+        return "Nenhuma resposta do usuario ainda (primeira analise)."
+
+    lines = ["Respostas do usuario das rodadas anteriores:"]
+    for i, resp in enumerate(user_responses, 1):
+        q_id = resp.get("question_id", f"q{i}")
+        field = resp.get("field", "unknown")
+        answer = resp.get("answer", "")
+        lines.append(f"  {i}. [{q_id}] Campo '{field}': {answer}")
+
+    lines.append("")
+    lines.append("IMPORTANTE: Re-analise os mapeamentos considerando estas respostas!")
+    lines.append("Se o usuario confirmou um mapeamento, aumente a confianca para 1.0")
+
+    return "\n".join(lines)
+
+
+# =============================================================================
 # Main Analysis Functions
 # =============================================================================
 
@@ -371,35 +466,50 @@ async def analyze_file_with_gemini(
     s3_key: str,
     schema_context: str = None,
     memory_context: str = None,
+    user_responses: List[Dict[str, Any]] = None,
+    user_comments: str = None,
+    analysis_round: int = 1,
 ) -> Dict[str, Any]:
     """
-    Analyze file from S3 using Gemini Pro (AI-First).
+    Analyze file from S3 using Gemini Pro (AI-First with AGI-like behavior).
 
-    This is the main entry point for AI-First file analysis.
+    This is the main entry point for AI-First file analysis with iterative HIL.
 
-    Flow:
+    Flow (Multi-Round AGI Loop):
     1. Download file from S3
     2. Extract text content (CSV as-is, XLSX to JSON)
-    3. Send to Gemini with schema + memory context
-    4. Return analysis with mappings and confidence
+    3. Send to Gemini with schema + memory + user_responses + user_comments
+    4. Return analysis with mappings, confidence, and questions
+    5. If user responds, call again with responses for RE-ANALYSIS
 
     Args:
         s3_key: S3 key where file is stored
         schema_context: Target PostgreSQL schema description
-        memory_context: Prior learned patterns (optional)
+        memory_context: Prior learned patterns from AgentCore Memory
+        user_responses: Accumulated HIL responses from previous rounds
+                        Format: [{"question_id": "q1", "answer": "Numero de Serie"}]
+        user_comments: Free-text instructions/feedback from user
+        analysis_round: Current round number (1 = first analysis, 2+ = re-analysis)
 
     Returns:
         {
             "success": bool,
             "file_type": str,
             "analysis_confidence": float,
+            "analysis_round": int,
             "columns": [...],
             "suggested_mappings": {...},
+            "unmapped_columns": [...],
             "hil_questions": [...],
+            "unmapped_questions": [...],
+            "all_questions_answered": bool,
+            "ready_for_import": bool,
             "recommended_action": str,
         }
     """
-    logger.info(f"[GeminiTextAnalyzer] Analyzing file: {s3_key}")
+    logger.info(f"[GeminiTextAnalyzer] Analyzing file: {s3_key} (Round {analysis_round})")
+    if user_responses:
+        logger.info(f"[GeminiTextAnalyzer] Re-analysis with {len(user_responses)} user responses")
 
     try:
         # 1. Download file from S3
@@ -427,10 +537,15 @@ async def analyze_file_with_gemini(
                 "file_type": "unknown",
             }
 
-        # 3. Build prompt with context
+        # 3. Build prompt with context (AGI-like: includes user responses)
+        user_responses_text = _format_user_responses(user_responses)
+        user_comments_text = user_comments or "Nenhum comentario adicional."
+
         prompt = INVENTORY_ANALYSIS_PROMPT.format(
             schema_context=schema_context or DEFAULT_SCHEMA_CONTEXT,
             memory_context=memory_context or "Nenhum padrao aprendido ainda.",
+            user_responses=user_responses_text,
+            user_comments=user_comments_text,
             file_content=file_content,
         )
 
@@ -459,11 +574,31 @@ async def analyze_file_with_gemini(
         result["filename"] = filename
         result["file_type"] = file_type
         result["s3_key"] = s3_key
+        result["analysis_round"] = analysis_round
+
+        # Ensure AGI-like fields exist
+        if "unmapped_columns" not in result:
+            result["unmapped_columns"] = []
+        if "unmapped_questions" not in result:
+            result["unmapped_questions"] = []
+        if "all_questions_answered" not in result:
+            # Check if all questions are answered
+            hil_questions = result.get("hil_questions", [])
+            unmapped_questions = result.get("unmapped_questions", [])
+            total_questions = len(hil_questions) + len(unmapped_questions)
+            result["all_questions_answered"] = total_questions == 0
+        if "ready_for_import" not in result:
+            result["ready_for_import"] = (
+                result.get("all_questions_answered", False) and
+                result.get("analysis_confidence", 0) >= 0.80
+            )
 
         logger.info(
-            f"[GeminiTextAnalyzer] Analysis complete: "
+            f"[GeminiTextAnalyzer] Round {analysis_round} complete: "
             f"confidence={result.get('analysis_confidence', 0):.2f}, "
-            f"action={result.get('recommended_action', 'unknown')}"
+            f"ready={result.get('ready_for_import', False)}, "
+            f"questions={len(result.get('hil_questions', []))}, "
+            f"unmapped={len(result.get('unmapped_columns', []))}"
         )
 
         return result
@@ -699,7 +834,7 @@ def get_default_schema_context() -> str:
 
 async def analyze_file_simple(s3_key: str) -> Dict[str, Any]:
     """
-    Simple wrapper for file analysis with default context.
+    Simple wrapper for file analysis with default context (Round 1).
 
     Use this for quick analysis without custom schema/memory.
     """
@@ -707,4 +842,87 @@ async def analyze_file_simple(s3_key: str) -> Dict[str, Any]:
         s3_key=s3_key,
         schema_context=DEFAULT_SCHEMA_CONTEXT,
         memory_context=None,
+        user_responses=None,
+        user_comments=None,
+        analysis_round=1,
     )
+
+
+async def re_analyze_with_responses(
+    s3_key: str,
+    user_responses: List[Dict[str, Any]],
+    user_comments: str = None,
+    schema_context: str = None,
+    memory_context: str = None,
+    previous_round: int = 1,
+) -> Dict[str, Any]:
+    """
+    Re-analyze file with user responses (AGI-like multi-round).
+
+    Use this to continue the HIL dialogue after user responds to questions.
+
+    Args:
+        s3_key: S3 key where file is stored
+        user_responses: User's answers to HIL questions
+                        Format: [{"question_id": "q1", "field": "SERIAL", "answer": "Numero de Serie"}]
+        user_comments: Free-text instructions from user
+        schema_context: PostgreSQL schema
+        memory_context: Learned patterns
+        previous_round: Previous round number
+
+    Returns:
+        Updated analysis with adjusted mappings and potentially new questions
+    """
+    return await analyze_file_with_gemini(
+        s3_key=s3_key,
+        schema_context=schema_context or DEFAULT_SCHEMA_CONTEXT,
+        memory_context=memory_context,
+        user_responses=user_responses,
+        user_comments=user_comments,
+        analysis_round=previous_round + 1,
+    )
+
+
+def check_analysis_ready(analysis_result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Check if analysis is ready for import or needs more HIL.
+
+    Args:
+        analysis_result: Result from analyze_file_with_gemini
+
+    Returns:
+        {
+            "ready": bool,
+            "reason": str,
+            "pending_questions": int,
+            "unmapped_columns": int,
+            "confidence": float,
+        }
+    """
+    hil_questions = analysis_result.get("hil_questions", [])
+    unmapped_questions = analysis_result.get("unmapped_questions", [])
+    unmapped_columns = analysis_result.get("unmapped_columns", [])
+    confidence = analysis_result.get("analysis_confidence", 0)
+    ready = analysis_result.get("ready_for_import", False)
+
+    pending = len(hil_questions) + len(unmapped_questions)
+
+    if ready:
+        reason = "Analise completa - pronto para importacao"
+    elif pending > 0:
+        reason = f"{pending} pergunta(s) pendente(s)"
+    elif len(unmapped_columns) > 0:
+        reason = f"{len(unmapped_columns)} coluna(s) nao mapeada(s) sem decisao"
+    elif confidence < 0.80:
+        reason = f"Confianca baixa ({confidence:.0%})"
+    else:
+        reason = "Precisa de aprovacao do usuario"
+
+    return {
+        "ready": ready,
+        "reason": reason,
+        "pending_questions": pending,
+        "unmapped_columns": len(unmapped_columns),
+        "confidence": confidence,
+        "round": analysis_result.get("analysis_round", 1),
+    }

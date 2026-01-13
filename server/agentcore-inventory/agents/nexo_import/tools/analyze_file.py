@@ -1,19 +1,25 @@
 # =============================================================================
-# Analyze File Tool - AI-First with Gemini Pro
+# Analyze File Tool - AI-First with Gemini Pro (AGI-Like Behavior)
 # =============================================================================
 # Analyzes file structure (sheets, columns, types) from S3 using Gemini.
 #
-# Philosophy: OBSERVE → THINK → LEARN → EXECUTE
+# Philosophy: OBSERVE → THINK → LEARN → EXECUTE (with Multi-Round HIL)
 # - OBSERVE: Download file from S3
-# - THINK: Gemini Pro analyzes semantically
-# - LEARN: Uses memory context from LearningAgent
+# - THINK: Gemini Pro analyzes semantically with context
+# - LEARN: Uses memory context from LearningAgent (AgentCore Memory)
 # - EXECUTE: Returns analysis with confidence and HIL questions
+#
+# AGI-Like Behavior:
+# - Multi-round iterative HIL dialogue
+# - User responses feed back into Gemini for re-analysis
+# - Unmapped columns are flagged and require user decision
+# - Final summary requires explicit user approval before import
 #
 # Module: Gestao de Ativos -> Gestao de Estoque -> Smart Import
 # =============================================================================
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 
 from shared.audit_emitter import AgentAuditEmitter
@@ -32,15 +38,24 @@ async def analyze_file_tool(
     session_id: Optional[str] = None,
     schema_context: Optional[str] = None,
     memory_context: Optional[str] = None,
+    user_responses: Optional[List[Dict[str, Any]]] = None,
+    user_comments: Optional[str] = None,
+    analysis_round: int = 1,
 ) -> Dict[str, Any]:
     """
-    Analyze file structure from S3 using Gemini Pro (AI-First).
+    Analyze file structure from S3 using Gemini Pro (AI-First with AGI-Like Behavior).
 
     Examines the file to determine:
     - Column names and suggested mappings
     - Confidence scores for each mapping
     - HIL questions for low-confidence mappings
+    - Unmapped columns requiring user decision
     - Row counts and data types
+
+    AGI-Like Multi-Round HIL:
+    - Round 1: Initial analysis (Memory + File + Schema)
+    - Round 2+: Re-analysis with user responses (Memory + File + Schema + Responses)
+    - Continues until ready_for_import=True
 
     Args:
         s3_key: S3 key where file is stored
@@ -48,23 +63,36 @@ async def analyze_file_tool(
         session_id: Optional session ID for audit
         schema_context: PostgreSQL schema description (optional)
         memory_context: Learned patterns from LearningAgent (optional)
+        user_responses: User answers from previous HIL rounds (AGI-like)
+        user_comments: Free-text instructions from user (AGI-like)
+        analysis_round: Current round number (1 = first, 2+ = re-analysis)
 
     Returns:
-        File analysis with structure, mappings, and HIL questions
+        File analysis with structure, mappings, HIL questions, and readiness status
     """
-    audit.working(
-        message=f"Analisando arquivo com Gemini: {filename or s3_key}",
-        session_id=session_id,
-    )
+    round_label = f"Round {analysis_round}"
+    if user_responses:
+        audit.working(
+            message=f"[{round_label}] Re-analisando com {len(user_responses)} respostas: {filename or s3_key}",
+            session_id=session_id,
+        )
+    else:
+        audit.working(
+            message=f"[{round_label}] Analisando arquivo com Gemini: {filename or s3_key}",
+            session_id=session_id,
+        )
 
     try:
-        # AI-First: Use Gemini for semantic analysis
+        # AI-First: Use Gemini for semantic analysis (AGI-like with user context)
         from tools.gemini_text_analyzer import analyze_file_with_gemini
 
         analysis = await analyze_file_with_gemini(
             s3_key=s3_key,
             schema_context=schema_context,
             memory_context=memory_context,
+            user_responses=user_responses,
+            user_comments=user_comments,
+            analysis_round=analysis_round,
         )
 
         if not analysis.get("success", False):
@@ -87,8 +115,26 @@ async def analyze_file_tool(
         recommended_action = analysis.get("recommended_action", "unknown")
         hil_questions = analysis.get("hil_questions", [])
 
+        # AGI-like fields
+        unmapped_columns = analysis.get("unmapped_columns", [])
+        unmapped_questions = analysis.get("unmapped_questions", [])
+        all_questions_answered = analysis.get("all_questions_answered", False)
+        ready_for_import = analysis.get("ready_for_import", False)
+        current_round = analysis.get("analysis_round", analysis_round)
+
+        # Calculate total pending questions
+        total_pending = len(hil_questions) + len(unmapped_questions)
+
+        # Determine status message
+        if ready_for_import:
+            status_msg = f"[{round_label}] Pronto para importação: {row_count} linhas"
+        elif total_pending > 0:
+            status_msg = f"[{round_label}] Aguardando {total_pending} resposta(s)"
+        else:
+            status_msg = f"[{round_label}] Análise: {row_count} linhas, confiança {confidence:.0%}"
+
         audit.completed(
-            message=f"Análise concluída: {row_count} linhas, confiança {confidence:.0%}",
+            message=status_msg,
             session_id=session_id,
             details={
                 "row_count": row_count,
@@ -96,6 +142,9 @@ async def analyze_file_tool(
                 "confidence": confidence,
                 "recommended_action": recommended_action,
                 "hil_questions_count": len(hil_questions),
+                "unmapped_columns_count": len(unmapped_columns),
+                "ready_for_import": ready_for_import,
+                "analysis_round": current_round,
             },
         )
 
@@ -109,6 +158,13 @@ async def analyze_file_tool(
             "suggested_mappings": analysis.get("suggested_mappings", {}),
             "hil_questions": hil_questions,
             "recommended_action": recommended_action,
+            # AGI-like fields
+            "unmapped_columns": unmapped_columns,
+            "unmapped_questions": unmapped_questions,
+            "all_questions_answered": all_questions_answered,
+            "ready_for_import": ready_for_import,
+            "analysis_round": current_round,
+            "pending_questions_count": total_pending,
             # Legacy fields for compatibility
             "sheet_count": 1,
             "total_rows": row_count,

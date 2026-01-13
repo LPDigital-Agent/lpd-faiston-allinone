@@ -1,11 +1,18 @@
 # =============================================================================
-# Execute Import Tool - AI-First with Gemini
+# Execute Import Tool - AI-First with Gemini (AGI-Like Behavior)
 # =============================================================================
 # Executes the import with validated mappings using Gemini for data extraction.
 #
-# Philosophy: OBSERVE → THINK → LEARN → EXECUTE
+# Philosophy: OBSERVE → THINK → LEARN → EXECUTE (with HIL Approval)
 # - Gemini analyzed the file (THINK phase completed)
-# - Now we EXECUTE: extract data and insert into PostgreSQL
+# - Generate SUMMARY for user approval (AGI-like)
+# - ONLY EXECUTE if user_approval=True
+#
+# AGI-Like Behavior:
+# - Final summary REQUIRED before import
+# - User MUST explicitly approve
+# - All decisions (mappings, ignored columns) shown in summary
+# - Import blocked without approval
 #
 # Module: Gestao de Ativos -> Gestao de Estoque -> Smart Import
 # =============================================================================
@@ -31,14 +38,25 @@ async def execute_import_tool(
     target_table: str = "pending_entry_items",
     user_id: Optional[str] = None,
     session_id: Optional[str] = None,
+    # AGI-Like: New parameters for approval workflow
+    user_approval: bool = False,
+    analysis_summary: Optional[Dict[str, Any]] = None,
+    unmapped_decisions: Optional[Dict[str, str]] = None,
+    ignored_columns: Optional[List[str]] = None,
+    metadata_columns: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Execute the import with validated column mappings.
+    Execute the import with validated column mappings (AGI-Like with HIL Approval).
 
-    Steps:
+    AGI-Like Workflow:
+    1. If user_approval=False → Generate summary and return for approval
+    2. If user_approval=True → Execute import with validated mappings
+
+    Steps (when approved):
     1. Extract data from S3 file using column mappings
-    2. Add metadata to transformed rows
-    3. Insert rows into PostgreSQL via MCP Gateway
+    2. Apply unmapped column decisions (ignore/metadata)
+    3. Add metadata to transformed rows
+    4. Insert rows into PostgreSQL via MCP Gateway
 
     Args:
         s3_key: S3 key where file is stored
@@ -46,12 +64,42 @@ async def execute_import_tool(
         target_table: Target table for import (default: pending_entry_items)
         user_id: User ID for audit trail
         session_id: Optional session ID for audit
+        user_approval: AGI-Like - MUST be True to execute (default: False)
+        analysis_summary: AGI-Like - Summary from analysis phase
+        unmapped_decisions: AGI-Like - User decisions {column: action}
+        ignored_columns: AGI-Like - Columns to ignore (from user decisions)
+        metadata_columns: AGI-Like - Columns to store in metadata JSON
 
     Returns:
-        Import result with success status and metrics
+        If not approved: Summary for user approval (requires_approval=True)
+        If approved: Import result with success status and metrics
     """
+    # Initialize defaults for AGI-like parameters
+    unmapped_decisions = unmapped_decisions or {}
+    ignored_columns = ignored_columns or []
+    metadata_columns = metadata_columns or []
+
+    # ==========================================================================
+    # AGI-Like: Check if approval is required
+    # ==========================================================================
+    if not user_approval:
+        # Generate summary and return for approval
+        return await _generate_import_summary(
+            s3_key=s3_key,
+            column_mappings=column_mappings,
+            analysis_summary=analysis_summary,
+            unmapped_decisions=unmapped_decisions,
+            ignored_columns=ignored_columns,
+            metadata_columns=metadata_columns,
+            target_table=target_table,
+            session_id=session_id,
+        )
+
+    # ==========================================================================
+    # User approved - Proceed with import
+    # ==========================================================================
     audit.working(
-        message="Executando importação...",
+        message="✅ Aprovação recebida. Executando importação...",
         session_id=session_id,
     )
 
@@ -296,6 +344,187 @@ async def _insert_rows(
             "rows_inserted": 0,
             "error": str(e),
         }
+
+
+# =============================================================================
+# AGI-Like: Generate Import Summary (for User Approval)
+# =============================================================================
+
+async def _generate_import_summary(
+    s3_key: str,
+    column_mappings: Dict[str, str],
+    analysis_summary: Optional[Dict[str, Any]],
+    unmapped_decisions: Dict[str, str],
+    ignored_columns: List[str],
+    metadata_columns: List[str],
+    target_table: str,
+    session_id: Optional[str],
+) -> Dict[str, Any]:
+    """
+    Generate a summary of what will be imported (AGI-Like Behavior).
+
+    This summary is presented to the user for EXPLICIT APPROVAL
+    before any data is actually imported.
+
+    Frontend receives this and shows:
+    - Total records to import
+    - Column mappings table
+    - Ignored columns (data will be lost)
+    - Metadata columns (data preserved in JSON)
+    - Warnings/alerts
+    - APPROVE/REJECT buttons
+
+    Returns:
+        Frontend-compatible summary response
+    """
+    audit.working(
+        message="Gerando resumo para aprovação...",
+        session_id=session_id,
+    )
+
+    # Extract metrics from analysis summary
+    row_count = 0
+    column_count = 0
+    confidence = 0.0
+
+    if analysis_summary:
+        row_count = analysis_summary.get("row_count", 0)
+        column_count = analysis_summary.get("column_count", 0)
+        confidence = analysis_summary.get("confidence", 0.0)
+
+    # Build mappings list for display
+    mappings_list = []
+    for source, target in column_mappings.items():
+        mappings_list.append({
+            "source_column": source,
+            "target_field": target,
+            "action": "map",
+        })
+
+    # Build ignored columns list
+    ignored_list = []
+    for col in ignored_columns:
+        ignored_list.append({
+            "source_column": col,
+            "action": "ignore",
+            "warning": "Dados serão perdidos",
+        })
+
+    # Build metadata columns list
+    metadata_list = []
+    for col in metadata_columns:
+        metadata_list.append({
+            "source_column": col,
+            "action": "metadata",
+            "info": "Dados preservados no campo metadata (JSONB)",
+        })
+
+    # Generate warnings
+    warnings = []
+    if ignored_columns:
+        warnings.append({
+            "type": "data_loss",
+            "message": f"{len(ignored_columns)} coluna(s) serão ignoradas e os dados perdidos",
+            "columns": ignored_columns,
+        })
+
+    if confidence < 0.8:
+        warnings.append({
+            "type": "low_confidence",
+            "message": f"Confiança da análise: {confidence:.0%} (abaixo de 80%)",
+        })
+
+    # Build summary message for display
+    summary_message = _build_summary_message(
+        row_count=row_count,
+        mappings_count=len(column_mappings),
+        ignored_count=len(ignored_columns),
+        metadata_count=len(metadata_columns),
+        target_table=target_table,
+    )
+
+    audit.completed(
+        message="Resumo gerado. Aguardando aprovação do usuário.",
+        session_id=session_id,
+        details={
+            "row_count": row_count,
+            "mappings_count": len(column_mappings),
+            "ignored_count": len(ignored_columns),
+            "metadata_count": len(metadata_columns),
+        },
+    )
+
+    return {
+        # AGI-Like: Frontend must show this and get approval
+        "requires_approval": True,
+        "approved": False,
+
+        # Summary data for frontend display
+        "summary": {
+            "message": summary_message,
+            "row_count": row_count,
+            "column_count": column_count,
+            "confidence": confidence,
+            "target_table": target_table,
+            "s3_key": s3_key,
+        },
+
+        # Detailed breakdown
+        "mappings": mappings_list,
+        "ignored_columns": ignored_list,
+        "metadata_columns": metadata_list,
+        "warnings": warnings,
+
+        # For re-calling with approval
+        "approval_payload": {
+            "s3_key": s3_key,
+            "column_mappings": column_mappings,
+            "target_table": target_table,
+            "ignored_columns": ignored_columns,
+            "metadata_columns": metadata_columns,
+            "user_approval": True,  # Set to True when user approves
+        },
+
+        # Frontend instructions
+        "frontend_action": "show_approval_dialog",
+        "approval_buttons": [
+            {"value": "approve", "label": "✅ Aprovar e Importar", "primary": True},
+            {"value": "reject", "label": "❌ Cancelar", "primary": False},
+            {"value": "edit", "label": "✏️ Editar Mapeamentos", "primary": False},
+        ],
+    }
+
+
+def _build_summary_message(
+    row_count: int,
+    mappings_count: int,
+    ignored_count: int,
+    metadata_count: int,
+    target_table: str,
+) -> str:
+    """
+    Build a human-readable summary message in Portuguese.
+    """
+    lines = [
+        f"📊 **Resumo da Importação**",
+        f"",
+        f"• **{row_count:,}** registro(s) serão importados",
+        f"• **{mappings_count}** coluna(s) mapeadas para campos do banco",
+        f"• Tabela destino: `{target_table}`",
+    ]
+
+    if ignored_count > 0:
+        lines.append(f"")
+        lines.append(f"⚠️ **Atenção:** {ignored_count} coluna(s) serão ignoradas (dados perdidos)")
+
+    if metadata_count > 0:
+        lines.append(f"")
+        lines.append(f"📦 {metadata_count} coluna(s) serão preservadas no campo `metadata`")
+
+    lines.append(f"")
+    lines.append(f"**Deseja prosseguir com a importação?**")
+
+    return "\n".join(lines)
 
 
 # Alias for backward compatibility with main.py imports
