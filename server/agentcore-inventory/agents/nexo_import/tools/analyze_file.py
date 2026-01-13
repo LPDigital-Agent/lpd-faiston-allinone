@@ -96,16 +96,31 @@ async def analyze_file_tool(
         )
 
         if not analysis.get("success", False):
+            # Extract detailed error information for debugging
+            error_detail = analysis.get("error", "Unknown error")
+            analysis_keys = list(analysis.keys()) if isinstance(analysis, dict) else []
+
+            # Log full analysis response for debugging (critical for troubleshooting)
+            logger.error(
+                f"[analyze_file] Gemini analysis failed. "
+                f"Error: {error_detail}. "
+                f"Analysis keys: {analysis_keys}. "
+                f"Raw response preview: {str(analysis)[:500]}"
+            )
+
             audit.error(
                 message="Falha na análise com Gemini",
                 session_id=session_id,
-                error=analysis.get("error", "Unknown error"),
+                error=error_detail,
+                details={"analysis_keys": analysis_keys},
             )
+
             return {
                 "success": False,
-                "error": analysis.get("error", "Analysis failed"),
+                "error": error_detail,
                 "file_analysis": {},
                 "sheets": [],
+                "debug_gemini_response_keys": analysis_keys,
             }
 
         # Extract key metrics

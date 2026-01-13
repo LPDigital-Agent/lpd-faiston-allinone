@@ -568,6 +568,89 @@ class A2AClient:
             }
         }
 
+    def _try_extract_json(self, text: str) -> Optional[Dict]:
+        """
+        Try to extract JSON object from text.
+
+        Handles multiple formats that Strands agents may return:
+        - Direct JSON string
+        - JSON in markdown code blocks (```json ... ```)
+        - JSON embedded in natural language responses
+
+        Args:
+            text: Response text that may contain JSON
+
+        Returns:
+            Extracted dict or None if no valid JSON found
+        """
+        if not text:
+            return None
+
+        text = text.strip()
+
+        # 1. Direct JSON parse (most common case)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Extract from markdown code block
+        if "```json" in text:
+            start = text.find("```json") + 7
+            end = text.find("```", start)
+            if end > start:
+                try:
+                    return json.loads(text[start:end].strip())
+                except json.JSONDecodeError:
+                    pass
+
+        # Also try generic code block
+        if "```" in text and "```json" not in text:
+            start = text.find("```") + 3
+            # Skip language identifier if present (e.g., ```python)
+            newline_pos = text.find("\n", start)
+            if newline_pos > start:
+                start = newline_pos + 1
+            end = text.find("```", start)
+            if end > start:
+                try:
+                    return json.loads(text[start:end].strip())
+                except json.JSONDecodeError:
+                    pass
+
+        # 3. Find JSON object anywhere in text (brace matching)
+        start_idx = text.find("{")
+        if start_idx >= 0:
+            brace_count = 0
+            in_string = False
+            escape_next = False
+
+            for i, char in enumerate(text[start_idx:], start_idx):
+                if escape_next:
+                    escape_next = False
+                    continue
+                if char == "\\":
+                    escape_next = True
+                    continue
+                if char == '"' and not escape_next:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+
+                if char == "{":
+                    brace_count += 1
+                elif char == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        try:
+                            return json.loads(text[start_idx:i + 1])
+                        except json.JSONDecodeError:
+                            pass
+                        break
+
+        return None
+
     def _parse_a2a_response(
         self,
         response: Dict,
@@ -605,6 +688,22 @@ class A2AClient:
         for part in parts:
             if part.get("kind") == "text":
                 response_text += part.get("text", "")
+
+        # NEW: Try to extract structured JSON from the response text
+        # Strands agents may embed tool results in conversational text (e.g., "Here's the result: {...}")
+        # This is critical for NEXO analysis where tool results must be properly extracted
+        if response_text:
+            extracted_json = self._try_extract_json(response_text)
+            if extracted_json:
+                logger.debug(f"[A2A] Extracted JSON from response text for {agent_id}")
+                response_text = json.dumps(extracted_json)
+            else:
+                # Log warning if text looks like it might contain JSON but extraction failed
+                if "{" in response_text and "}" in response_text:
+                    logger.warning(
+                        f"[A2A] Response from {agent_id} contains braces but JSON extraction failed. "
+                        f"Preview: {response_text[:200]}..."
+                    )
 
         return A2AResponse(
             success=True,

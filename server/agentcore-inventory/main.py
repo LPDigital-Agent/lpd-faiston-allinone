@@ -130,6 +130,7 @@ async def _invoke_agent_a2a(
             "success": False,
             "error": result.error or "A2A invocation failed",
             "agent_id": agent_id,
+            "debug_raw_response": str(result.raw_response)[:500] if result.raw_response else None,
         }
 
     # Parse response - agents return JSON in the response text
@@ -140,10 +141,31 @@ async def _invoke_agent_a2a(
         # A2A response wraps actual result in 'result' field
         if "result" in response_data:
             return response_data["result"]
-        return response_data
 
-    except json.JSONDecodeError:
-        # If response is not JSON, return as-is
+        # Direct result with success field (already unwrapped)
+        if response_data.get("success") is not None:
+            return response_data
+
+        # Fallback: assume success if we got non-empty data
+        if response_data:
+            return response_data
+
+        # Empty response - return explicit error
+        return {
+            "success": False,
+            "error": "Empty response from agent (no data returned)",
+            "agent_id": agent_id,
+        }
+
+    except json.JSONDecodeError as e:
+        # If response contains error indicators, treat as failure
+        if result.response and any(kw in result.response.lower() for kw in ["error", "failed", "exception"]):
+            return {
+                "success": False,
+                "error": f"Agent error: {result.response[:500]}",
+                "agent_id": agent_id,
+            }
+        # Otherwise return as text response (agent may have returned natural language)
         return {
             "success": True,
             "response": result.response,
@@ -3186,14 +3208,38 @@ async def _nexo_analyze_file(payload: dict, user_id: str, session_id: str) -> di
     #                   overall_confidence, questions, reasoning_trace
 
     if not result.get("success"):
-        # Emit error event
+        # Extract error from multiple possible locations for better debugging
+        # This ensures frontend always gets meaningful error messages
+        error_msg = (
+            result.get("error") or
+            result.get("message") or
+            result.get("detail") or
+            (result.get("debug_raw_response", "")[:200] if result.get("debug_raw_response") else None) or
+            "Erro interno do agente (sem detalhes disponíveis)"
+        )
+
+        # Include debug info for troubleshooting
+        debug_info = {
+            "result_keys": list(result.keys()) if isinstance(result, dict) else [],
+            "has_response": bool(result.get("response")),
+            "agent_id": result.get("agent_id"),
+        }
+
+        # Emit error event with details
         emit_agent_event(
             agent_id="nexo_import",
             status="problema",
-            message=f"Erro ao analisar {filename}: {result.get('error', 'erro desconhecido')}",
+            message=f"Erro ao analisar {filename}: {error_msg}",
             session_id=session_id,
+            details=debug_info,
         )
-        return result
+
+        # Return structured error response
+        return {
+            "success": False,
+            "error": error_msg,
+            "debug_info": debug_info,
+        }
 
     # Extract analysis data
     analysis = result.get("analysis", {})
