@@ -37,8 +37,9 @@ AWS_REGION = "us-east-2"
 AWS_ACCOUNT_ID = "377311924364"
 AWS_PROFILE = "faiston-aio"
 AGENTCORE_ENDPOINT = f"https://bedrock-agentcore.{AWS_REGION}.amazonaws.com"
-# NEXO Import runtime (specialized for Smart Import HIL dialogue)
-RUNTIME_ID = "faiston_sga_nexo_import-0zNtFDAo7M"
+# HTTP Orchestrator runtime (routes to specialist A2A agents)
+# NOTE: Frontend uses HTTP protocol (JWT auth), NOT A2A protocol (SigV4)
+RUNTIME_ID = "faiston_asset_management-uSuLPsFQNH"
 SGA_RUNTIME_ARN = f"arn:aws:bedrock-agentcore:{AWS_REGION}:{AWS_ACCOUNT_ID}:runtime/{RUNTIME_ID}"
 CSV_FILE_PATH = "data/SOLICITAÇÕES DE EXPEDIÇÃO.csv"
 TARGET_RECORD_COUNT = 1688

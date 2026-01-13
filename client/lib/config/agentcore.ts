@@ -49,8 +49,8 @@ const RUNTIME_IDS = {
   /** Faiston Academy - Learning platform agent */
   academy: 'faiston_academy_agents-ODNvP6HxCD',
 
-  /** SGA Inventory - NEXO Import orchestrator (Smart Import) */
-  sga: 'faiston_sga_nexo_import-0zNtFDAo7M',
+  /** SGA Inventory - HTTP Orchestrator (routes to A2A agents) */
+  sga: 'faiston_asset_management-uSuLPsFQNH',
 
   /** Portal - Central NEXO orchestrator agent */
   portal: 'faiston_portal_agents-PENDING', // TODO: Update after first deployment
