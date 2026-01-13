@@ -221,3 +221,66 @@ export const stopAutoRefresh = (): void => {
 export const isAutoRefreshRunning = (): boolean => {
   return refreshInterval !== null;
 };
+
+// =============================================================================
+// Access Token Validation (AgentCore)
+// =============================================================================
+
+/**
+ * Garante que o Access Token esteja válido, renovando se necessário
+ *
+ * Esta função deve ser chamada antes de fazer requisições ao AWS Bedrock AgentCore
+ * que requer accessToken (diferente de GraphQL que usa idToken).
+ *
+ * @returns Access Token válido ou null se não autenticado
+ *
+ * @example
+ * ```typescript
+ * const token = await ensureValidAccessToken();
+ * if (!token) {
+ *   // Redirecionar para login
+ *   window.location.href = '/login';
+ *   return;
+ * }
+ * // Usar token para AgentCore
+ * headers: { Authorization: `Bearer ${token}` }
+ * ```
+ */
+export const ensureValidAccessToken = async (): Promise<string | null> => {
+  try {
+    const tokens = await getTokens();
+    if (!tokens) {
+      return null;
+    }
+
+    const { accessToken } = tokens;
+
+    // Verificar se o token está próximo de expirar
+    if (!isTokenExpiringSoon(accessToken)) {
+      return accessToken;
+    }
+
+    // Token está expirando, tentar renovar
+    console.log('[Auth] Access Token expirando, iniciando refresh...');
+
+    try {
+      await refreshSession();
+      const newTokens = await getTokens();
+
+      if (newTokens?.accessToken) {
+        console.log('[Auth] Access Token renovado com sucesso');
+        return newTokens.accessToken;
+      }
+    } catch (refreshError) {
+      console.error('[Auth] Falha ao renovar access token:', refreshError);
+      // Se não conseguir renovar, fazer logout
+      signOut();
+      return null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[Auth] Erro ao verificar access token:', error);
+    return null;
+  }
+};
