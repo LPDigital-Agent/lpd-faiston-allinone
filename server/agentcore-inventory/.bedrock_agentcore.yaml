@@ -77,15 +77,18 @@ agents:
       signing_algorithm: ES384
       issuer_url: null
       duration_seconds: 300
-    # IMPORTANT: Authorizer already exists on runtime faiston_asset_management-uSuLPsFQNH-300
-    # Commenting out to prevent "Authorizer already exists" error during deployment
-    # The JWT authorizer is already configured and will continue to work
-    # authorizer_configuration:
-    #   customJWTAuthorizer:
-    #     discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
-    #     allowedClients:
-    #     #     - 7ovjm09dr94e52mpejvbu9v1cg
-    authorizer_configuration: null
+    # JWT Authorizer Configuration for Frontend Access
+    # IMPORTANT: This MUST be set for the orchestrator to accept frontend JWT tokens
+    # Setting to null will REMOVE the authorizer during deployment (breaks auth!)
+    #
+    # NOTE: If deployment fails with "Authorizer already exists" error, the
+    # workflow's configure-orchestrator job will update it post-deployment.
+    # The authorizer_configuration here ensures it survives ASYNC deployment completion.
+    authorizer_configuration:
+      customJWTAuthorizer:
+        discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
+        allowedClients:
+          - 7ovjm09dr94e52mpejvbu9v1cg
     request_header_configuration: null
     oauth_configuration: null
     api_key_env_var_name: null
