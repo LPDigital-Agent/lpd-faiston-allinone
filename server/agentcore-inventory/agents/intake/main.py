@@ -104,6 +104,12 @@ AGENT_SKILLS = [
         description="Health check endpoint for monitoring. Returns agent status, version, model, protocol, and specialty information.",
         tags=["intake", "monitoring", "health", "status"],
     ),
+    AgentSkill(
+        id="get_upload_url",
+        name="Get Upload URL",
+        description="Generate presigned S3 URL for document upload. Used before uploading NF documents (XML, PDF, images) for processing. Returns upload_url, s3_key, and expiration time.",
+        tags=["intake", "upload", "s3", "presigned-url", "nf"],
+    ),
 ]
 
 # =============================================================================
@@ -498,6 +504,64 @@ async def health_check() -> Dict[str, Any]:
     }
 
 
+@tool
+def get_upload_url(
+    filename: str,
+    content_type: str = "application/octet-stream",
+) -> Dict[str, Any]:
+    """
+    Generate presigned S3 URL for document upload.
+
+    This tool creates a presigned URL that allows direct upload to S3
+    without exposing AWS credentials. Used before processing NF documents.
+
+    Args:
+        filename: Original filename for the document (e.g., "nota_fiscal.xml")
+        content_type: MIME type of the file (default: application/octet-stream)
+            Common types: application/xml, application/pdf, image/png, image/jpeg
+
+    Returns:
+        Dict containing:
+            - success: True if URL generated
+            - upload_url: Presigned URL for PUT request
+            - s3_key: S3 key where file will be stored
+            - expires_in: URL expiration time in seconds (3600)
+        Or error dict if generation fails
+    """
+    logger.info(f"[{AGENT_NAME}] Generating upload URL for: {filename}")
+
+    if not filename:
+        return {"success": False, "error": "filename is required"}
+
+    try:
+        # Import S3 client for presigned URL generation
+        from tools.s3_client import SGAS3Client
+
+        s3 = SGAS3Client()
+
+        # Generate temp path with unique key
+        key = s3.get_temp_path(filename)
+
+        # Generate presigned upload URL
+        url_info = s3.generate_upload_url(
+            key=key,
+            content_type=content_type,
+            expires_in=3600,  # 1 hour expiration
+        )
+
+        # Rename 'key' to 's3_key' for API consistency
+        if url_info.get("success") and "key" in url_info:
+            url_info["s3_key"] = url_info.pop("key")
+
+        logger.info(f"[{AGENT_NAME}] Upload URL generated: {url_info.get('s3_key', 'unknown')}")
+
+        return url_info
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] get_upload_url failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
 # =============================================================================
 # Strands Agent Configuration
 # =============================================================================
@@ -519,6 +583,7 @@ def create_agent() -> Agent:
             process_entry,
             confirm_entry,
             health_check,
+            get_upload_url,  # BUG-013: Upload URL generation for NF documents
         ],
         system_prompt=SYSTEM_PROMPT,
     )

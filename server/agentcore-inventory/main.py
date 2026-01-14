@@ -200,6 +200,7 @@ def _get_static_action_mapping():
         "confirm_nf_entry": ("intake", "confirm_entry"),
         "process_scanned_nf_upload": ("intake", "process_nf"),
         "process_image_ocr": ("intake", "parse_nf_image"),
+        "get_nf_upload_url": ("intake", "get_upload_url"),  # BUG-013: Presigned URL via IntakeAgent
         # NexoImport
         "nexo_analyze_file": ("nexo_import", "analyze_file"),
         "nexo_get_questions": ("nexo_import", "get_questions"),
@@ -880,6 +881,8 @@ def invoke(payload: dict, context) -> dict:
 
         # =================================================================
         # Mode 2: Swarm Routing (Phase 8) - NEXO Import Operations
+        # BUG-013 FIX: get_nf_upload_url moved to A2A routing via IntakeAgent
+        # (see _get_static_action_mapping for routing configuration)
         # =================================================================
         if action and _should_use_swarm(action):
             logger.info(f"[Orchestrator] Swarm routing: {action} → Inventory Swarm")
