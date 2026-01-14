@@ -19,8 +19,9 @@
 # =============================================================================
 
 import logging
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
-
+from uuid import uuid4
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
@@ -166,35 +167,181 @@ async def analyze_file_tool(
         # CRITICAL: This flag tells the Strands ReAct loop to pause
         should_stop = total_pending > 0 or not ready_for_import
 
-        return {
-            "success": True,
-            "file_analysis": analysis,
-            "row_count": row_count,
-            "column_count": column_count,
-            "confidence": confidence,
-            "columns": analysis.get("columns", []),
-            "suggested_mappings": analysis.get("suggested_mappings", {}),
-            "hil_questions": hil_questions,
-            "recommended_action": recommended_action,
-            # AGI-like fields
-            "unmapped_columns": unmapped_columns,
-            "unmapped_questions": unmapped_questions,
-            "all_questions_answered": all_questions_answered,
-            "ready_for_import": ready_for_import,
-            "analysis_round": current_round,
-            "pending_questions_count": total_pending,
-            # STOP ACTION: Signal Strands ReAct to pause for user response
-            "stop_action": should_stop,
-            "stop_reason": "Aguardando respostas do usuário" if should_stop else None,
-            # Legacy fields for compatibility
+        # Generate session ID if not provided
+        effective_session_id = session_id or f"nexo-{uuid4().hex[:8]}"
+        effective_filename = filename or s3_key.split("/")[-1]
+
+        # Build column_mappings array (matches TypeScript NexoColumnMapping[])
+        column_mappings = [
+            {
+                "file_column": col.get("source_name", col.get("name", "")),
+                "target_field": col.get("suggested_mapping") or col.get("target_field", ""),
+                "confidence": col.get("mapping_confidence", col.get("confidence", 0.0)),
+                "reasoning": col.get("reason", f"Mapped based on column name pattern"),
+                "alternatives": [],
+            }
+            for col in analysis.get("columns", [])
+            if col.get("suggested_mapping") or col.get("target_field")
+        ]
+
+        # Build questions array (matches TypeScript NexoQuestion[])
+        questions = [
+            {
+                "id": q.get("id", f"q{i}"),
+                "question": q.get("question", ""),
+                "context": q.get("reason", q.get("context", "")),
+                "importance": "critical" if q.get("priority") == "high" else "medium",
+                "topic": q.get("topic", "column_mapping"),
+                "options": [
+                    {"value": opt if isinstance(opt, str) else opt.get("value", ""),
+                     "label": opt if isinstance(opt, str) else opt.get("label", "")}
+                    for opt in q.get("options", [])
+                ] if q.get("options") else [],
+                "default_value": q.get("default_value"),
+            }
+            for i, q in enumerate(hil_questions)
+        ]
+
+        # Build unmapped_questions array (matches TypeScript)
+        unmapped_questions_formatted = [
+            {
+                "id": uq.get("id", f"uq{i}"),
+                "type": "unmapped",
+                "column": uq.get("field", uq.get("column", "")),
+                "question": uq.get("question", ""),
+                "description": uq.get("reason", uq.get("description", "")),
+                "suggested_action": uq.get("suggested_action", "metadata"),
+                "options": [
+                    {"value": opt if isinstance(opt, str) else opt.get("value", ""),
+                     "label": opt if isinstance(opt, str) else opt.get("label", ""),
+                     "warning": opt.get("warning", False) if isinstance(opt, dict) else False,
+                     "recommended": opt.get("recommended", False) if isinstance(opt, dict) else False}
+                    for opt in uq.get("options", [])
+                ] if uq.get("options") else [],
+                "blocking": True,
+            }
+            for i, uq in enumerate(unmapped_questions)
+        ]
+
+        # Build reasoning_trace (matches TypeScript NexoReasoningStep[])
+        reasoning_trace = [
+            {
+                "type": "observation",
+                "content": f"Analyzed file: {effective_filename}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            {
+                "type": "thought",
+                "content": f"Detected {column_count} columns, {row_count} rows with {confidence:.0%} confidence",
+            },
+            {
+                "type": "action",
+                "content": f"Recommended action: {recommended_action}",
+                "tool": "gemini_text_analyzer",
+            },
+        ]
+
+        # Build nested analysis object (CRITICAL - matches TypeScript NexoAnalyzeFileResponse.analysis)
+        analysis_nested = {
             "sheet_count": 1,
             "total_rows": row_count,
             "sheets": [{
                 "name": analysis.get("filename", "Sheet1"),
+                "purpose": "items",  # Default purpose for single-sheet files
                 "row_count": row_count,
                 "column_count": column_count,
-                "columns": analysis.get("columns", []),
+                "columns": [
+                    {
+                        "name": col.get("source_name", col.get("name", "")),
+                        "sample_values": col.get("sample_values", []),
+                        "detected_type": col.get("data_type", col.get("detected_type", "string")),
+                        "suggested_mapping": col.get("suggested_mapping") or col.get("target_field"),
+                        "confidence": col.get("mapping_confidence", col.get("confidence", 0.0)),
+                    }
+                    for col in analysis.get("columns", [])
+                ],
+                "confidence": confidence,
             }],
+            "recommended_strategy": recommended_action,
+        }
+
+        return {
+            # Core response fields (matches TypeScript NexoAnalyzeFileResponse)
+            "success": True,
+            "import_session_id": effective_session_id,
+            "filename": effective_filename,
+            "detected_file_type": analysis.get("file_type", "csv"),
+
+            # NESTED analysis object (CRITICAL - matches TypeScript contract)
+            "analysis": analysis_nested,
+
+            # Column mappings array
+            "column_mappings": column_mappings,
+
+            # Overall confidence (renamed from confidence)
+            "overall_confidence": confidence,
+
+            # Questions array (renamed from hil_questions)
+            "questions": questions,
+
+            # Unmapped questions for AGI-like behavior
+            "unmapped_questions": unmapped_questions_formatted if unmapped_questions_formatted else None,
+
+            # Reasoning trace for transparency
+            "reasoning_trace": reasoning_trace,
+
+            # Session IDs
+            "user_id": None,  # Set by orchestrator if needed
+            "session_id": effective_session_id,
+
+            # STATELESS: Session state for frontend storage
+            "session_state": {
+                "session_id": effective_session_id,
+                "filename": effective_filename,
+                "s3_key": s3_key,
+                "stage": "questioning" if total_pending > 0 else "processing",
+                "file_analysis": {
+                    "sheets": analysis_nested["sheets"],
+                    "sheet_count": 1,
+                    "total_rows": row_count,
+                    "detected_type": analysis.get("file_type", "csv"),
+                    "recommended_strategy": recommended_action,
+                },
+                "reasoning_trace": reasoning_trace,
+                "questions": questions,
+                "answers": {},
+                "learned_mappings": {},
+                "ai_instructions": {},
+                "requested_new_columns": [],
+                "column_mappings": {
+                    m["file_column"]: m["target_field"]
+                    for m in column_mappings
+                },
+                "confidence": {
+                    "overall": confidence,
+                    "extraction_quality": 1.0,
+                    "evidence_strength": 1.0,
+                    "historical_match": 1.0,
+                    "risk_level": "low" if confidence >= 0.8 else "medium" if confidence >= 0.5 else "high",
+                    "factors": [],
+                    "requires_hil": confidence < 0.6,
+                },
+                "error": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+
+            # AGI-like control fields (for internal use)
+            "ready_for_import": ready_for_import,
+            "analysis_round": current_round,
+            "pending_questions_count": total_pending,
+
+            # Strands ReAct control
+            "stop_action": should_stop,
+            "stop_reason": "Aguardando respostas do usuário" if should_stop else None,
+
+            # DEPRECATED: Legacy fields for backward compatibility
+            "file_analysis": analysis,  # Keep for debugging
         }
 
     except Exception as e:
