@@ -538,3 +538,183 @@ class TestResponseValidation:
         is_valid = isinstance(sheets, list) and len(sheets) > 0
 
         assert is_valid is True, "Should accept valid response"
+
+
+class TestToolResultFormat:
+    """
+    Test that extraction handles official Strands ToolResult format.
+
+    BUG-015 Fix: Tools now return {"status": "...", "content": [{"json": {...}}]}
+    format per official Strands SDK documentation.
+    """
+
+    def test_extracts_from_toolresult_json_block(self):
+        """
+        Should extract from {"status": "success", "content": [{"json": {...}}]}.
+
+        This is the PRIMARY format our unified_analyze_file tool now returns.
+        """
+        from main import _extract_tool_output_from_swarm_result
+
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "status": "success",
+            "content": [
+                {
+                    "json": {
+                        "success": True,
+                        "analysis": {
+                            "sheets": [{"name": "Sheet1", "row_count": 100}],
+                            "sheet_count": 1,
+                        },
+                        "overall_confidence": 0.92,
+                    }
+                }
+            ],
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        result = _extract_tool_output_from_swarm_result(
+            mock_swarm_result, agent_name="file_analyst", tool_name="unified_analyze_file"
+        )
+
+        assert result is not None
+        assert "analysis" in result
+        assert result["analysis"]["sheets"][0]["name"] == "Sheet1"
+        assert result["overall_confidence"] == 0.92
+
+    def test_extracts_from_toolresult_text_block(self):
+        """
+        Should parse JSON from {"status": "success", "content": [{"text": "..."}]}.
+
+        Fallback path when tool returns text instead of json block.
+        """
+        from main import _extract_tool_output_from_swarm_result
+
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "status": "success",
+            "content": [
+                {
+                    "text": json.dumps({
+                        "success": True,
+                        "analysis": {
+                            "sheets": [{"name": "Data", "row_count": 50}],
+                            "sheet_count": 1,
+                        },
+                    })
+                }
+            ],
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        result = _extract_tool_output_from_swarm_result(
+            mock_swarm_result, agent_name="file_analyst", tool_name="unified_analyze_file"
+        )
+
+        assert result is not None
+        assert "analysis" in result
+        assert result["analysis"]["sheets"][0]["name"] == "Data"
+
+    def test_handles_toolresult_with_error_status(self):
+        """
+        Should still extract content even when status is 'error'.
+
+        Tools may return status='error' but still have useful analysis data.
+        """
+        from main import _extract_tool_output_from_swarm_result
+
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "status": "error",
+            "content": [
+                {
+                    "json": {
+                        "success": False,
+                        "error": "File parsing failed",
+                        "analysis": {
+                            "sheets": [],
+                            "sheet_count": 0,
+                        },
+                    }
+                }
+            ],
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        result = _extract_tool_output_from_swarm_result(
+            mock_swarm_result, agent_name="file_analyst", tool_name="unified_analyze_file"
+        )
+
+        assert result is not None
+        assert result["success"] is False
+        assert "analysis" in result
+
+    def test_backwards_compatible_with_plain_dict(self):
+        """
+        Should still handle plain dict (legacy format) for backwards compatibility.
+
+        Ensures we don't break existing behavior if tool returns plain dict.
+        """
+        from main import _extract_tool_output_from_swarm_result
+
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "success": True,
+            "analysis": {
+                "sheets": [{"name": "Legacy", "row_count": 200}],
+                "sheet_count": 1,
+            },
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        result = _extract_tool_output_from_swarm_result(
+            mock_swarm_result, agent_name="file_analyst", tool_name="unified_analyze_file"
+        )
+
+        assert result is not None
+        assert "analysis" in result
+        assert result["analysis"]["sheets"][0]["name"] == "Legacy"
+
+    def test_extracts_from_json_string_toolresult(self):
+        """
+        Should handle ToolResult format when result is JSON string.
+
+        Some scenarios may serialize the entire ToolResult as a string.
+        """
+        from main import _extract_tool_output_from_swarm_result
+
+        mock_agent_result = Mock()
+        mock_agent_result.result = json.dumps({
+            "status": "success",
+            "content": [
+                {
+                    "json": {
+                        "success": True,
+                        "analysis": {
+                            "sheets": [{"name": "StringParsed", "row_count": 75}],
+                            "sheet_count": 1,
+                        },
+                    }
+                }
+            ],
+        })
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        result = _extract_tool_output_from_swarm_result(
+            mock_swarm_result, agent_name="file_analyst", tool_name="unified_analyze_file"
+        )
+
+        assert result is not None
+        assert "analysis" in result
+        assert result["analysis"]["sheets"][0]["name"] == "StringParsed"

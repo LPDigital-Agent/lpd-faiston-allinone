@@ -448,6 +448,29 @@ async def _invoke_swarm(
     try:
         result = swarm(prompt, **swarm_context)
 
+        # =====================================================================
+        # BUG-015 FIX: Diagnostic logging for production debugging
+        # =====================================================================
+        # Log SwarmResult structure to understand what AgentCore returns
+        # This helps diagnose extraction issues in CloudWatch
+        # =====================================================================
+        logger.info(f"[Swarm] Result type: {type(result).__name__}")
+        logger.info(f"[Swarm] Result has 'results': {hasattr(result, 'results')}")
+        if hasattr(result, "results") and result.results:
+            logger.info(f"[Swarm] results keys: {list(result.results.keys())}")
+            for key, val in result.results.items():
+                has_result_attr = hasattr(val, "result")
+                logger.info(f"[Swarm] results[{key}] has .result: {has_result_attr}")
+                if has_result_attr:
+                    r = val.result
+                    logger.info(f"[Swarm] results[{key}].result type: {type(r).__name__}")
+                    if isinstance(r, dict):
+                        logger.info(f"[Swarm] results[{key}].result keys: {list(r.keys())}")
+        logger.info(f"[Swarm] Result has 'message': {hasattr(result, 'message')}")
+        if hasattr(result, "message") and result.message:
+            logger.info(f"[Swarm] message length: {len(result.message)}")
+            logger.info(f"[Swarm] message preview: {result.message[:200]}...")
+
         # Extract response from Swarm result
         response = _process_swarm_result(result, session)
 
@@ -536,8 +559,10 @@ def _extract_tool_output_from_swarm_result(
     """
     Extract structured tool output from SwarmResult.
 
-    Strands Swarm stores individual agent results in result.results dict.
-    We also check agent.messages for tool_result content blocks as fallback.
+    Handles multiple formats per official Strands documentation:
+    1. ToolResult format: {"status": "...", "content": [{"json": {...}}]}
+    2. Plain dict with our data directly
+    3. JSON string that needs parsing
 
     OFFICIAL STRANDS PATTERN (from documentation):
     ```python
@@ -555,22 +580,73 @@ def _extract_tool_output_from_swarm_result(
     """
     # PRIORITY 1: Try result.results["agent_name"].result (OFFICIAL PATTERN)
     if hasattr(result, "results") and result.results:
+        logger.debug(f"[Swarm] result.results keys: {list(result.results.keys())}")
+
         agent_result = result.results.get(agent_name)
-        if agent_result and hasattr(agent_result, "result"):
-            raw = agent_result.result
-            if isinstance(raw, dict):
-                logger.debug(f"[Swarm] Found dict result from {agent_name}")
-                return raw
-            if isinstance(raw, str):
-                try:
-                    parsed = json.loads(raw)
-                    logger.debug(f"[Swarm] Parsed JSON string from {agent_name}")
-                    return parsed
-                except json.JSONDecodeError:
-                    logger.debug(f"[Swarm] Could not parse result from {agent_name}: {raw[:100]}")
+        if agent_result:
+            logger.debug(f"[Swarm] Found agent_result for {agent_name}")
+
+            if hasattr(agent_result, "result"):
+                raw = agent_result.result
+                logger.debug(
+                    f"[Swarm] raw type: {type(raw).__name__}, "
+                    f"keys: {list(raw.keys()) if isinstance(raw, dict) else 'N/A'}"
+                )
+
+                # ============================================================
+                # BUG-015 FIX: Handle ToolResult format
+                # ============================================================
+                # Official Strands tools return: {"status": "...", "content": [...]}
+                # We need to unwrap content[].json to get actual tool output
+                # ============================================================
+                if isinstance(raw, dict) and "content" in raw and isinstance(raw.get("content"), list):
+                    logger.info("[Swarm] Detected ToolResult format, extracting from content")
+                    for content_block in raw["content"]:
+                        if isinstance(content_block, dict):
+                            # Try json block first (our standard format)
+                            if "json" in content_block:
+                                data = content_block["json"]
+                                if isinstance(data, dict) and "analysis" in data:
+                                    logger.info("[Swarm] ✓ Extracted from content[].json")
+                                    return data
+                            # Try text block (parse as JSON)
+                            if "text" in content_block:
+                                try:
+                                    data = json.loads(content_block["text"])
+                                    if isinstance(data, dict) and "analysis" in data:
+                                        logger.info("[Swarm] ✓ Parsed from content[].text")
+                                        return data
+                                except (json.JSONDecodeError, TypeError):
+                                    continue
+
+                # Handle plain dict (legacy format or direct return)
+                if isinstance(raw, dict) and "analysis" in raw:
+                    logger.info("[Swarm] ✓ Found plain dict with analysis")
+                    return raw
+
+                # Handle JSON string
+                if isinstance(raw, str):
+                    try:
+                        parsed = json.loads(raw)
+                        if isinstance(parsed, dict):
+                            # Check if it's ToolResult format
+                            if "content" in parsed and isinstance(parsed.get("content"), list):
+                                for block in parsed["content"]:
+                                    if isinstance(block, dict) and "json" in block:
+                                        data = block["json"]
+                                        if isinstance(data, dict) and "analysis" in data:
+                                            logger.info("[Swarm] ✓ Extracted from parsed string ToolResult")
+                                            return data
+                            # Or direct data
+                            if "analysis" in parsed:
+                                logger.info("[Swarm] ✓ Parsed JSON string with analysis")
+                                return parsed
+                    except json.JSONDecodeError:
+                        logger.debug(f"[Swarm] Could not parse string result: {raw[:100]}")
 
     # PRIORITY 2: Try extracting from entry_point agent's messages
     if hasattr(result, "entry_point") and hasattr(result.entry_point, "messages"):
+        logger.debug("[Swarm] Trying entry_point.messages fallback")
         for msg in reversed(result.entry_point.messages):
             if not isinstance(msg, dict):
                 continue
@@ -587,15 +663,22 @@ def _extract_tool_output_from_swarm_result(
                                 if isinstance(content_data, str)
                                 else content_data
                             )
-                            # Verify it has expected structure
-                            if isinstance(parsed, dict) and "analysis" in parsed:
-                                logger.debug(
-                                    f"[Swarm] Extracted tool_result from entry_point messages"
-                                )
-                                return parsed
+                            # Handle ToolResult wrapper in message
+                            if isinstance(parsed, dict):
+                                if "content" in parsed and isinstance(parsed.get("content"), list):
+                                    for inner in parsed["content"]:
+                                        if isinstance(inner, dict) and "json" in inner:
+                                            data = inner["json"]
+                                            if isinstance(data, dict) and "analysis" in data:
+                                                logger.info("[Swarm] ✓ Extracted from entry_point ToolResult")
+                                                return data
+                                elif "analysis" in parsed:
+                                    logger.info("[Swarm] ✓ Extracted from entry_point messages")
+                                    return parsed
                         except (json.JSONDecodeError, TypeError):
                             continue
 
+    logger.warning(f"[Swarm] ✗ Could not extract tool output from any source")
     return None
 
 

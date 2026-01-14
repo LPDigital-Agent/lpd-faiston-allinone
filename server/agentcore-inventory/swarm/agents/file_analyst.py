@@ -124,7 +124,17 @@ def unified_analyze_file(
         s3_key, analysis_round, result.get("success", False)
     )
 
-    return result
+    # ==========================================================================
+    # BUG-015 FIX: Return in official Strands ToolResult format
+    # ==========================================================================
+    # Official Strands SDK tools return: {"status": "...", "content": [{"json": ...}]}
+    # Reference: https://strandsagents.com SDK examples
+    # This ensures proper extraction via result.results["file_analyst"].result
+    # ==========================================================================
+    return {
+        "status": "success" if result.get("success") else "error",
+        "content": [{"json": result}]
+    }
 
 # =============================================================================
 # System Prompt
