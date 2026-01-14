@@ -1,9 +1,12 @@
 # Faiston One Authentication Architecture
 
-> **Last Updated:** 2026-01-13
+> **Last Updated:** 2026-01-14
 > **Status:** Production
+> **Architecture:** Strands Orchestrator Agent (LLM-based routing)
 
 This document describes the authentication architecture for Faiston One platform, specifically for the AgentCore multi-agent system.
+
+> **REFACTORED (2026-01-14):** The orchestrator was transformed from a 4,426-line monolith with 75 handlers to a ~490-line **Strands Agent** with LLM-based routing via Gemini Flash.
 
 ---
 
@@ -56,7 +59,7 @@ The platform uses a **dual authentication model**:
 
 ## AgentCore Runtime Types
 
-### Orchestrator (HTTP Protocol)
+### Orchestrator (HTTP Protocol + Strands Agent)
 
 | Property | Value |
 |----------|-------|
@@ -65,6 +68,16 @@ The platform uses a **dual authentication model**:
 | Protocol | `HTTP` |
 | Auth | JWT Bearer Token |
 | Use Case | Frontend-facing entry point |
+| Architecture | **Strands Agent** with LLM-based routing |
+| Model | Gemini 2.5 Flash (for fast routing decisions) |
+| Code Size | ~490 lines (refactored from 4,426 lines) |
+
+**Routing Pattern:**
+```
+Frontend → HTTP /invocations → Strands Agent (Gemini) → invoke_specialist tool → A2A Protocol → Specialist
+```
+
+The orchestrator uses a **Strands `Agent`** object with a system prompt that describes all 14 specialist agents. The LLM decides which specialist to invoke based on user intent.
 
 ### Specialist Agents (A2A Protocol)
 

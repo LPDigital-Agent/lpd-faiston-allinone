@@ -129,7 +129,7 @@ data "archive_file" "websocket_connect" {
   output_path = "${path.module}/lambda_packages/agentroom-ws-connect.zip"
 
   source {
-    content = <<-EOF
+    content  = <<-EOF
 """WebSocket $connect handler - stores connection in DynamoDB."""
 import os
 import boto3
@@ -204,7 +204,7 @@ data "archive_file" "websocket_disconnect" {
   output_path = "${path.module}/lambda_packages/agentroom-ws-disconnect.zip"
 
   source {
-    content = <<-EOF
+    content  = <<-EOF
 """WebSocket $disconnect handler - removes connection from DynamoDB."""
 import os
 import boto3

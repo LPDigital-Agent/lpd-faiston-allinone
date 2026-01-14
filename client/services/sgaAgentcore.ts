@@ -126,6 +126,9 @@ const sgaService = createAgentCoreService({
 
 export type { AgentCoreRequest, AgentCoreResponse, InvokeOptions };
 
+// BUG-014: Re-export type for A2A response extraction
+export type { SGAGetUploadUrlResponse };
+
 // =============================================================================
 // Core Functions (delegated to base service)
 // =============================================================================

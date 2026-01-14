@@ -173,15 +173,24 @@ To be used on web research we are in year 2026.
 ### CRITICAL: Authentication Protocol Architecture
 
 > **DETAILED DOCUMENTATION**: See `docs/AUTHENTICATION_ARCHITECTURE.md` for complete auth flow, troubleshooting, and ADRs.
+> **ORCHESTRATOR PATTERN**: See `docs/ORCHESTRATOR_ARCHITECTURE.md` for the Strands Orchestrator pattern.
 
 ```
-Frontend (JWT) → faiston_asset_management (HTTP) → faiston_sga_* (A2A/SigV4)
+Frontend (JWT) → FaistonInventoryManagement (HTTP) → faiston_sga_* (A2A/SigV4)
+                 └── Strands Orchestrator Agent ──┘
+                     (LLM-based routing via Gemini)
 ```
+
+**Architecture Notes (REFACTORED 2026-01-14):**
+- The orchestrator uses **Strands Agent** with Gemini for LLM-based intelligent routing
+- Deployment name remains `faiston_asset_management` for backward compatibility
+- Internal name is `FaistonInventoryManagement` (conceptual: Inventory Management Orchestrator)
+- **Code reduced from 4,426 lines to ~490 lines** (89% reduction)
 
 **Protocol Rules:**
 - **NEVER** call `faiston_sga_*` agents directly from frontend
 - Frontend MUST call `faiston_asset_management-uSuLPsFQNH` (HTTP orchestrator)
-- Orchestrator routes to specialist agents via A2A protocol
+- Orchestrator routes to specialist agents via A2A protocol (LLM decides routing)
 - Calling A2A agent with JWT → "Empty response payload" (auth mismatch)
 
 **JWT Authorizer Configuration (MANDATORY):**
@@ -388,6 +397,7 @@ ROUND N: Memory + File + Schema + All Responses → Gemini → Final Mappings
   - linting/formatting
   - maintainable code
 
+- **PYTHON ENGINEERING (MANDATORY):** follow Python best practices (PEP8, type hints where applicable, ruff/pytest, clear modular design, minimal complexity).
 - **SECURITY / PENTEST-READY:**  
   Platform MUST be security-first and aligned with:
   - OWASP

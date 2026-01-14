@@ -3,6 +3,8 @@
 > **MANDATORY REFERENCE**: This document describes the complete Smart Import flow.
 > Claude Code MUST consult this document before making any changes to the import flow.
 
+> **REFACTORED (2026-01-14):** Orchestrator transformed to **Strands Agent** with LLM-based routing (4,426 → 490 lines).
+
 ---
 
 ## Overview
@@ -30,13 +32,22 @@ Smart Import is an **AI-First** file import system that uses:
                                   │ Authorization: Bearer {JWT}
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│              AWS BEDROCK AGENTCORE (HTTP Protocol)              │
+│         STRANDS ORCHESTRATOR AGENT (HTTP Protocol)              │
 │         faiston_asset_management-uSuLPsFQNH                     │
 │                                                                 │
-│  Entrypoint: main.py (root)                                    │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ BedrockAgentCoreApp + Strands Agent (LLM-based routing)    ││
+│  │                                                             ││
+│  │  Entrypoint: main.py (root) - ~490 lines                   ││
+│  │  Model: Gemini 2.5 Flash (fast routing)                    ││
+│  │  Tools: [invoke_specialist, health_check]                  ││
+│  │  System Prompt: Routes to 14 specialists by intent         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
 │  Protocol: HTTP + JWT Authorizer                               │
-│  Role: ORCHESTRATOR (routes to specialist A2A agents)          │
+│  Pattern: agents-as-tools (LLM decides which specialist)       │
 └─────────────────────────────────┬───────────────────────────────┘
+                                  │ invoke_specialist() tool
                                   │ A2A Protocol (JSON-RPC 2.0)
                                   │ Auth: SigV4 (boto3 IAM)
                                   ▼
@@ -50,7 +61,7 @@ Smart Import is an **AI-First** file import system that uses:
 │           │                    │                    │          │
 │           ▼                    ▼                    ▼          │
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │              Gemini 3.0 Pro (with Thinking)                 ││
+│  │              Gemini 2.5 Pro (with Thinking)                 ││
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────┬───────────────────────────────┘
                                   │ MCP Protocol
@@ -203,16 +214,18 @@ The `stop_action: true` flag signals the Strands ReAct loop to pause.
 
 ## Code Locations
 
-| Component | Path |
-|-----------|------|
-| Frontend Config | `client/lib/config/agentcore.ts` |
-| Frontend Hook | `client/lib/hooks/useInventoryImport.ts` |
-| Orchestrator | `server/agentcore-inventory/main.py` |
-| A2A Client | `server/agentcore-inventory/shared/a2a_client.py` |
-| NEXO Agent | `server/agentcore-inventory/agents/nexo_import/main.py` |
-| File Analysis | `server/agentcore-inventory/agents/nexo_import/tools/analyze_file.py` |
-| Gemini Analyzer | `server/agentcore-inventory/agents/nexo_import/tools/gemini_text_analyzer.py` |
-| Audit Emitter | `server/agentcore-inventory/shared/audit_emitter.py` |
+| Component | Path | Notes |
+|-----------|------|-------|
+| Frontend Config | `client/lib/config/agentcore.ts` | |
+| Frontend Hook | `client/lib/hooks/useInventoryImport.ts` | |
+| **Orchestrator (Strands Agent)** | `server/agentcore-inventory/main.py` | **~490 lines** (refactored from 4,426) |
+| Orchestrator Backup | `server/agentcore-inventory/main.py.backup` | Original 75-handler version |
+| A2A Client | `server/agentcore-inventory/shared/a2a_client.py` | |
+| NEXO Agent | `server/agentcore-inventory/agents/nexo_import/main.py` | |
+| File Analysis | `server/agentcore-inventory/agents/nexo_import/tools/analyze_file.py` | |
+| Gemini Analyzer | `server/agentcore-inventory/agents/nexo_import/tools/gemini_text_analyzer.py` | |
+| Audit Emitter | `server/agentcore-inventory/shared/audit_emitter.py` | |
+| Gemini Model Factory | `server/agentcore-inventory/agents/utils.py` | `create_gemini_model()` |
 
 ---
 
@@ -252,6 +265,9 @@ The `stop_action: true` flag signals the Strands ReAct loop to pause.
 
 | Date | Change | Commit |
 |------|--------|--------|
+| 2026-01-14 | **REFACTOR:** main.py → Strands Orchestrator Agent (4,426 → 490 lines) | pending |
+| 2026-01-14 | Replaced 75 @app.handler with 1 @app.entrypoint + LLM routing | pending |
+| 2026-01-14 | Added invoke_specialist tool for A2A calls | pending |
 | 2026-01-13 | BUG-010: Added SSM loading to gemini_text_analyzer.py | pending |
 | 2026-01-13 | Fixed protocol mismatch (reverted wrong runtime ID) | d9b3325 |
 | 2026-01-13 | Added timeout 300s, Decimal conversion, stop_action | 6cdf86e |

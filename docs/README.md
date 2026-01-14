@@ -96,6 +96,13 @@
 | Document | Purpose |
 |----------|---------|
 | [SMART_IMPORT_ARCHITECTURE.md](SMART_IMPORT_ARCHITECTURE.md) | NEXO Smart Import flow, runtime IDs, troubleshooting |
+| [ORCHESTRATOR_ARCHITECTURE.md](ORCHESTRATOR_ARCHITECTURE.md) | Strands Orchestrator pattern with LLM-based routing |
+
+### Product Development
+
+| Document | Purpose |
+|----------|---------|
+| [PRD-tavily-enrichment.md](../product-development/current-feature/PRD-tavily-enrichment.md) | Tavily Data Enrichment Module for post-import equipment research |
 
 ---
 

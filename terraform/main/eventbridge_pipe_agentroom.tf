@@ -173,7 +173,7 @@ data "archive_file" "event_enricher" {
   output_path = "${path.module}/lambda_packages/agentroom-event-enricher.zip"
 
   source {
-    content = <<-EOF
+    content  = <<-EOF
 """EventBridge Pipe enrichment - transforms DynamoDB records for frontend."""
 
 AGENT_NAMES = {
@@ -324,7 +324,7 @@ data "archive_file" "websocket_broadcast" {
   output_path = "${path.module}/lambda_packages/agentroom-ws-broadcast.zip"
 
   source {
-    content = <<-EOF
+    content  = <<-EOF
 """WebSocket broadcast - pushes events to all connected clients."""
 import os
 import json
@@ -442,8 +442,8 @@ resource "aws_pipes_pipe" "agent_room_events" {
 
   source_parameters {
     dynamodb_stream_parameters {
-      starting_position             = "LATEST"
-      batch_size                    = 10
+      starting_position                  = "LATEST"
+      batch_size                         = 10
       maximum_batching_window_in_seconds = 1 # Low latency batch
     }
 

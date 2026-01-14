@@ -13,7 +13,9 @@ import {
   getNFUploadUrl,
   processImageOCR,
   confirmNFEntry,
+  type SGAGetUploadUrlResponse,  // BUG-014: Type for extraction
 } from '@/services/sgaAgentcore';
+import { extractAgentResponse } from '@/utils/agentcoreResponse';  // BUG-014: A2A response extraction
 import type {
   NFExtraction,
   NFItemMapping,
@@ -104,9 +106,16 @@ export function useImageOCR(): UseImageOCRReturn {
         content_type: file.type,
       });
 
+      // BUG-014: Extract response from A2A wrapped format
+      const uploadUrlData = extractAgentResponse<SGAGetUploadUrlResponse>(urlResult.data);
+
+      if (!uploadUrlData?.upload_url || !uploadUrlData?.s3_key) {
+        throw new Error('Falha ao obter URL de upload');
+      }
+
       // 3. Upload to S3
       setProgress(30);
-      const uploadResponse = await fetch(urlResult.data.upload_url, {
+      const uploadResponse = await fetch(uploadUrlData.upload_url, {
         method: 'PUT',
         body: file,
         headers: {
@@ -121,7 +130,7 @@ export function useImageOCR(): UseImageOCRReturn {
       // 4. Process image with OCR (Gemini Vision)
       setProgress(50);
       const processResult = await processImageOCR({
-        s3_key: urlResult.data.s3_key,
+        s3_key: uploadUrlData.s3_key,
         project_id: projectId || '',
         destination_location_id: destinationLocationId,
       });

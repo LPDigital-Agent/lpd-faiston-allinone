@@ -15,7 +15,9 @@ import {
   confirmNFEntry,
   getPendingNFEntries,
   assignProjectToEntry,
+  type SGAGetUploadUrlResponse,  // BUG-014: Type for extraction
 } from '@/services/sgaAgentcore';
+import { extractAgentResponse } from '@/utils/agentcoreResponse';  // BUG-014: A2A response extraction
 import type {
   NFExtraction,
   NFItemMapping,
@@ -120,9 +122,16 @@ export function useNFReader(): UseNFReaderReturn {
         content_type: file.type || (fileType === 'xml' ? 'application/xml' : 'application/pdf'),
       });
 
+      // BUG-014: Extract response from A2A wrapped format
+      const uploadUrlData = extractAgentResponse<SGAGetUploadUrlResponse>(urlResult.data);
+
+      if (!uploadUrlData?.upload_url || !uploadUrlData?.s3_key) {
+        throw new Error('Falha ao obter URL de upload');
+      }
+
       // 2. Upload to S3
       setUploadProgress(30);
-      const uploadResponse = await fetch(urlResult.data.upload_url, {
+      const uploadResponse = await fetch(uploadUrlData.upload_url, {
         method: 'PUT',
         body: file,
         headers: {
@@ -137,7 +146,7 @@ export function useNFReader(): UseNFReaderReturn {
       // 3. Process NF (projectId can be empty string or null)
       setUploadProgress(60);
       const processResult = await processNFUpload({
-        s3_key: urlResult.data.s3_key,
+        s3_key: uploadUrlData.s3_key,
         file_type: fileType,
         project_id: projectId || '', // Empty string means no project assigned
         destination_location_id: destinationLocationId,

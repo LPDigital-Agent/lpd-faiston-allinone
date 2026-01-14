@@ -4,6 +4,48 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-14 (Session 1) - MAJOR REFACTORING
+
+**User asked:** Transform main.py from 4,426-line monolith to Strands Orchestrator Agent
+
+**Work Completed:**
+
+### Phase 1-4: Refactoring (COMPLETED)
+- **Backup created:** `main.py.backup` (original 75-handler version preserved)
+- **Refactored main.py:** 4,426 → ~490 lines (89% reduction)
+- **Pattern:** BedrockAgentCoreApp + Strands Agent (LLM-based routing)
+- **Tools:** `invoke_specialist` (A2A routing), `health_check`
+- **Model:** Gemini 2.5 Flash for fast routing decisions
+- **Backward compatibility:** `ACTION_TO_SPECIALIST` mapping for direct actions
+
+### Phase 6: Documentation (IN PROGRESS)
+- ✅ Updated `docs/AUTHENTICATION_ARCHITECTURE.md` - Added Strands Agent pattern info
+- ✅ Updated `docs/SMART_IMPORT_ARCHITECTURE.md` - Updated architecture diagram
+- ✅ Created `docs/ORCHESTRATOR_ARCHITECTURE.md` - New doc explaining pattern
+
+### Architecture Decision: 100% Swarm
+
+**User Decision (2026-01-14):** Selected 100% Swarm architecture over Hybrid (Swarm + Workflow).
+
+**Trade-off accepted:**
+- ❌ ~2x slower analysis (90s → 180s for parallel tasks)
+- ✅ Maximum autonomy (AGI-like behavior)
+- ✅ Self-improvement via Meta-Tooling
+- ✅ Single architecture pattern (simpler)
+
+### Key Files Modified
+- `server/agentcore-inventory/main.py` - Refactored to Strands Agent
+- `docs/AUTHENTICATION_ARCHITECTURE.md` - Updated
+- `docs/SMART_IMPORT_ARCHITECTURE.md` - Updated
+- `docs/ORCHESTRATOR_ARCHITECTURE.md` - NEW
+
+### Pending
+- Phase 5: Deploy via GitHub Actions and validate
+- Phase 7: A2AClientToolProvider for dynamic discovery
+- Phase 8: Implement 100% Swarm architecture
+
+---
+
 ## 2026-01-13 (Session 2)
 
 **User asked:** Debug "Falha na análise (sem detalhes)" error after 403 fix
@@ -1666,6 +1708,230 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-14 01:38:31 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 01:39:16 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 01:40:29 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 01:41:57 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 01:44:50 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 02:53:54 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:06:14 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:07:29 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:10:19 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:13:02 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:24:55 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:28:28 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:32:43 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:34:24 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:54:37 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 03:54:58 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:13:25 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:16:51 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:21:25 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:21:32 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:28:12 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:48:33 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:52:55 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 04:55:26 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 05:01:32 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 05:02:12 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 05:02:20 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 05:17:50 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 05:18:02 UTC
 
 **User:** (no user message captured)
 

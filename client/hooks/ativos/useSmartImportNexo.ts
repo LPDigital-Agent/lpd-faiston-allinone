@@ -36,7 +36,9 @@ import {
   type NexoProcessingConfig,
   type NexoPriorKnowledge,
   type NexoSessionState,  // STATELESS: Full session state type
+  type SGAGetUploadUrlResponse,  // BUG-014: Type for extraction
 } from '@/services/sgaAgentcore';
+import { extractAgentResponse } from '@/utils/agentcoreResponse';  // BUG-014: A2A response extraction
 
 // =============================================================================
 // Constants - Rotating Messages for Re-Analysis (Phase 3 fix)
@@ -331,14 +333,18 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         content_type: contentType,
       });
 
-      if (!urlResult.data?.upload_url || !urlResult.data?.s3_key) {
+      // BUG-014: Extract response from A2A wrapped format
+      // Strands A2A wraps responses: { specialist_agent, response: {...}, request_id }
+      const uploadUrlData = extractAgentResponse<SGAGetUploadUrlResponse>(urlResult.data);
+
+      if (!uploadUrlData?.upload_url || !uploadUrlData?.s3_key) {
         throw new Error('Falha ao obter URL de upload');
       }
 
       // Step 2: Upload file to S3
       updateProgress('uploading', 30, 'Enviando arquivo...');
 
-      const uploadResponse = await fetch(urlResult.data.upload_url, {
+      const uploadResponse = await fetch(uploadUrlData.upload_url, {
         method: 'PUT',
         body: file,
         headers: { 'Content-Type': contentType },
@@ -384,7 +390,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       updateProgress('analyzing', 50, 'NEXO analisando arquivo...', 'observe');
 
       const analysisResult = await nexoAnalyzeFile({
-        s3_key: urlResult.data.s3_key,
+        s3_key: uploadUrlData.s3_key,
         filename: file.name,
         content_type: contentType,
         prior_knowledge: priorKnowledge ? {
@@ -420,7 +426,7 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       const sessionState: NexoSessionState = data.session_state || {
         session_id: data.import_session_id,
         filename: data.filename,
-        s3_key: urlResult.data.s3_key,
+        s3_key: uploadUrlData.s3_key,
         stage: data.questions && data.questions.length > 0 ? 'questioning' : 'processing',
         file_analysis: {
           sheets: data.analysis.sheets,

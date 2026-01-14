@@ -38,7 +38,9 @@ import {
   type NexoReasoningStep,
   type NexoSheetAnalysis,
   type NexoSessionState,  // STATELESS: Full session state type
+  type SGAGetUploadUrlResponse,  // BUG-014: Type for extraction
 } from '@/services/sgaAgentcore';
+import { extractAgentResponse } from '@/utils/agentcoreResponse';  // BUG-014: A2A response extraction
 import type {
   SmartFileType,
   SmartSourceType,
@@ -203,9 +205,12 @@ export function useSmartImporter(): UseSmartImporterReturn & {
         content_type: contentType,
       });
 
+      // BUG-014: Extract response from A2A wrapped format
+      const uploadUrlData = extractAgentResponse<SGAGetUploadUrlResponse>(urlResult.data);
+
       // Defensive validation - ensure we got a valid response
-      if (!urlResult.data || !urlResult.data.upload_url || !urlResult.data.s3_key) {
-        const errorMsg = (urlResult.data as { error?: string })?.error || 'Falha ao obter URL de upload';
+      if (!uploadUrlData || !uploadUrlData.upload_url || !uploadUrlData.s3_key) {
+        const errorMsg = (uploadUrlData as { error?: string })?.error || 'Falha ao obter URL de upload';
         throw new Error(errorMsg);
       }
 
@@ -214,7 +219,7 @@ export function useSmartImporter(): UseSmartImporterReturn & {
       // =======================================================================
       setProgress({ stage: 'uploading', percent: 40, message: 'Enviando arquivo...' });
 
-      const uploadResponse = await fetch(urlResult.data.upload_url, {
+      const uploadResponse = await fetch(uploadUrlData.upload_url, {
         method: 'PUT',
         body: file,
         headers: {
@@ -232,7 +237,7 @@ export function useSmartImporter(): UseSmartImporterReturn & {
       setProgress({ stage: 'processing', percent: 70, message: 'Processando arquivo...' });
 
       const smartResult = await invokeSmartImport({
-        s3_key: urlResult.data.s3_key,
+        s3_key: uploadUrlData.s3_key,
         filename: file.name,
         content_type: contentType,
         project_id: projectId || undefined,
@@ -386,13 +391,16 @@ export function useSmartImporter(): UseSmartImporterReturn & {
         content_type: contentType,
       });
 
-      if (!urlResult.data?.upload_url || !urlResult.data?.s3_key) {
+      // BUG-014: Extract response from A2A wrapped format
+      const uploadUrlDataNexo = extractAgentResponse<SGAGetUploadUrlResponse>(urlResult.data);
+
+      if (!uploadUrlDataNexo?.upload_url || !uploadUrlDataNexo?.s3_key) {
         throw new Error('Falha ao obter URL de upload');
       }
 
       // Upload to S3
       setProgress({ stage: 'uploading', percent: 40, message: 'Enviando arquivo...' });
-      const uploadResponse = await fetch(urlResult.data.upload_url, {
+      const uploadResponse = await fetch(uploadUrlDataNexo.upload_url, {
         method: 'PUT',
         body: file,
         headers: { 'Content-Type': contentType },
@@ -406,7 +414,7 @@ export function useSmartImporter(): UseSmartImporterReturn & {
       setProgress({ stage: 'processing', percent: 60, message: 'NEXO analisando estrutura...' });
 
       const analysisResult = await nexoAnalyzeFile({
-        s3_key: urlResult.data.s3_key,
+        s3_key: uploadUrlDataNexo.s3_key,
         filename: file.name,
         content_type: contentType,
       });
@@ -423,7 +431,7 @@ export function useSmartImporter(): UseSmartImporterReturn & {
       const sessionState: NexoSessionState = data.session_state || {
         session_id: data.import_session_id,
         filename: file.name,
-        s3_key: urlResult.data.s3_key,
+        s3_key: uploadUrlDataNexo.s3_key,
         stage: data.questions && data.questions.length > 0 ? 'questioning' : 'processing',
         file_analysis: {
           sheets: data.analysis.sheets,

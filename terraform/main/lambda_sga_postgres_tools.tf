@@ -63,9 +63,9 @@ resource "aws_iam_role_policy" "sga_postgres_tools_rds" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowRDSConnect"
-        Effect = "Allow"
-        Action = "rds-db:connect"
+        Sid      = "AllowRDSConnect"
+        Effect   = "Allow"
+        Action   = "rds-db:connect"
         Resource = "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_proxy.sga.id}/*"
       },
       {

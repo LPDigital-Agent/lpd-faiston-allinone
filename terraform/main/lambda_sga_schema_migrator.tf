@@ -58,9 +58,9 @@ resource "aws_iam_role_policy" "sga_schema_migrator_rds" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "AllowRDSConnect"
-        Effect = "Allow"
-        Action = "rds-db:connect"
+        Sid      = "AllowRDSConnect"
+        Effect   = "Allow"
+        Action   = "rds-db:connect"
         Resource = "arn:aws:rds-db:${var.aws_region}:${data.aws_caller_identity.current.account_id}:dbuser:${aws_db_proxy.sga.id}/*"
       },
       {
@@ -154,7 +154,7 @@ resource "aws_lambda_function" "sga_schema_migrator" {
   # MANDATORY: All Lambdas use arm64 + Python 3.13
   runtime       = "python3.13"
   architectures = ["arm64"]
-  timeout       = 600  # 10 minutes for large schema migrations
+  timeout       = 600 # 10 minutes for large schema migrations
   memory_size   = 512
 
   # Placeholder - actual code deployed via CI/CD
