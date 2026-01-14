@@ -13,7 +13,7 @@
 # - ReAct Pattern: OBSERVE→THINK→LEARN→EXECUTE + HIL
 #
 # MIGRATION COMPLETE: BedrockAgentCoreApp (HTTP) → Strands A2AServer (A2A)
-# - Each agent has: agents/<agent_id>/main.py (own A2AServer)
+# - ADR-002: Agents are now in agents/specialists/<agent_id>/main.py
 # - Entry point: main.py at package root (copied from agent's main.py)
 # - NO unified main_a2a.py - TRUE multi-agent isolation
 #
@@ -32,11 +32,12 @@ on:
     branches:
       - main
     paths:
-      # Each agent has its own main.py (TRUE Multi-Agent A2A)
-      - 'server/agentcore-inventory/agents/*/main.py'
-      - 'server/agentcore-inventory/agents/**'
+      # ADR-002: Agents are now in agents/specialists/ and agents/orchestrators/
+      - 'server/agentcore-inventory/agents/specialists/**'
+      - 'server/agentcore-inventory/agents/orchestrators/**'
       - 'server/agentcore-inventory/shared/**'
       - 'server/agentcore-inventory/tools/**'
+      - 'server/agentcore-inventory/scripts/**'
       - '.github/workflows/deploy-agentcore-sga-agents.yml'
   workflow_dispatch:
     inputs:
@@ -174,31 +175,33 @@ jobs:
           # - Strands A2AServer serves at port 9000, root path /
           # - ORCHESTRATOR (nexo_import) routes to SPECIALISTS via A2A
           #
-          # Structure:
-          #   main.py (copied from agents/<agent_id>/main.py)  <- Entry point
+          # Structure (ADR-002):
+          #   main.py (copied from agents/specialists/<agent_id>/main.py)  <- Entry point
           #   agents/
-          #     <agent_id>/
-          #       agent.py (business logic)
+          #     <agent_id>/                 (flattened from specialists for runtime imports)
           #       tools/
           #     utils.py (model config)
           #   shared/
           #     a2a_client.py (inter-agent communication)
+          #     hooks/ (observability hooks)
           # =========================================================================
 
           # Copy agent's OWN main.py to package root (TRUE Multi-Agent A2A)
           # Each agent has its own Strands A2AServer entry point
-          if [ -f "agents/$AGENT/main.py" ]; then
-            cp "agents/$AGENT/main.py" "$PACKAGE_DIR/main.py"
-            echo "✅ Copied agents/$AGENT/main.py → main.py"
+          # ADR-002: Agents are now in agents/specialists/ subdirectory
+          if [ -f "agents/specialists/$AGENT/main.py" ]; then
+            cp "agents/specialists/$AGENT/main.py" "$PACKAGE_DIR/main.py"
+            echo "✅ Copied agents/specialists/$AGENT/main.py → main.py"
           else
-            echo "::error::Missing agents/$AGENT/main.py - TRUE Multi-Agent A2A requires per-agent main.py"
+            echo "::error::Missing agents/specialists/$AGENT/main.py - TRUE Multi-Agent A2A requires per-agent main.py"
             exit 1
           fi
 
           # Copy agent modules (agent's own directory + utils.py for model config)
           # TRUE Multi-Agent: Each agent has isolated business logic
+          # ADR-002: Source is agents/specialists/, package structure keeps agents/<agent>/
           mkdir -p "$PACKAGE_DIR/agents/$AGENT"
-          cp -r agents/$AGENT/* "$PACKAGE_DIR/agents/$AGENT/"
+          cp -r agents/specialists/$AGENT/* "$PACKAGE_DIR/agents/$AGENT/"
 
           # Copy utils.py for centralized model configuration (Gemini 3.0)
           if [ -f "agents/utils.py" ]; then
@@ -222,8 +225,9 @@ jobs:
           touch "$PACKAGE_DIR/shared/__init__.py"
 
           # Copy requirements.txt to package root (if exists in agent folder)
-          if [ -f "agents/$AGENT/requirements.txt" ]; then
-            cp "agents/$AGENT/requirements.txt" "$PACKAGE_DIR/requirements.txt"
+          # ADR-002: Agents are now in agents/specialists/
+          if [ -f "agents/specialists/$AGENT/requirements.txt" ]; then
+            cp "agents/specialists/$AGENT/requirements.txt" "$PACKAGE_DIR/requirements.txt"
           fi
 
           # Ensure requirements.txt exists with Strands A2A dependencies
