@@ -40,6 +40,9 @@ from agents.utils import create_gemini_model, AGENT_VERSION
 # Configuration
 from config.agent_urls import RUNTIME_IDS, get_agent_url
 
+# Direct tool imports for Infrastructure Actions (bypass A2A for deterministic ops)
+# NOTE: Import is done lazily in _handle_infrastructure_action() to avoid circular deps
+
 # Hooks (Phase 1 ADR-002)
 from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
@@ -135,6 +138,87 @@ INFRASTRUCTURE_ACTIONS = {
     "get_nf_upload_url": ("intake", "get_upload_url"),
     "get_presigned_download_url": ("intake", "get_download_url"),
 }
+
+
+def _handle_infrastructure_action(action: str, payload: dict) -> dict:
+    """
+    Handle infrastructure actions directly without A2A protocol.
+
+    BUG-017 FIX: A2A calls pass through the specialist's LLM which wraps
+    the tool result in conversational text. For infrastructure operations
+    like S3 presigned URLs, we need raw JSON responses.
+
+    This function imports and calls the tool functions directly, bypassing
+    the A2A protocol entirely for deterministic infrastructure operations.
+
+    Args:
+        action: Infrastructure action name (from INFRASTRUCTURE_ACTIONS)
+        payload: Action parameters (filename, content_type, etc.)
+
+    Returns:
+        Raw JSON response dict (not LLM-wrapped)
+    """
+    # Lazy import to avoid circular dependencies
+    from tools.s3_client import SGAS3Client
+
+    try:
+        if action == "get_nf_upload_url":
+            # Generate presigned upload URL for NF document
+            filename = payload.get("filename", "document")
+            content_type = payload.get("content_type", "application/octet-stream")
+
+            s3 = SGAS3Client()
+            key = s3.get_temp_path(filename)
+            url_info = s3.generate_upload_url(
+                key=key, content_type=content_type, expires_in=3600
+            )
+
+            # Rename 'key' to 's3_key' for API consistency (as intake agent does)
+            url_info["s3_key"] = url_info.pop("key", key)
+
+            logger.info(
+                f"[Infrastructure] Generated upload URL for {filename}: {key}"
+            )
+            return {
+                "success": True,
+                "specialist_agent": "intake",
+                "response": url_info,
+            }
+
+        elif action == "get_presigned_download_url":
+            # Generate presigned download URL for existing S3 object
+            s3_key = payload.get("s3_key") or payload.get("key")
+            if not s3_key:
+                return {
+                    "success": False,
+                    "error": "Missing 's3_key' parameter",
+                }
+
+            s3 = SGAS3Client()
+            url_info = s3.generate_download_url(key=s3_key, expires_in=3600)
+
+            logger.info(f"[Infrastructure] Generated download URL for {s3_key}")
+            return {
+                "success": True,
+                "specialist_agent": "intake",
+                "response": url_info,
+            }
+
+        else:
+            # Unknown infrastructure action (shouldn't happen)
+            return {
+                "success": False,
+                "error": f"Unknown infrastructure action: {action}",
+            }
+
+    except Exception as e:
+        logger.exception(f"[Infrastructure] Error handling {action}: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "action": action,
+        }
+
 
 # Lazy-loaded Swarm instance
 _inventory_swarm = None
@@ -737,21 +821,16 @@ def invoke(payload: dict, context) -> dict:
                 )
             )
 
-        # Mode 2.5: Infrastructure Actions (bypass LLM for pure infrastructure)
+        # Mode 2.5: Infrastructure Actions (DIRECT TOOL CALL - No A2A)
+        # BUG-017 FIX: A2A calls pass through specialist's LLM which wraps
+        # responses in conversational text. For infrastructure ops like S3
+        # presigned URLs, we call the tool functions directly for raw JSON.
+        #
         # NOTE: Only S3/infrastructure ops - business data MUST go through LLM
         # This preserves the 100% Agentic AI principle for all business logic.
         if action and action in INFRASTRUCTURE_ACTIONS:
-            agent_id, target_action = INFRASTRUCTURE_ACTIONS[action]
-            logger.info(f"[Orchestrator] Infrastructure routing: {action} → {agent_id}.{target_action}")
-            return asyncio.run(
-                _invoke_agent_via_a2a(
-                    agent_id=agent_id,
-                    action=target_action,
-                    payload=payload,
-                    session_id=session_id,
-                    user_id=user_id,
-                )
-            )
+            logger.info(f"[Orchestrator] Infrastructure direct call: {action}")
+            return _handle_infrastructure_action(action=action, payload=payload)
 
         # Mode 3: LLM-based Routing (Natural Language or Direct Action)
         orchestrator = _get_orchestrator()

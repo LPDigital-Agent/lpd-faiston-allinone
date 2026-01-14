@@ -260,9 +260,10 @@ Returns system status, version, deployed commit, and available specialists.
 
 Actions in `SWARM_ACTIONS` (nexo_*) are routed to the autonomous 5-agent Swarm for intelligent file import processing.
 
-### Mode 2.5: Infrastructure Actions (Deterministic Routing)
+### Mode 2.5: Infrastructure Actions (Direct Tool Call)
 
 > **Added:** 2026-01-14 (BUG-017 Fix)
+> **Updated:** 2026-01-14 (BUG-017 v2 - Direct tool call, no A2A)
 
 ```json
 {
@@ -277,11 +278,22 @@ Actions in `SWARM_ACTIONS` (nexo_*) are routed to the autonomous 5-agent Swarm f
 - Do NOT involve business data
 - ARE pure technical operations
 
+**BUG-017 Root Cause & Fix:**
+- **Problem:** Initial fix used A2A protocol which passes through specialist's LLM, wrapping JSON in conversational text
+- **Fix:** Direct import of `SGAS3Client` in orchestrator - calls tool functions directly without A2A
+- **Result:** Raw JSON response (`{upload_url, s3_key}`) returned to frontend without LLM wrapping
+
 ```python
 INFRASTRUCTURE_ACTIONS = {
     "get_nf_upload_url": ("intake", "get_upload_url"),
     "get_presigned_download_url": ("intake", "get_download_url"),
 }
+
+def _handle_infrastructure_action(action, payload):
+    """Direct tool call - bypasses A2A entirely."""
+    from tools.s3_client import SGAS3Client
+    s3 = SGAS3Client()
+    # ... direct S3 operations
 ```
 
 **100% Agentic AI Principle:** ALL business data queries (query_balance, query_asset_location, etc.) MUST go through Mode 3 (LLM routing). Only pure infrastructure operations can use Mode 2.5.

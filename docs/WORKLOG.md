@@ -4,7 +4,37 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
-## 2026-01-14 (Session 3) - BUG-017 FIX
+## 2026-01-14 (Session 4) - BUG-017 v2 FIX (Direct Tool Call)
+
+**Bug:** BUG-017 v1 fix still failed - upload URL returned wrapped in LLM conversational text
+
+**Root Cause (v2):** A2A protocol passes requests through the specialist agent's LLM, which wraps tool results in conversational text like "Here's your upload URL: {...}". Frontend expects raw JSON `{upload_url, s3_key}`.
+
+**Solution Implemented (v2):**
+- Created `_handle_infrastructure_action()` function that directly imports and calls `SGAS3Client`
+- Bypasses A2A protocol entirely for infrastructure operations
+- Returns raw JSON response directly to frontend
+- **100% Agentic AI preserved:** Business data queries still use LLM → A2A → MCP → DB
+
+**Files Modified:**
+- `server/agentcore-inventory/agents/orchestrators/estoque/main.py` - Direct S3 tool call in Mode 2.5
+- `docs/ORCHESTRATOR_ARCHITECTURE.md` - Updated Mode 2.5 documentation
+- `CLAUDE.md` - Added REQUEST FLOW ARCHITECTURE as IMMUTABLE & MANDATORY
+
+**Key Code Change:**
+```python
+# BEFORE (v1) - A2A wraps response in LLM text
+return asyncio.run(_invoke_agent_via_a2a("intake", "get_upload_url", ...))
+
+# AFTER (v2) - Direct tool call, raw JSON
+return _handle_infrastructure_action(action="get_nf_upload_url", payload=payload)
+```
+
+**Status:** Code complete, pending deployment via GitHub Actions
+
+---
+
+## 2026-01-14 (Session 3) - BUG-017 FIX (v1 - A2A Routing)
 
 **Bug:** NEXO Smart Import upload URL failure ("Falha ao obter URL de upload")
 
@@ -27,7 +57,7 @@ Automatically maintained by Claude Code hooks.
 3. Mode 2.5: Infrastructure (S3 URLs only) ← NEW
 4. Mode 3: LLM-based (business data + natural language)
 
-**Status:** Code complete, pending deployment via GitHub Actions
+**Status:** ❌ Did not work - A2A wraps response (see Session 4)
 
 ---
 
@@ -2175,6 +2205,22 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-14 22:40:01 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 22:41:15 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 23:04:51 UTC
 
 **User:** (no user message captured)
 
