@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # =============================================================================
-# Agent Structure Validation Script - Strands A2A Architecture
+# Agent Structure Validation Script - Strands A2A Architecture (ADR-002)
 # =============================================================================
-# Validates all 14 agents follow the correct AgentCore pattern.
+# Validates all agents follow the correct AgentCore pattern.
 #
-# ARCHITECTURE: TRUE Multi-Agent A2A
+# ARCHITECTURE: "Everything is an Agent" (ADR-002)
+# - ORCHESTRATORS in agents/orchestrators/{domain}/
+# - SPECIALISTS in agents/specialists/{agent_name}/
 # - Each agent has its OWN main.py with Strands A2AServer
-# - ORCHESTRATOR (nexo_import) routes to SPECIALISTS via A2A
 # - ReAct pattern: OBSERVE → THINK → LEARN → ACT + HIL
 # =============================================================================
 
@@ -15,7 +16,11 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Tuple
 
-# Expected agents
+# Directory structure (ADR-002)
+SPECIALISTS_SUBDIR = "specialists"
+ORCHESTRATORS_SUBDIR = "orchestrators"
+
+# Expected specialist agents
 # NOTE: "data_import" because "import" is a Python reserved keyword (SyntaxError)
 EXPECTED_AGENTS = [
     "carrier",
@@ -55,10 +60,10 @@ AGENT_ROLES = {
 
 # Required files for each agent subdirectory
 # NOTE: agent.py REMOVED - legacy Google ADK format. Now using Strands A2A via main.py only.
+# NOTE: Dockerfile REMOVED - ADR-001 mandates ZIP deploy with AgentCore, not Docker.
 REQUIRED_FILES = [
     "__init__.py",
     "main.py",  # Strands A2AServer entry point (replaced agent.py)
-    "Dockerfile",
     "requirements.txt",
 ]
 
@@ -71,9 +76,10 @@ REQUIRED_TOOLS = [
 def validate_agent_structure(agents_dir: Path) -> Tuple[bool, List[str]]:
     """Validate all agents have the correct structure."""
     errors = []
+    specialists_dir = agents_dir / SPECIALISTS_SUBDIR
 
     for agent_name in EXPECTED_AGENTS:
-        agent_dir = agents_dir / agent_name
+        agent_dir = specialists_dir / agent_name
 
         # Check agent directory exists
         if not agent_dir.exists():
@@ -131,9 +137,10 @@ def validate_shared_module(base_dir: Path) -> Tuple[bool, List[str]]:
 def validate_per_agent_main(agents_dir: Path) -> Tuple[bool, List[str]]:
     """Validate each agent has its own main.py with Strands A2AServer."""
     errors = []
+    specialists_dir = agents_dir / SPECIALISTS_SUBDIR
 
     for agent_name in EXPECTED_AGENTS:
-        main_py = agents_dir / agent_name / "main.py"
+        main_py = specialists_dir / agent_name / "main.py"
 
         if not main_py.exists():
             errors.append(f"❌ {agent_name}: Missing main.py")
@@ -167,9 +174,10 @@ def validate_per_agent_main(agents_dir: Path) -> Tuple[bool, List[str]]:
 def validate_dockerfile_content(agents_dir: Path) -> Tuple[bool, List[str]]:
     """Validate Dockerfiles have correct settings."""
     errors = []
+    specialists_dir = agents_dir / SPECIALISTS_SUBDIR
 
     for agent_name in EXPECTED_AGENTS:
-        dockerfile = agents_dir / agent_name / "Dockerfile"
+        dockerfile = specialists_dir / agent_name / "Dockerfile"
         if not dockerfile.exists():
             continue
 
@@ -193,10 +201,11 @@ def validate_dockerfile_content(agents_dir: Path) -> Tuple[bool, List[str]]:
 def validate_agent_id(agents_dir: Path) -> Tuple[bool, List[str]]:
     """Validate each agent has correct AGENT_ID in main.py."""
     errors = []
+    specialists_dir = agents_dir / SPECIALISTS_SUBDIR
 
     for agent_name in EXPECTED_AGENTS:
         # Check main.py (primary) - this is the Strands A2AServer entry point
-        main_file = agents_dir / agent_name / "main.py"
+        main_file = specialists_dir / agent_name / "main.py"
         if main_file.exists():
             content = main_file.read_text()
 
@@ -288,12 +297,8 @@ def main():
     all_errors.extend(errors)
     print(f"   {'✅ All main.py files valid' if valid else '❌ Issues found'}")
 
-    # 5. Validate Dockerfiles
-    print("🐳 Checking Dockerfiles...")
-    valid, errors = validate_dockerfile_content(agents_dir)
-    all_valid = all_valid and valid
-    all_errors.extend(errors)
-    print(f"   {'✅ Dockerfiles valid' if valid else '⚠️  Warnings found'}")
+    # 5. Dockerfiles - SKIPPED per ADR-001 (ZIP deploy, not Docker)
+    print("🐳 Dockerfiles: SKIPPED (ADR-001: ZIP deploy)")
 
     # 6. Validate agent content
     print("🤖 Checking agent definitions...")
@@ -312,10 +317,11 @@ def main():
         print()
 
     # Print agent roles
+    specialists_dir = agents_dir / SPECIALISTS_SUBDIR
     print("📊 Agent Roles:")
     for agent_name in EXPECTED_AGENTS:
         role = AGENT_ROLES.get(agent_name, "UNKNOWN")
-        status = "✅" if (agents_dir / agent_name / "main.py").exists() else "❌"
+        status = "✅" if (specialists_dir / agent_name / "main.py").exists() else "❌"
         print(f"   {status} {agent_name}: {role}")
     print()
 
