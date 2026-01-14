@@ -93,6 +93,7 @@ Your role is to:
 | schema_evolution | Column type inference, schema changes | Schema analysis |
 | equipment_research | Equipment documentation research | Equipment specs, datasheets |
 | data_import | Generic data import operations | Bulk imports |
+| enrichment | Equipment data enrichment via Tavily AI search | Specs, manuals, datasheets |
 
 ## 🔄 Routing Rules
 
@@ -108,6 +109,7 @@ Use the invoke_specialist tool with the appropriate agent_id:
 8. **Returns** → agent_id="reverse"
 9. **Equipment Research** → agent_id="equipment_research"
 10. **Learning/Memory** → agent_id="learning"
+11. **Equipment Enrichment** → agent_id="enrichment"
 
 ## ⚠️ Response Format
 
@@ -240,6 +242,12 @@ def _get_static_action_mapping():
         "query_equipment_docs": ("equipment_research", "query_equipment_docs"),
         # Observation
         "generate_import_observations": ("observation", "generate_observations"),
+        # Enrichment (Tavily-powered equipment enrichment)
+        "enrich_equipment": ("enrichment", "enrich_equipment"),
+        "enrich_equipment_batch": ("enrichment", "enrich_batch"),
+        "sync_knowledge_base": ("enrichment", "sync_knowledge_base"),
+        "validate_part_number": ("enrichment", "validate_part_number"),
+        "get_enrichment_status": ("enrichment", "get_enrichment_status"),
     }
 
 
@@ -738,6 +746,7 @@ def health_check() -> dict:
             "schema_evolution",
             "equipment_research",
             "data_import",
+            "enrichment",
         ],
     }
 

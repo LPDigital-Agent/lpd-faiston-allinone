@@ -65,6 +65,7 @@ PRO_THINKING_AGENTS = {
     "import",           # Data import - file structure understanding
     "learning",         # Memory extraction - pattern recognition
     "schema_evolution", # Schema analysis - SQL generation
+    "enrichment",       # Equipment enrichment - complex reasoning with Tavily data
 }
 
 # Agents that require Pro (complex reasoning but no thinking needed)

@@ -125,6 +125,13 @@ resource "aws_iam_role_policy" "sga_agentcore_gateway_lambda" {
 # Target ID: SKVZZNCDKE
 # Target Name: SGAPostgresTools
 # Auth Type: AWS_IAM
+#
+# TAVILY TARGET (Equipment Enrichment - January 2026):
+# Gateway now supports Tavily as native OpenAPI target for equipment data enrichment.
+# Tavily provides AI-optimized search for specs, manuals, and documentation.
+# Target ID: [TO_BE_CREATED_VIA_CLI]
+# Target Name: TavilySearchMCP
+# Auth Type: API Key (via Secrets Manager)
 # =============================================================================
 
 locals {
@@ -136,6 +143,11 @@ locals {
   sga_target_id   = "SKVZZNCDKE"
   sga_target_name = "SGAPostgresTools"
 
+  # Tavily target configuration (to be created via CLI)
+  tavily_target_name    = "TavilySearchMCP"
+  tavily_target_id      = "PLACEHOLDER_UPDATE_AFTER_CREATION"
+  tavily_api_secret_arn = aws_secretsmanager_secret.tavily_api_key.arn
+
   # Gateway configuration for reference
   sga_gateway_config = {
     gateway_id  = local.sga_gateway_id
@@ -144,6 +156,9 @@ locals {
     target_name = local.sga_target_name
     auth_type   = "AWS_IAM"
     region      = var.aws_region
+    # Tavily target (add after CLI creation)
+    tavily_target_id   = local.tavily_target_id
+    tavily_target_name = local.tavily_target_name
   }
 
   # Tool schema for inline definition
@@ -154,12 +169,12 @@ locals {
       input_schema = {
         type = "object"
         properties = {
-          location_id  = { type = "string", description = "Filtro por código do local" }
-          project_id   = { type = "string", description = "Filtro por código do projeto" }
-          part_number  = { type = "string", description = "Filtro por part number" }
-          status       = { type = "string", enum = ["IN_STOCK", "IN_TRANSIT", "RESERVED", "INSTALLED"] }
-          limit        = { type = "integer", default = 100, maximum = 1000 }
-          offset       = { type = "integer", default = 0 }
+          location_id = { type = "string", description = "Filtro por código do local" }
+          project_id  = { type = "string", description = "Filtro por código do projeto" }
+          part_number = { type = "string", description = "Filtro por part number" }
+          status      = { type = "string", enum = ["IN_STOCK", "IN_TRANSIT", "RESERVED", "INSTALLED"] }
+          limit       = { type = "integer", default = 100, maximum = 1000 }
+          offset      = { type = "integer", default = 0 }
         }
       }
     },
@@ -283,8 +298,8 @@ locals {
       name        = "sga_get_schema_metadata"
       description = "Obtém metadados completos do schema PostgreSQL para validação de importação NEXO"
       input_schema = {
-        type = "object"
-        properties = {}
+        type        = "object"
+        properties  = {}
         description = "Retorna tabelas, colunas, ENUMs, FKs e constraints do schema SGA"
       }
     },
@@ -382,6 +397,11 @@ output "sga_gateway_tools_ssm" {
   value       = aws_ssm_parameter.sga_gateway_tools.name
 }
 
+output "tavily_target_name" {
+  description = "Tavily Gateway target name"
+  value       = local.tavily_target_name
+}
+
 # =============================================================================
 # AWS CLI Commands for Gateway Creation
 # =============================================================================
@@ -414,4 +434,43 @@ output "sga_gateway_tools_ssm" {
 # 3. Store Gateway URL in SSM:
 # GATEWAY_URL=$(aws bedrock-agentcore get-gateway --gateway-identifier <GATEWAY_ID> --query 'gateway.endpoint' --output text)
 # aws ssm put-parameter --name /faiston-one/sga/gateway/url --value "$GATEWAY_URL" --type String --overwrite
+#
+# =============================================================================
+# 4. Create Tavily Target (Equipment Enrichment):
+# =============================================================================
+# NOTE: Tavily is available as native AgentCore Gateway integration.
+# Reference: https://aws.amazon.com/blogs/opensource/tavily-available-aws-bedrock-agentcore-gateway/
+#
+# aws bedrock-agentcore create-gateway-target \
+#   --gateway-identifier "faiston-one-sga-gateway-prod-qbnlm3ao63" \
+#   --name "TavilySearchMCP" \
+#   --description "Tavily AI-optimized search for equipment specs and documentation" \
+#   --target-configuration '{
+#     "openApi": {
+#       "openApiSchemaUrl": "https://api.tavily.com/.well-known/openapi.json",
+#       "authenticationScheme": {
+#         "apiKey": {
+#           "headerName": "api-key",
+#           "secretArn": "'"$(terraform output -raw tavily_secret_arn)"'"
+#         }
+#       }
+#     }
+#   }' \
+#   --credential-provider-configurations '[{"credentialProviderType": "GATEWAY_IAM_ROLE"}]' \
+#   --profile faiston-aio
+#
+# After creation, update local.tavily_target_id with the returned target ID.
+#
+# =============================================================================
+# 5. Verify Tavily Target:
+# =============================================================================
+# aws bedrock-agentcore list-gateway-targets \
+#   --gateway-identifier "faiston-one-sga-gateway-prod-qbnlm3ao63" \
+#   --profile faiston-aio
+#
+# Test Tavily via Gateway MCP:
+# curl -X POST "https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp" \
+#   -H "Content-Type: application/json" \
+#   --aws-sigv4 "aws:amz:us-east-2:bedrock-agentcore" \
+#   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"tavily_search","arguments":{"query":"Cisco C9200-24P specifications"}},"id":1}'
 # =============================================================================
