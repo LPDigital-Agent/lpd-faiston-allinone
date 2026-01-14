@@ -231,3 +231,15 @@ Before writing any code:
 - Full architecture documents
 
 If more detail is needed → open the specific document or module `CLAUDE.md`.
+
+---
+
+## Need Full Rules Reload?
+
+If context drifts mid-session and you need ALL modular rules loaded without `/clear`:
+
+```
+/prime-all
+```
+
+This loads all 12 rule files from `.claude/rules/` into active context.

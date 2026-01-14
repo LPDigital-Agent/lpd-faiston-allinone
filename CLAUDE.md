@@ -327,8 +327,10 @@ ROUND N: Memory + File + Schema + All Responses → Gemini → Final Mappings
 
 ### ✅ ALWAYS DO
 1. Use Terraform for **ALL AWS resources**
-2. Apply **ALL CORS changes ONLY** in `terraform/main/locals.tf`
-3. Run `terraform plan` via GitHub Actions **BEFORE** apply
+2. USE THE TERRAFORM VERISION COM AWS DRIVE 6.2.28LIKE IN THE LIKE BELOW:
+   https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/bedrockagentcore_memory_strategy
+3. Apply **ALL CORS changes ONLY** in `terraform/main/locals.tf`
+4. Run `terraform plan` via GitHub Actions **BEFORE** apply
 
 ---
 

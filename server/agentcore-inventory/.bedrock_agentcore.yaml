@@ -1,25 +1,5 @@
-# =============================================================================
-# Bedrock AgentCore Configuration - Faiston SGA Multi-Agent System
-# =============================================================================
-# 14 Agents deployed via CLI (direct_code_deploy):
-# - 1 Orchestrator: faiston_asset_management (HTTP protocol, JWT auth)
-# - 13 Specialists: faiston_sga_* (A2A protocol, SigV4 auth)
-#
-# Architecture:
-# - Frontend → Orchestrator (JWT Bearer Token)
-# - Orchestrator → Specialists (A2A with SigV4)
-# - All agents use same IAM role: faiston-one-sga-agentcore-role
-#
-# Reference:
-# - https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-a2a.html
-# =============================================================================
-
 default_agent: faiston_asset_management
-
 agents:
-  # ===========================================================================
-  # ORCHESTRATOR AGENT (receives frontend requests via HTTP)
-  # ===========================================================================
   faiston_asset_management:
     name: faiston_asset_management
     entrypoint: main.py
@@ -41,27 +21,28 @@ agents:
         network_mode: PUBLIC
         network_mode_config: null
       protocol_configuration:
-        server_protocol: HTTP  # Frontend uses JWT Bearer Token
+        server_protocol: HTTP
       observability:
         enabled: true
       lifecycle_configuration:
         idle_runtime_session_timeout: null
         max_lifetime: null
     bedrock_agentcore:
-      agent_id: null
-      agent_arn: null
-      agent_session_id: dff36485-6b9d-4e22-80ef-012dcf55599e
+      agent_id: faiston_asset_management-uSuLPsFQNH
+      agent_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_asset_management-uSuLPsFQNH
+      agent_session_id: null
     codebuild:
       project_name: null
       execution_role: null
       source_bucket: null
-    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
-    # GLOBAL namespace: /strategy/import/company (company-wide learning)
-    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
     memory:
       mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
+      memory_arn: null
       memory_name: nexo_sga_learning_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
     identity:
       credential_providers: []
       workload: null
@@ -71,26 +52,16 @@ agents:
       signing_algorithm: ES384
       issuer_url: null
       duration_seconds: 300
-    # JWT Authorizer for Cognito - MUST be in YAML (not just workflow)
-    # due to AWS async deployment overwriting post-deploy config changes
     authorizer_configuration:
       customJWTAuthorizer:
         discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
         allowedClients:
-          - 7ovjm09dr94e52mpejvbu9v1cg
+        - 7ovjm09dr94e52mpejvbu9v1cg
     request_header_configuration: null
     oauth_configuration: null
     api_key_env_var_name: null
     api_key_credential_provider_name: null
     is_generated_by_agentcore_create: false
-
-  # ===========================================================================
-  # SPECIALIST AGENTS (A2A Protocol - called by orchestrator)
-  # ===========================================================================
-
-  # ---------------------------------------------------------------------------
-  # NexoImportAgent - Intelligent file import orchestrator
-  # ---------------------------------------------------------------------------
   faiston_sga_nexo_import:
     name: faiston_sga_nexo_import
     entrypoint: agents/nexo_import/main.py
@@ -112,22 +83,43 @@ agents:
         network_mode: PUBLIC
         network_mode_config: null
       protocol_configuration:
-        server_protocol: A2A  # JSON-RPC 2.0 for inter-agent communication
+        server_protocol: A2A
       observability:
         enabled: true
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
-    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
+    bedrock_agentcore:
+      agent_id: faiston_sga_nexo_import-0zNtFDAo7M
+      agent_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_sga_nexo_import-0zNtFDAo7M
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
     memory:
       mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
+      memory_arn: null
       memory_name: nexo_sga_learning_memory
-
-  # ---------------------------------------------------------------------------
-  # LearningAgent - Episodic memory and pattern learning
-  # ---------------------------------------------------------------------------
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_learning:
     name: faiston_sga_learning
     entrypoint: agents/learning/main.py
@@ -155,16 +147,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
-    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
     memory:
       mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
+      memory_arn: null
       memory_name: nexo_sga_learning_memory
-
-  # ---------------------------------------------------------------------------
-  # ValidationAgent - Schema and data validation
-  # ---------------------------------------------------------------------------
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_validation:
     name: faiston_sga_validation
     entrypoint: agents/validation/main.py
@@ -192,10 +205,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # SchemaEvolutionAgent - Dynamic schema evolution
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_schema_evolution:
     name: faiston_sga_schema_evolution
     entrypoint: agents/schema_evolution/main.py
@@ -223,16 +263,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-    # Memory re-enabled: 2026-01-12 - nexo_sga_learning_memory-u3ypElEdl1
-    # Valid modes: STM_ONLY, STM_AND_LTM, NO_MEMORY
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
     memory:
       mode: STM_AND_LTM
       memory_id: nexo_sga_learning_memory-u3ypElEdl1
+      memory_arn: null
       memory_name: nexo_sga_learning_memory
-
-  # ---------------------------------------------------------------------------
-  # IntakeAgent - NF reader (PDF/XML)
-  # ---------------------------------------------------------------------------
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_intake:
     name: faiston_sga_intake
     entrypoint: agents/intake/main.py
@@ -260,12 +321,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # ImportAgent - Bulk import (spreadsheets, CSV)
-  # NOTE: Runtime name is faiston_sga_import (AWS immutable), but code is in agents/data_import/
-  # because "import" is a Python reserved keyword (SyntaxError when used as module name)
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_import:
     name: faiston_sga_import
     entrypoint: agents/data_import/main.py
@@ -293,10 +379,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # EstoqueControlAgent - Inventory control and balance
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_estoque_control:
     name: faiston_sga_estoque_control
     entrypoint: agents/estoque_control/main.py
@@ -324,10 +437,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # ComplianceAgent - Regulatory compliance and audit
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_compliance:
     name: faiston_sga_compliance
     entrypoint: agents/compliance/main.py
@@ -355,10 +495,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # ReconciliacaoAgent - SAP reconciliation
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_reconciliacao:
     name: faiston_sga_reconciliacao
     entrypoint: agents/reconciliacao/main.py
@@ -386,10 +553,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # ExpeditionAgent - Shipment management
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_expedition:
     name: faiston_sga_expedition
     entrypoint: agents/expedition/main.py
@@ -417,10 +611,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # CarrierAgent - Carrier management and tracking
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_carrier:
     name: faiston_sga_carrier
     entrypoint: agents/carrier/main.py
@@ -448,10 +669,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # ReverseAgent - Reverse logistics
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_reverse:
     name: faiston_sga_reverse
     entrypoint: agents/reverse/main.py
@@ -479,10 +727,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # ObservationAgent - Monitoring and alerting
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_observation:
     name: faiston_sga_observation
     entrypoint: agents/observation/main.py
@@ -510,10 +785,37 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
-
-  # ---------------------------------------------------------------------------
-  # EquipmentResearchAgent - Equipment KB and research
-  # ---------------------------------------------------------------------------
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
   faiston_sga_equipment_research:
     name: faiston_sga_equipment_research
     entrypoint: agents/equipment_research/main.py
@@ -541,3 +843,34 @@ agents:
       lifecycle_configuration:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

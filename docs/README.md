@@ -87,8 +87,15 @@
 
 | Document | Purpose |
 |----------|---------|
+| [AUTHENTICATION_ARCHITECTURE.md](AUTHENTICATION_ARCHITECTURE.md) | Complete auth flow (JWT → AgentCore → A2A) |
 | [FRONTEND_AUTH.md](FRONTEND_AUTH.md) | Frontend authentication architecture |
 | [FRONTEND_AUTH_IMPLEMENTATION.md](FRONTEND_AUTH_IMPLEMENTATION.md) | Auth implementation details |
+
+### Smart Import Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [SMART_IMPORT_ARCHITECTURE.md](SMART_IMPORT_ARCHITECTURE.md) | NEXO Smart Import flow, runtime IDs, troubleshooting |
 
 ---
 

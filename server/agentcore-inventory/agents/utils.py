@@ -208,9 +208,16 @@ class LazyGeminiModel:
                     )
 
             # Build params
+            # BUG-011 FIX: Increased max_output_tokens from 4096 to 16384
+            # The file analysis response includes: structure, mappings, confidence scores,
+            # HIL questions, unmapped columns, and full JSON output. With the new
+            # RESPONSE FORMAT requirement (commit 09caf83), responses can easily exceed
+            # 4096 tokens, causing MaxTokensReachedException in Strands A2A.
+            # Gemini 2.5 Pro supports up to 65,536 output tokens.
+            # Reference: https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.5-pro
             params = {
                 "temperature": 0.7,
-                "max_output_tokens": 4096,
+                "max_output_tokens": 16384,  # 4x increase to handle detailed analysis
             }
 
             # BUG-009 CORRECT FIX: Different thinking parameters per Gemini version
