@@ -295,6 +295,103 @@ ROUND N: Memory + File + Schema + All Responses → Gemini → Final Mappings
 
 ---
 
+## 🔒 REQUEST FLOW ARCHITECTURE — IMMUTABLE & MANDATORY
+
+> **⚠️ WARNING:** This architecture is IMMUTABLE. ANY change or bypass requires **EXPLICIT USER AUTHORIZATION**.
+
+### Canonical Request Flow (VERIFIED 2026-01-14)
+
+ALL frontend requests to SGA agents MUST follow this flow:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                         CANONICAL REQUEST FLOW                                    │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│   FRONTEND (React/Next.js)                                                       │
+│   └─ Hook/Service sends payload with JWT Auth (Cognito)                          │
+│                         │                                                        │
+│                         ▼                                                        │
+│   AWS Bedrock AgentCore HTTP Endpoint                                            │
+│   └─ URL: https://bedrock-agentcore.us-east-2.amazonaws.com/runtimes/{arn}      │
+│   └─ ARN: faiston_asset_management-uSuLPsFQNH                                    │
+│   └─ Auth: JWT Bearer Token                                                      │
+│                         │                                                        │
+│                         ▼                                                        │
+│   ORCHESTRATOR AGENT (Strands Agent + Gemini)                                    │
+│   └─ File: server/agentcore-inventory/agents/orchestrators/estoque/main.py       │
+│   └─ ROUTING MODES:                                                              │
+│       ├─ Mode 1: Health Check (action: "health")                                 │
+│       ├─ Mode 2: Swarm Routing (NEXO imports)                                    │
+│       ├─ Mode 2.5: Infrastructure Actions (S3 presigned URLs, deterministic)    │
+│       └─ Mode 3: LLM-based Routing (business data, natural language)             │
+│                         │                                                        │
+│                         ▼                                                        │
+│   A2A Protocol (JSON-RPC 2.0)                                                    │
+│   └─ Auth: SigV4 (AWS internal, NOT JWT)                                         │
+│                         │                                                        │
+│                         ▼                                                        │
+│   SPECIALIST AGENTS (intake, estoque_control, learning, etc.)                    │
+│   └─ Execute tools and return response                                           │
+│                         │                                                        │
+│                         ▼                                                        │
+│   Response flows back: Specialist → Orchestrator → Frontend                      │
+│                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### FORBIDDEN PATTERNS
+
+The following patterns are **STRICTLY FORBIDDEN**:
+
+1. **Direct A2A calls from Frontend** — Frontend MUST NEVER call specialist agents directly
+2. **Bypassing Orchestrator** — ALL requests MUST go through the orchestrator
+3. **JWT to A2A mismatch** — A2A agents use SigV4, NOT JWT (calling A2A with JWT = "Empty response payload" error)
+4. **Hardcoded business routing** — Business data MUST use LLM-based routing (100% Agentic)
+
+### CHANGE CONTROL (MANDATORY)
+
+ANY change to this flow architecture requires:
+
+1. **EXPLICIT user authorization** (not assumed or implicit)
+2. **ADR documentation** (Architecture Decision Record in `docs/adr/`)
+3. **Impact analysis** on all affected components
+4. **Update to this CLAUDE.md section**
+
+**VIOLATION HANDLING:** If ANY component violates this flow, **STOP IMMEDIATELY** and ask for guidance.
+
+### Routing Modes Reference
+
+| Mode | Trigger | Routing Type | Example |
+|------|---------|--------------|---------|
+| Mode 1 | `action: "health"` | Direct response | Health check |
+| Mode 2 | `action in SWARM_ACTIONS` | Strands Swarm | NEXO import analysis |
+| Mode 2.5 | `action in INFRASTRUCTURE_ACTIONS` | Deterministic A2A | S3 presigned URLs |
+| Mode 3 | Natural language / unknown | LLM reasoning | Inventory queries |
+
+### Runtime IDs (SOURCE OF TRUTH)
+
+| Agent | Runtime ID | Protocol |
+|-------|------------|----------|
+| Orchestrator | `faiston_asset_management-uSuLPsFQNH` | HTTP + JWT |
+| intake | `faiston_sga_intake-9I7Nwe6ZfP` | A2A + SigV4 |
+| estoque_control | See `config/agent_urls.py` | A2A + SigV4 |
+| learning | See `config/agent_urls.py` | A2A + SigV4 |
+
+### Key Files in the Flow
+
+| Step | File | Purpose |
+|------|------|---------|
+| 1 | `client/hooks/ativos/useSmartImportNexo.ts` | React hook triggering upload |
+| 2 | `client/services/sgaAgentcore.ts` | Service with `getNFUploadUrl()` |
+| 3 | `client/services/agentcoreBase.ts` | Base invoke with JWT auth |
+| 4 | `client/lib/config/agentcore.ts` | Runtime ARN configuration |
+| 5 | `server/.../orchestrators/estoque/main.py` | Orchestrator with routing modes |
+| 6 | `server/.../specialists/intake/main.py` | Intake agent with S3 tools |
+| 7 | `config/agent_urls.py` | Runtime ID mappings |
+
+---
+
 ## 🚫 NON-AGENT ARCHITECTURE IS FORBIDDEN
 
 - USING **AI AGENTS IS 100% MANDATORY**.
