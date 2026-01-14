@@ -114,13 +114,20 @@ data "aws_iam_policy_document" "bedrock_kb_s3vectors" {
     sid    = "S3VectorsBucketAccess"
     effect = "Allow"
     actions = [
+      # Bucket-level operations
+      "s3vectors:CreateVectorBucket",
+      "s3vectors:DeleteVectorBucket",
+      "s3vectors:GetVectorBucket",
+      "s3vectors:ListVectorBuckets",
+      # Index-level operations (note: plural forms!)
       "s3vectors:CreateIndex",
       "s3vectors:DeleteIndex",
-      "s3vectors:DescribeIndex",
+      "s3vectors:GetIndex",
       "s3vectors:ListIndexes",
-      "s3vectors:GetVector",
-      "s3vectors:PutVector",
-      "s3vectors:DeleteVector",
+      # Vector operations (note: plural forms for Get/Put/Delete!)
+      "s3vectors:GetVectors",
+      "s3vectors:PutVectors",
+      "s3vectors:DeleteVectors",
       "s3vectors:QueryVectors"
     ]
     resources = [
