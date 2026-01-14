@@ -16,10 +16,16 @@ from agents.learning.tools.create_episode import create_episode_tool
 from agents.learning.tools.retrieve_prior_knowledge import retrieve_prior_knowledge_tool
 from agents.learning.tools.generate_reflection import generate_reflection_tool
 from agents.learning.tools.get_adaptive_threshold import get_adaptive_threshold_tool
+from agents.learning.tools.consolidate_memories import (
+    consolidate_memories_tool,
+    get_memory_statistics,
+)
 
 __all__ = [
     "create_episode_tool",
     "retrieve_prior_knowledge_tool",
     "generate_reflection_tool",
     "get_adaptive_threshold_tool",
+    "consolidate_memories_tool",
+    "get_memory_statistics",
 ]
