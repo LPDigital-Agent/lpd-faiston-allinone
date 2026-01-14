@@ -75,36 +75,43 @@ MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 AGENT_SKILLS = [
     AgentSkill(
+        id="get_quotes",
         name="get_quotes",
         description="Get shipping quotes from multiple carriers based on origin, destination, weight, and dimensions. Returns quotes with pricing, delivery time, and carrier details.",
         tags=["shipping", "quotes", "pricing", "carriers"],
     ),
     AgentSkill(
+        id="recommend_carrier",
         name="recommend_carrier",
         description="Recommend the best carrier for a shipment based on priority (cost, speed, balanced), delivery constraints, and cost limits. Provides reasoning for the recommendation.",
         tags=["shipping", "recommendation", "optimization", "carriers"],
     ),
     AgentSkill(
+        id="track_shipment",
         name="track_shipment",
         description="Track shipment status in real-time using tracking code. Auto-detects carrier if not provided. Returns current status, movement history, and delivery estimation.",
         tags=["tracking", "shipment", "status", "delivery"],
     ),
     AgentSkill(
+        id="create_shipment",
         name="create_shipment",
         description="Create shipping postings with tracking codes via postal service API. Generates real shipments that can be tracked and labeled.",
         tags=["shipping", "shipment", "creation", "tracking"],
     ),
     AgentSkill(
+        id="liberate_shipment",
         name="liberate_shipment",
         description="Liberate shipments for tracking database access. Required step before tracking data becomes available on some carrier APIs.",
         tags=["shipping", "liberation", "tracking", "activation"],
     ),
     AgentSkill(
+        id="get_label",
         name="get_label",
         description="Generate shipping labels in PDF or ZPL format for created shipments. Returns base64-encoded label data ready for printing.",
         tags=["shipping", "label", "pdf", "printing"],
     ),
     AgentSkill(
+        id="health_check",
         name="health_check",
         description="Check agent health status and retrieve agent metadata including version, model, protocol, and specialty.",
         tags=["monitoring", "health", "status"],
