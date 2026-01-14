@@ -700,6 +700,28 @@ class A2AClient:
             if part.get("kind") == "text":
                 response_text += part.get("text", "")
 
+        # ===== A2A PROTOCOL FIX: Extract from artifacts (BUG-012) =====
+        # Per A2A spec (https://a2a-protocol.org/latest/specification/):
+        # "Artifacts represent task outputs" - Strands A2AExecutor packages
+        # tool results in artifacts[].parts[] with artifact name "agent_response"
+        if not response_text:
+            artifacts = result.get("artifacts", [])
+            for artifact in artifacts:
+                artifact_parts = artifact.get("parts", [])
+                for part in artifact_parts:
+                    if part.get("kind") == "text":
+                        artifact_text = part.get("text", "")
+                        if artifact_text:
+                            response_text = artifact_text
+                            logger.info(
+                                f"[A2A] Extracted from artifact for {agent_id}: "
+                                f"{len(artifact_text)} chars"
+                            )
+                            break
+                if response_text:
+                    break
+        # ===== END A2A PROTOCOL FIX =====
+
         # NEW: Try to extract structured JSON from the response text
         # Strands agents may embed tool results in conversational text (e.g., "Here's the result: {...}")
         # This is critical for NEXO analysis where tool results must be properly extracted
