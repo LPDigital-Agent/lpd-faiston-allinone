@@ -131,18 +131,6 @@ AGENT_SKILLS = [
         description="Monitor agent health status and configuration.",
         tags=["learning", "monitoring", "health"],
     ),
-    AgentSkill(
-        id="sleep_cycle",
-        name="Sleep Cycle Consolidation",
-        description="NEXO Mind Sleep Cycle: Consolidate memories, forget weak patterns, create Master Memories. Runs at 03:00 AM UTC via EventBridge.",
-        tags=["learning", "memory", "consolidation", "sleep", "hebbian"],
-    ),
-    AgentSkill(
-        id="memory_statistics",
-        name="Memory Statistics",
-        description="Get statistics about current memory state: counts by type, category, weight class.",
-        tags=["learning", "memory", "statistics", "monitoring"],
-    ),
 ]
 
 # =============================================================================
@@ -618,90 +606,6 @@ async def record_low_confidence_event(
 
 
 @tool
-async def sleep_cycle(
-    dry_run: bool = False,
-    session_id: Optional[str] = None,
-) -> Dict[str, Any]:
-    """
-    Execute NEXO Mind Sleep Cycle consolidation.
-
-    Lei 4 - Respeito aos Ciclos: The "Sonhador" (Dreamer) processes memories.
-
-    This tool:
-    1. ACORDAR: List raw memories from the day
-    2. ESQUECER: Forget weak memories (Hebbian weight < 0.3 + age > 24h)
-    3. SONHAR: Identify patterns and create Master Memories
-    4. LIMPAR: Mark processed memories
-
-    Triggered by EventBridge at 03:00 AM UTC or manually.
-
-    Args:
-        dry_run: If True, report what would happen without executing
-        session_id: Optional session ID for audit
-
-    Returns:
-        Consolidation report with counts and actions taken
-    """
-    logger.info(f"[{AGENT_NAME}] 🌙 SLEEP CYCLE: Starting consolidation (dry_run={dry_run})")
-
-    try:
-        from agents.learning.tools.consolidate_memories import consolidate_memories_tool
-
-        result = await consolidate_memories_tool(
-            session_id=session_id,
-            dry_run=dry_run,
-        )
-
-        # Log to ObservationAgent
-        await a2a_client.invoke_agent("observation", {
-            "action": "log_event",
-            "event_type": "SLEEP_CYCLE_COMPLETE",
-            "agent_id": AGENT_ID,
-            "session_id": session_id,
-            "details": {
-                "dry_run": dry_run,
-                "forgotten": result.get("forgotten", 0),
-                "dreams_created": result.get("dreams_created", 0),
-                "patterns_found": result.get("patterns_found", 0),
-            },
-        }, session_id)
-
-        return result
-
-    except Exception as e:
-        logger.error(f"[{AGENT_NAME}] sleep_cycle failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
-
-
-@tool
-async def memory_statistics(
-    actor_id: str = "system",
-) -> Dict[str, Any]:
-    """
-    Get statistics about current memory state.
-
-    Useful for monitoring NEXO Mind health.
-
-    Args:
-        actor_id: Actor ID to query statistics for
-
-    Returns:
-        Statistics including counts by type, category, weight class
-    """
-    logger.info(f"[{AGENT_NAME}] Getting memory statistics for actor: {actor_id}")
-
-    try:
-        from agents.learning.tools.consolidate_memories import get_memory_statistics
-
-        result = await get_memory_statistics(actor_id=actor_id)
-        return {"success": True, **result}
-
-    except Exception as e:
-        logger.error(f"[{AGENT_NAME}] memory_statistics failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
-
-
-@tool
 async def health_check() -> Dict[str, Any]:
     """
     Health check endpoint for monitoring.
@@ -746,8 +650,6 @@ def create_agent() -> Agent:
             store_pattern,
             retrieve_column_mappings,
             record_low_confidence_event,
-            sleep_cycle,
-            memory_statistics,
             health_check,
         ],
         system_prompt=SYSTEM_PROMPT,
