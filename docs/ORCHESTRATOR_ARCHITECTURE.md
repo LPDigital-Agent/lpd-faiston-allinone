@@ -1,16 +1,45 @@
 # Orchestrator Architecture (Strands Agent)
 
 > **Last Updated:** 2026-01-14
-> **Status:** Production
-> **Pattern:** BedrockAgentCoreApp + Strands Agent (LLM-based routing)
+> **Status:** Production (Phase 2 of ADR-002 Migration Complete)
+> **Pattern:** BedrockAgentCoreApp + Full Strands Agent (LLM-based routing)
+> **ADR Reference:** [ADR-002 - Faiston Agent Ecosystem Architecture](./adr/ADR-002-faiston-agent-ecosystem.md)
 
 This document describes the orchestrator architecture for Faiston One Inventory Management System (SGA).
 
 ---
 
+## ADR-002: "Everything is an Agent" Architecture
+
+> **Principle:** The orchestrator IS a Strands Agent, NOT a Python wrapper.
+
+Per ADR-002 (Accepted 2026-01-14), the architecture follows these principles:
+
+1. **Orchestrators are Agents** - Full Strands Agent with hooks, session management, structured output
+2. **Specialists at Same Level** - All agents (orchestrators and specialists) are peers, not parent-child
+3. **Multiple Orchestrators Supported** - Future domain orchestrators (expedicao, reversa, rastreabilidade)
+4. **No Routing Tables in Prompts** - LLM decides routing based on tool descriptions
+
+### New Directory Structure (Phase 2 Complete)
+
+```
+server/agentcore-inventory/agents/
+├── orchestrators/           # Domain orchestrators (full Strands Agents)
+│   └── estoque/             # 📦 Inventory management
+│       ├── __init__.py
+│       └── main.py          # ✅ Phase 2 - Full Strands Agent (~790 lines)
+└── specialists/             # Reusable capabilities (15 agents)
+    ├── estoque_control/
+    ├── intake/
+    ├── nexo_import/
+    └── ... (12 more)
+```
+
+---
+
 ## Overview
 
-The orchestrator is the **central entry point** for all inventory management requests. It uses a **Strands Agent** with **Gemini 2.5 Flash** for intelligent routing to 14 specialist agents.
+The orchestrator is the **central entry point** for all inventory management requests. It uses a **Strands Agent** with **Gemini 2.5 Flash** for intelligent routing to 15 specialist agents.
 
 ### Key Metrics
 
@@ -221,13 +250,29 @@ The Strands Agent (Gemini) interprets intent and calls `invoke_specialist`.
 
 ## Code Location
 
+### Legacy Location (Pre-ADR-002 Migration)
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `server/agentcore-inventory/main.py` | Re-export wrapper (now thin proxy) | ✅ Updated |
+| `server/agentcore-inventory/main.py.backup` | Original 75-handler version (4,426 lines) | 📁 Archive |
+| `server/agentcore-inventory/shared/a2a_client.py` | A2A Protocol client for specialists (~1,185 lines) | ✅ Kept (used by specialists) |
+| `server/agentcore-inventory/shared/a2a_tool_provider.py` | Dynamic agent discovery (~506 lines) | 🗑️ Removed (orchestrator only) |
+
+> **Note:** `a2a_client.py` is KEPT because specialists use `delegate_to_*` functions for inter-specialist communication (e.g., nexo_import → learning). The orchestrator no longer uses this file - it has inline boto3 SDK calls.
+
+### New Location (ADR-002 Phase 2 Complete)
+
 | File | Purpose |
 |------|---------|
-| `server/agentcore-inventory/main.py` | Orchestrator entry point (~610 lines with Phase 7.1) |
-| `server/agentcore-inventory/main.py.backup` | Original 75-handler version (4,426 lines) |
+| `server/agentcore-inventory/agents/orchestrators/estoque/main.py` | **Full Strands Agent orchestrator (~790 lines)** |
+| `server/agentcore-inventory/agents/specialists/` | All 15 specialist agents |
+| `server/agentcore-inventory/config/agent_urls.py` | Runtime ID → URL mapping (source of truth) |
 | `server/agentcore-inventory/agents/utils.py` | `create_gemini_model()` factory |
-| `server/agentcore-inventory/shared/a2a_client.py` | A2A Protocol client |
-| `server/agentcore-inventory/shared/a2a_tool_provider.py` | **NEW** Dynamic agent discovery (Phase 7.1) |
+| `server/agentcore-inventory/shared/hooks/` | HookProvider implementations |
+| `server/agentcore-inventory/shared/hooks/logging_hook.py` | JSON structured logging |
+| `server/agentcore-inventory/shared/hooks/metrics_hook.py` | CloudWatch metrics emission |
+| `server/agentcore-inventory/shared/hooks/guardrails_hook.py` | Shadow mode content moderation |
 
 ---
 
@@ -411,8 +456,170 @@ See: `docs/plans/swift-finding-dongarra.md` for full Swarm architecture plan.
 
 ---
 
+---
+
+## ADR-002 Migration Phases
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| **Phase 1** | ✅ Complete | Restructure directories (orchestrators/ + specialists/) |
+| **Phase 2** | ✅ Complete | Rewrite orchestrator as full Strands Agent (~790 lines) |
+| **Phase 3** | ✅ Complete | Update specialists with AgentCoreMemory, hooks |
+| **Phase 4** | ✅ Complete | Integrate Swarm for NEXO (embedded in orchestrator) |
+| **Phase 5** | Pending | Deploy and verification |
+
+---
+
+## Phase 2 Implementation Details
+
+> **Added:** 2026-01-14
+> **Status:** Complete
+> **File:** `server/agentcore-inventory/agents/orchestrators/estoque/main.py`
+
+### Key Changes from Legacy Orchestrator
+
+| Aspect | Legacy (`main.py`) | New (`orchestrators/estoque/main.py`) |
+|--------|-------------------|---------------------------------------|
+| Lines of Code | ~1,318 | ~790 |
+| Routing Tables | Hardcoded in SYSTEM_PROMPT | None - LLM reads tool descriptions |
+| A2A Implementation | Custom `shared/a2a_client.py` | Direct boto3 SDK calls |
+| Agent Discovery | `shared/a2a_tool_provider.py` | Removed - static RUNTIME_IDS |
+| Backward Compatibility | ACTION_TO_SPECIALIST mapping | Removed (breaking change per ADR-002) |
+| Swarm Integration | External module | Embedded in orchestrator |
+
+### LLM-Based Routing Pattern
+
+The new orchestrator removes all routing tables from the system prompt. Instead, the LLM reads the `invoke_specialist` tool docstring which contains detailed agent descriptions:
+
+```python
+@tool(context=True)
+async def invoke_specialist(agent_id: str, action: str, payload: dict, tool_context: ToolContext) -> dict:
+    """
+    ## Available Specialist Agents:
+
+    ### estoque_control
+    Inventory control operations: stock movements, reservations...
+    Actions: query_balance, create_reservation, cancel_reservation...
+
+    ### intake
+    Document intake and processing: NF PDF/XML extraction...
+    Actions: process_nf, validate_extraction, confirm_entry...
+
+    ... (15 agents total)
+    """
+```
+
+### invocation_state for Hidden Context
+
+User and session context is passed via `invocation_state` (invisible to LLM):
+
+```python
+# In entrypoint
+result = orchestrator(
+    llm_prompt,
+    user_id=user_id,       # Hidden from LLM
+    session_id=session_id,  # Hidden from LLM
+)
+
+# In tool (accessed via ToolContext)
+user_id = tool_context.invocation_state.get("user_id", "unknown")
+session_id = tool_context.invocation_state.get("session_id", "default-session")
+```
+
+### A2A Invocation via boto3 SDK
+
+The new orchestrator uses boto3 directly (no custom wrapper):
+
+```python
+client = boto3.client("bedrock-agentcore", region_name="us-east-2")
+response = client.invoke_agent_runtime(
+    agentRuntimeArn=runtime_arn,
+    runtimeSessionId=session_id,
+    payload=json.dumps(a2a_request).encode("utf-8"),
+)
+```
+
+### Hooks Integration
+
+The orchestrator uses HookProvider implementations:
+
+1. **LoggingHook** - JSON structured logging for all agent events
+2. **MetricsHook** - CloudWatch metrics emission (FaistonSGA namespace)
+3. **GuardrailsHook** - Shadow mode content moderation (optional)
+
+```python
+hooks = [
+    LoggingHook(log_level=logging.INFO),
+    MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
+]
+if guardrail_id:
+    hooks.append(GuardrailsHook(guardrail_id=guardrail_id, shadow_mode=True))
+```
+
+---
+
+## Phase 3 Implementation Details
+
+> **Added:** 2026-01-14
+> **Status:** Complete
+> **Files:** All 15 specialist agents in `server/agentcore-inventory/agents/specialists/`
+
+### Summary
+
+All 15 specialist agents have been updated to include HookProvider implementations for observability per ADR-002. This ensures consistent logging and metrics across the entire agent ecosystem.
+
+### Updated Specialists
+
+| Specialist | Role | Hooks Added |
+|------------|------|-------------|
+| estoque_control | Stock management | LoggingHook, MetricsHook |
+| intake | Inventory entry | LoggingHook, MetricsHook |
+| nexo_import | Smart import | LoggingHook, MetricsHook |
+| learning | Pattern learning | LoggingHook, MetricsHook |
+| validation | Data validation | LoggingHook, MetricsHook |
+| compliance | Compliance checks | LoggingHook, MetricsHook |
+| carrier | Carrier management | LoggingHook, MetricsHook |
+| data_import | Data import | LoggingHook, MetricsHook |
+| equipment_research | Equipment research | LoggingHook, MetricsHook |
+| expedition | Expedition management | LoggingHook, MetricsHook |
+| observation | Audit logging | LoggingHook, MetricsHook |
+| reconciliacao | Reconciliation | LoggingHook, MetricsHook |
+| reverse | Reverse logistics | LoggingHook, MetricsHook |
+| schema_evolution | Dynamic schema | LoggingHook, MetricsHook |
+| nf_reader | NF parsing | LoggingHook, MetricsHook |
+
+### Standard Pattern Applied
+
+Each specialist received the same hook integration pattern:
+
+```python
+# Import hooks
+from shared.hooks import LoggingHook, MetricsHook
+
+# Apply in create_agent()
+def create_agent() -> Agent:
+    return Agent(
+        name=AGENT_NAME,
+        model=create_gemini_model(AGENT_ID),
+        tools=[...],
+        system_prompt=SYSTEM_PROMPT,
+        hooks=[LoggingHook(), MetricsHook()],  # ADR-002: Observability hooks
+    )
+```
+
+### Benefits
+
+1. **Consistent Logging**: All agents emit JSON-structured logs to CloudWatch
+2. **Metrics Visibility**: CloudWatch metrics track invocations, duration, tool usage
+3. **Debugging**: Easier to trace issues across multi-agent workflows
+4. **Compliance**: Audit trail for all agent operations
+
+---
+
 ## Related Documentation
 
+- [ADR-002 - Faiston Agent Ecosystem Architecture](./adr/ADR-002-faiston-agent-ecosystem.md) - "Everything is an Agent" decision
+- [ADR-001 - Remove Orphan Dockerfiles](./adr/ADR-001-remove-orphan-dockerfiles.md) - ZIP deploy decision
 - [SMART_IMPORT_ARCHITECTURE.md](./SMART_IMPORT_ARCHITECTURE.md) - Import flow details
 - [AUTHENTICATION_ARCHITECTURE.md](./AUTHENTICATION_ARCHITECTURE.md) - Auth configuration
 - [CLAUDE.md](../CLAUDE.md) - Development guidelines

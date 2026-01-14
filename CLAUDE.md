@@ -181,11 +181,12 @@ Frontend (JWT) → FaistonInventoryManagement (HTTP) → faiston_sga_* (A2A/SigV
                      (LLM-based routing via Gemini)
 ```
 
-**Architecture Notes (REFACTORED 2026-01-14):**
-- The orchestrator uses **Strands Agent** with Gemini for LLM-based intelligent routing
+**Architecture Notes (ADR-002 Phase 2 - 2026-01-14):**
+- The orchestrator is a **FULL Strands Agent** with Gemini for LLM-based intelligent routing
 - Deployment name remains `faiston_asset_management` for backward compatibility
-- Internal name is `FaistonInventoryManagement` (conceptual: Inventory Management Orchestrator)
-- **Code reduced from 4,426 lines to ~490 lines** (89% reduction)
+- Internal name is `FaistonInventoryOrchestrator` (located at `agents/orchestrators/estoque/main.py`)
+- **Code: ~790 lines** (ADR-002 compliant with hooks, Swarm integration)
+- **No routing tables in system prompt** - LLM decides from tool descriptions
 
 **Protocol Rules:**
 - **NEVER** call `faiston_sga_*` agents directly from frontend
