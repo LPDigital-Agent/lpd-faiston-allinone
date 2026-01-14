@@ -755,8 +755,16 @@ def _process_swarm_result(result, session: dict) -> dict:
     # PRIORITY 2: Try to parse message as JSON
     elif hasattr(result, "message") and result.message:
         try:
-            response = json.loads(result.message)
-            logger.info("[Swarm] Parsed response from message JSON")
+            # Handle both dict and string types
+            if isinstance(result.message, dict):
+                response = result.message
+                logger.info("[Swarm] Using message dict directly")
+            elif isinstance(result.message, str):
+                response = json.loads(result.message)
+                logger.info("[Swarm] Parsed response from message JSON")
+            else:
+                response = {}
+                logger.warning(f"[Swarm] Unexpected message type: {type(result.message)}")
         except json.JSONDecodeError:
             # PRIORITY 3: Try to extract JSON object from message text
             # The LLM sometimes wraps JSON in natural language
@@ -928,7 +936,13 @@ async def _invoke_specialist_internal(
 
     # Parse response
     try:
-        response_data = json.loads(result.response) if result.response else {}
+        # Handle both dict and string types
+        if isinstance(result.response, dict):
+            response_data = result.response
+        elif isinstance(result.response, str):
+            response_data = json.loads(result.response)
+        else:
+            response_data = {}
 
         # A2A response may wrap result in 'result' field
         if "result" in response_data:
@@ -1303,7 +1317,14 @@ Request: {prompt}
             # Priority 2: Try to parse message as JSON (if LLM returned JSON directly)
             if hasattr(result, "message") and result.message:
                 try:
-                    parsed = json.loads(result.message)
+                    # Handle both dict and string types
+                    if isinstance(result.message, dict):
+                        parsed = result.message
+                    elif isinstance(result.message, str):
+                        parsed = json.loads(result.message)
+                    else:
+                        parsed = {}
+
                     # Ensure it looks like a specialist response
                     if isinstance(parsed, dict) and "specialist_agent" in parsed:
                         return parsed
