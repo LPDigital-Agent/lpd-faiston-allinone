@@ -970,11 +970,14 @@ agents:
       signing_algorithm: ES384
       issuer_url: null
       duration_seconds: 300
-    authorizer_configuration:
-      customJWTAuthorizer:
-        discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
-        allowedClients:
-          - 7ovjm09dr94e52mpejvbu9v1cg
+    # NOTE: Authorizer already exists in AWS - skip to avoid ValidationException conflict
+    # Original config preserved for reference:
+    # authorizer_configuration:
+    #   customJWTAuthorizer:
+    #     discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
+    #     allowedClients:
+    #       - 7ovjm09dr94e52mpejvbu9v1cg
+    authorizer_configuration: null
     request_header_configuration: null
     oauth_configuration: null
     api_key_env_var_name: null
