@@ -105,6 +105,39 @@ resource "aws_iam_role_policy" "bedrock_kb_model" {
 }
 
 # =============================================================================
+# S3 Vectors Access Policy for Bedrock KB
+# =============================================================================
+# Allows Bedrock KB to read/write vectors in S3 Vectors bucket
+
+data "aws_iam_policy_document" "bedrock_kb_s3vectors" {
+  statement {
+    sid    = "S3VectorsBucketAccess"
+    effect = "Allow"
+    actions = [
+      "s3vectors:CreateIndex",
+      "s3vectors:DeleteIndex",
+      "s3vectors:DescribeIndex",
+      "s3vectors:ListIndexes",
+      "s3vectors:GetVector",
+      "s3vectors:PutVector",
+      "s3vectors:DeleteVector",
+      "s3vectors:QueryVectors"
+    ]
+    resources = [
+      # Vector bucket ARN - will be constructed after bucket creation
+      "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${var.project_name}-equipment-kb-vectors",
+      "arn:aws:s3vectors:${var.aws_region}:${data.aws_caller_identity.current.account_id}:bucket/${var.project_name}-equipment-kb-vectors/*"
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "bedrock_kb_s3vectors" {
+  name   = "${var.project_name}-bedrock-kb-s3vectors-policy"
+  role   = aws_iam_role.bedrock_kb_equipment.id
+  policy = data.aws_iam_policy_document.bedrock_kb_s3vectors.json
+}
+
+# =============================================================================
 # Additional S3 Access for SGA AgentCore (Equipment Docs Upload)
 # =============================================================================
 # Allows EquipmentResearchAgent to upload documents to equipment docs bucket

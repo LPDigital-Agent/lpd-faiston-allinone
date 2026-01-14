@@ -1,229 +1,82 @@
 # =============================================================================
-# Amazon Bedrock Knowledge Base for Equipment Documentation
+# Amazon Bedrock Knowledge Base for Equipment Documentation (S3 Vectors)
 # =============================================================================
 # Creates a RAG-enabled Knowledge Base for equipment specifications, manuals,
 # and datasheets. Used by NEXO Assistant to answer equipment-related questions.
 #
-# Architecture:
+# Architecture (S3 Vectors - Fully Managed by Bedrock):
 # - S3 Source: faiston-one-sga-equipment-docs-prod (equipment docs)
-# - Vector Store: OpenSearch Serverless (managed by AWS)
+# - Vector Store: S3 Vectors (fully managed, no index creation needed)
 # - Embedding Model: Amazon Titan Embeddings V2 (1024 dimensions)
 # - Chunking: Fixed-size 512 tokens, 20% overlap
 #
 # Data Flow:
 # EnrichmentAgent -> S3 -> Bedrock KB -> NEXO Assistant (RetrieveAndGenerate)
 #
+# Why S3 Vectors over OpenSearch Serverless:
+# - Zero manual index creation (Bedrock manages everything)
+# - 80% less Terraform code (~50 lines vs ~250 lines)
+# - Lower cost (S3 pricing vs OpenSearch pricing)
+# - No security policies needed
+# - Sub-second latency is acceptable for equipment doc queries
+#
 # Reference:
 # - PRD: product-development/current-feature/PRD-tavily-enrichment.md
 # - S3 Bucket: terraform/main/s3_sga_equipment_docs.tf
 # - IAM Roles: terraform/main/iam_bedrock_kb.tf
+# - AWS Docs: https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-bedrock-kb.html
 # =============================================================================
 
 # =============================================================================
-# OpenSearch Serverless Collection for Vector Store
+# S3 Vectors Bucket for Equipment Knowledge Base
 # =============================================================================
-# Bedrock KB uses OpenSearch Serverless as the vector database.
-# Three security policies are required before the collection can be created.
+# S3 Vectors is a fully managed vector store. Bedrock automatically creates
+# and manages the vector index within this bucket.
 
-# -----------------------------------------------------------------------------
-# 1. Encryption Security Policy
-# -----------------------------------------------------------------------------
-resource "aws_opensearchserverless_security_policy" "kb_encryption" {
-  name        = "${var.project_name}-kb-encryption"
-  type        = "encryption"
-  description = "Encryption policy for Bedrock KB vector store"
+resource "aws_s3vectors_vector_bucket" "equipment_kb" {
+  vector_bucket_name = "${var.project_name}-equipment-kb-vectors"
 
-  policy = jsonencode({
-    Rules = [
-      {
-        Resource     = ["collection/${var.project_name}-equipment-kb"]
-        ResourceType = "collection"
-      }
-    ]
-    AWSOwnedKey = true
-  })
-}
-
-# -----------------------------------------------------------------------------
-# 2. Network Security Policy
-# -----------------------------------------------------------------------------
-# Allow access from Bedrock service
-resource "aws_opensearchserverless_security_policy" "kb_network" {
-  name        = "${var.project_name}-kb-network"
-  type        = "network"
-  description = "Network policy for Bedrock KB access"
-
-  policy = jsonencode([
-    {
-      Description = "Allow Bedrock access to collection"
-      Rules = [
-        {
-          ResourceType = "collection"
-          Resource     = ["collection/${var.project_name}-equipment-kb"]
-        },
-        {
-          ResourceType = "dashboard"
-          Resource     = ["collection/${var.project_name}-equipment-kb"]
-        }
-      ]
-      AllowFromPublic = true
-    }
-  ])
-}
-
-# -----------------------------------------------------------------------------
-# 3. Data Access Policy
-# -----------------------------------------------------------------------------
-# Grant Bedrock KB role AND Bedrock service principal access to read/write vectors
-# IMPORTANT: Bedrock service principal MUST be included for automatic index creation
-resource "aws_opensearchserverless_access_policy" "kb_data_access" {
-  name        = "${var.project_name}-kb-data-access"
-  type        = "data"
-  description = "Data access policy for Bedrock KB"
-
-  policy = jsonencode([
-    {
-      Description = "Bedrock KB data access"
-      Rules = [
-        {
-          ResourceType = "collection"
-          Resource     = ["collection/${var.project_name}-equipment-kb"]
-          Permission = [
-            "aoss:CreateCollectionItems",
-            "aoss:DeleteCollectionItems",
-            "aoss:UpdateCollectionItems",
-            "aoss:DescribeCollectionItems"
-          ]
-        },
-        {
-          ResourceType = "index"
-          Resource     = ["index/${var.project_name}-equipment-kb/*"]
-          Permission = [
-            "aoss:CreateIndex",
-            "aoss:DeleteIndex",
-            "aoss:UpdateIndex",
-            "aoss:DescribeIndex",
-            "aoss:ReadDocument",
-            "aoss:WriteDocument"
-          ]
-        }
-      ]
-      Principal = [
-        aws_iam_role.bedrock_kb_equipment.arn,
-        aws_iam_role.sga_agentcore_execution.arn
-      ]
-    },
-    # Bedrock service principal for automatic index creation
-    # This allows Bedrock to create the vector index during KB setup
-    {
-      Description = "Bedrock service access for index creation"
-      Rules = [
-        {
-          ResourceType = "collection"
-          Resource     = ["collection/${var.project_name}-equipment-kb"]
-          Permission = [
-            "aoss:CreateCollectionItems",
-            "aoss:DescribeCollectionItems",
-            "aoss:UpdateCollectionItems"
-          ]
-        },
-        {
-          ResourceType = "index"
-          Resource     = ["index/${var.project_name}-equipment-kb/*"]
-          Permission = [
-            "aoss:CreateIndex",
-            "aoss:DescribeIndex",
-            "aoss:UpdateIndex",
-            "aoss:ReadDocument",
-            "aoss:WriteDocument"
-          ]
-        }
-      ]
-      Principal = [
-        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/bedrock.amazonaws.com/AWSServiceRoleForAmazonBedrock"
-      ]
-    }
-  ])
-}
-
-# -----------------------------------------------------------------------------
-# OpenSearch Serverless Collection
-# -----------------------------------------------------------------------------
-resource "aws_opensearchserverless_collection" "equipment_kb" {
-  name        = "${var.project_name}-equipment-kb"
-  description = "Vector store for NEXO equipment knowledge base"
-  type        = "VECTORSEARCH"
-
-  # Disable standby replicas to reduce costs (can enable for prod)
-  standby_replicas = "DISABLED"
+  encryption_configuration {
+    sse_type = "AES256"
+  }
 
   tags = {
-    Name        = "Faiston Equipment Knowledge Base Vector Store"
+    Name        = "Faiston Equipment KB Vector Bucket"
     Environment = var.environment
     Module      = "Gestao de Ativos"
     Feature     = "Equipment Enrichment RAG"
-    Purpose     = "Vector embeddings for equipment documentation"
-  }
-
-  depends_on = [
-    aws_opensearchserverless_security_policy.kb_encryption,
-    aws_opensearchserverless_security_policy.kb_network,
-    aws_opensearchserverless_access_policy.kb_data_access
-  ]
-}
-
-# -----------------------------------------------------------------------------
-# Wait for Collection to be ACTIVE
-# -----------------------------------------------------------------------------
-# OpenSearch Serverless collections take time to become ACTIVE after creation.
-# This wait ensures the collection is ready before Bedrock KB tries to create the index.
-resource "time_sleep" "wait_for_collection" {
-  depends_on = [aws_opensearchserverless_collection.equipment_kb]
-
-  # Wait 120 seconds for collection to reach ACTIVE state
-  # This is necessary because the collection status check happens asynchronously
-  create_duration = "120s"
-}
-
-# =============================================================================
-# IAM Policy for OpenSearch Serverless Access
-# =============================================================================
-# Allow Bedrock KB role to access the OpenSearch Serverless collection
-
-data "aws_iam_policy_document" "bedrock_kb_aoss_access" {
-  statement {
-    sid    = "AllowAOSSAPIAccess"
-    effect = "Allow"
-    actions = [
-      "aoss:APIAccessAll"
-    ]
-    resources = [
-      aws_opensearchserverless_collection.equipment_kb.arn
-    ]
-  }
-
-  statement {
-    sid    = "AllowAOSSBatchAccess"
-    effect = "Allow"
-    actions = [
-      "aoss:BatchGetCollection",
-      "aoss:CreateSecurityPolicy",
-      "aoss:GetSecurityPolicy",
-      "aoss:UpdateSecurityPolicy"
-    ]
-    resources = ["*"]
+    Purpose     = "S3 Vectors storage for equipment embeddings"
   }
 }
 
-resource "aws_iam_role_policy" "bedrock_kb_aoss" {
-  name   = "${var.project_name}-bedrock-kb-aoss-policy"
-  role   = aws_iam_role.bedrock_kb_equipment.id
-  policy = data.aws_iam_policy_document.bedrock_kb_aoss_access.json
+# =============================================================================
+# S3 Vectors Index for Equipment Embeddings
+# =============================================================================
+# The index stores vector embeddings created by Titan Embeddings V2.
+# Bedrock automatically writes embeddings here during ingestion.
+
+resource "aws_s3vectors_index" "equipment_kb" {
+  index_name         = "equipment-knowledge-index"
+  vector_bucket_name = aws_s3vectors_vector_bucket.equipment_kb.vector_bucket_name
+
+  # Titan Embeddings V2 configuration
+  data_type       = "float32"
+  dimension       = 1024
+  distance_metric = "cosine"
+
+  tags = {
+    Name        = "Faiston Equipment KB Vector Index"
+    Environment = var.environment
+    Module      = "Gestao de Ativos"
+    Feature     = "Equipment Enrichment RAG"
+    Purpose     = "Vector index for semantic search"
+  }
 }
 
 # =============================================================================
-# Bedrock Knowledge Base
+# Bedrock Knowledge Base with S3 Vectors
 # =============================================================================
+
 resource "aws_bedrockagent_knowledge_base" "equipment" {
   name        = "${var.project_name}-equipment-kb"
   description = "Equipment specifications, manuals, and datasheets for NEXO Assistant"
@@ -246,17 +99,10 @@ resource "aws_bedrockagent_knowledge_base" "equipment" {
   }
 
   storage_configuration {
-    type = "OPENSEARCH_SERVERLESS"
+    type = "S3_VECTORS"
 
-    opensearch_serverless_configuration {
-      collection_arn    = aws_opensearchserverless_collection.equipment_kb.arn
-      vector_index_name = "equipment-knowledge-index"
-
-      field_mapping {
-        vector_field   = "equipment_vector"
-        text_field     = "equipment_text"
-        metadata_field = "equipment_metadata"
-      }
+    s3_vectors_configuration {
+      index_arn = aws_s3vectors_index.equipment_kb.index_arn
     }
   }
 
@@ -268,10 +114,9 @@ resource "aws_bedrockagent_knowledge_base" "equipment" {
     Purpose     = "RAG for equipment documentation queries"
   }
 
-  # Wait for collection to be ACTIVE and IAM policies to be in place
+  # Wait for S3 Vectors index to be ready
   depends_on = [
-    time_sleep.wait_for_collection,
-    aws_iam_role_policy.bedrock_kb_aoss
+    aws_s3vectors_index.equipment_kb
   ]
 }
 
@@ -279,6 +124,7 @@ resource "aws_bedrockagent_knowledge_base" "equipment" {
 # Bedrock Data Source (S3)
 # =============================================================================
 # Connect the equipment docs S3 bucket as a data source
+
 resource "aws_bedrockagent_data_source" "equipment_docs" {
   knowledge_base_id    = aws_bedrockagent_knowledge_base.equipment.id
   name                 = "${var.project_name}-equipment-docs-source"
@@ -290,8 +136,8 @@ resource "aws_bedrockagent_data_source" "equipment_docs" {
 
     s3_configuration {
       bucket_arn = aws_s3_bucket.sga_equipment_docs.arn
-      # Note: inclusion_prefixes removed - AWS API limits to 1 element max
-      # All S3 content in this bucket is equipment-related by design
+      # Note: All S3 content in this bucket is equipment-related by design
+      # No inclusion_prefixes needed (AWS API limits to 1 element max anyway)
     }
   }
 
@@ -319,13 +165,15 @@ resource "aws_ssm_parameter" "equipment_kb_config" {
   description = "Bedrock Knowledge Base configuration for equipment docs"
   type        = "String"
   value = jsonencode({
-    knowledge_base_id   = aws_bedrockagent_knowledge_base.equipment.id
-    knowledge_base_arn  = aws_bedrockagent_knowledge_base.equipment.arn
-    data_source_id      = aws_bedrockagent_data_source.equipment_docs.data_source_id
-    s3_bucket           = aws_s3_bucket.sga_equipment_docs.id
-    collection_endpoint = aws_opensearchserverless_collection.equipment_kb.collection_endpoint
-    embedding_model     = "amazon.titan-embed-text-v2:0"
-    region              = var.aws_region
+    knowledge_base_id  = aws_bedrockagent_knowledge_base.equipment.id
+    knowledge_base_arn = aws_bedrockagent_knowledge_base.equipment.arn
+    data_source_id     = aws_bedrockagent_data_source.equipment_docs.data_source_id
+    s3_bucket          = aws_s3_bucket.sga_equipment_docs.id
+    vector_bucket      = aws_s3vectors_vector_bucket.equipment_kb.vector_bucket_name
+    vector_index       = aws_s3vectors_index.equipment_kb.index_name
+    embedding_model    = "amazon.titan-embed-text-v2:0"
+    storage_type       = "S3_VECTORS"
+    region             = var.aws_region
   })
 
   tags = {
@@ -355,9 +203,14 @@ output "equipment_kb_data_source_id" {
   value       = aws_bedrockagent_data_source.equipment_docs.data_source_id
 }
 
-output "equipment_kb_collection_endpoint" {
-  description = "OpenSearch Serverless collection endpoint"
-  value       = aws_opensearchserverless_collection.equipment_kb.collection_endpoint
+output "equipment_kb_vector_bucket" {
+  description = "S3 Vectors bucket name"
+  value       = aws_s3vectors_vector_bucket.equipment_kb.vector_bucket_name
+}
+
+output "equipment_kb_vector_index" {
+  description = "S3 Vectors index name"
+  value       = aws_s3vectors_index.equipment_kb.index_name
 }
 
 output "equipment_kb_config_ssm" {
