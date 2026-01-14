@@ -1,3 +1,28 @@
+# =============================================================================
+# Faiston Inventory Management (SGA) - AgentCore Configuration
+# =============================================================================
+# REFACTORED: 2026-01-14
+#
+# ARCHITECTURE: Strands Orchestrator Agent + 14 Specialist A2A Agents
+#
+# The main orchestrator (faiston_asset_management) was refactored from a
+# 4,426-line monolith to a ~490-line Strands Agent with LLM-based routing.
+#
+# NAMING CONVENTION:
+# - Deployment name: faiston_asset_management (backward compatibility)
+# - Internal name: FaistonInventoryManagement (code references)
+# - Conceptual name: Inventory Management Orchestrator
+#
+# WHY NOT RENAMED:
+# - The agent_id (faiston_asset_management-uSuLPsFQNH) is fixed by AWS
+# - Renaming would create a new agent and break frontend integrations
+# - Internal code uses conceptual names; deployment name is preserved
+#
+# PROTOCOL:
+# - Orchestrator: HTTP on port 8080 (/invocations) with JWT auth
+# - Specialists: A2A JSON-RPC on port 9000 (internal only)
+# =============================================================================
+
 default_agent: faiston_asset_management
 agents:
   faiston_asset_management:
@@ -52,11 +77,15 @@ agents:
       signing_algorithm: ES384
       issuer_url: null
       duration_seconds: 300
-    authorizer_configuration:
-      customJWTAuthorizer:
-        discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
-        allowedClients:
-        - 7ovjm09dr94e52mpejvbu9v1cg
+    # IMPORTANT: Authorizer already exists on runtime faiston_asset_management-uSuLPsFQNH-300
+    # Commenting out to prevent "Authorizer already exists" error during deployment
+    # The JWT authorizer is already configured and will continue to work
+    # authorizer_configuration:
+    #   customJWTAuthorizer:
+    #     discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
+    #     allowedClients:
+    #     #     - 7ovjm09dr94e52mpejvbu9v1cg
+    authorizer_configuration: null
     request_header_configuration: null
     oauth_configuration: null
     api_key_env_var_name: null
