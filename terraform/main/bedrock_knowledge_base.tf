@@ -74,7 +74,8 @@ resource "aws_opensearchserverless_security_policy" "kb_network" {
 # -----------------------------------------------------------------------------
 # 3. Data Access Policy
 # -----------------------------------------------------------------------------
-# Grant Bedrock KB role access to read/write vectors
+# Grant Bedrock KB role AND Bedrock service principal access to read/write vectors
+# IMPORTANT: Bedrock service principal MUST be included for automatic index creation
 resource "aws_opensearchserverless_access_policy" "kb_data_access" {
   name        = "${var.project_name}-kb-data-access"
   type        = "data"
@@ -111,6 +112,36 @@ resource "aws_opensearchserverless_access_policy" "kb_data_access" {
         aws_iam_role.bedrock_kb_equipment.arn,
         aws_iam_role.sga_agentcore_execution.arn
       ]
+    },
+    # Bedrock service principal for automatic index creation
+    # This allows Bedrock to create the vector index during KB setup
+    {
+      Description = "Bedrock service access for index creation"
+      Rules = [
+        {
+          ResourceType = "collection"
+          Resource     = ["collection/${var.project_name}-equipment-kb"]
+          Permission = [
+            "aoss:CreateCollectionItems",
+            "aoss:DescribeCollectionItems",
+            "aoss:UpdateCollectionItems"
+          ]
+        },
+        {
+          ResourceType = "index"
+          Resource     = ["index/${var.project_name}-equipment-kb/*"]
+          Permission = [
+            "aoss:CreateIndex",
+            "aoss:DescribeIndex",
+            "aoss:UpdateIndex",
+            "aoss:ReadDocument",
+            "aoss:WriteDocument"
+          ]
+        }
+      ]
+      Principal = [
+        "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/bedrock.amazonaws.com/AWSServiceRoleForAmazonBedrock"
+      ]
     }
   ])
 }
@@ -139,6 +170,19 @@ resource "aws_opensearchserverless_collection" "equipment_kb" {
     aws_opensearchserverless_security_policy.kb_network,
     aws_opensearchserverless_access_policy.kb_data_access
   ]
+}
+
+# -----------------------------------------------------------------------------
+# Wait for Collection to be ACTIVE
+# -----------------------------------------------------------------------------
+# OpenSearch Serverless collections take time to become ACTIVE after creation.
+# This wait ensures the collection is ready before Bedrock KB tries to create the index.
+resource "time_sleep" "wait_for_collection" {
+  depends_on = [aws_opensearchserverless_collection.equipment_kb]
+
+  # Wait 120 seconds for collection to reach ACTIVE state
+  # This is necessary because the collection status check happens asynchronously
+  create_duration = "120s"
 }
 
 # =============================================================================
@@ -223,6 +267,12 @@ resource "aws_bedrockagent_knowledge_base" "equipment" {
     Feature     = "Equipment Enrichment"
     Purpose     = "RAG for equipment documentation queries"
   }
+
+  # Wait for collection to be ACTIVE and IAM policies to be in place
+  depends_on = [
+    time_sleep.wait_for_collection,
+    aws_iam_role_policy.bedrock_kb_aoss
+  ]
 }
 
 # =============================================================================
