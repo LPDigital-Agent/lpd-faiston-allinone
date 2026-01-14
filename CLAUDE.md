@@ -545,6 +545,7 @@ If this loop strategy is not being followed, you MUST STOP and fix the process b
 - ALL documentation lives in `docs/`
 - Be extremely concise
 - ALWAYS create a PLAN before implementation
+- NEVER EVER make deploy using command line interface. ONLY use Github Action workflow to deploy on aws.
 
 ## Git & GitHub
 
