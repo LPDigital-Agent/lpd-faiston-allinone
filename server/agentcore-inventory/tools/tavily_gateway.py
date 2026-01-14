@@ -1,32 +1,39 @@
 # =============================================================================
 # Tavily Gateway Adapter for Equipment Enrichment
 # =============================================================================
-# MCP client wrapper for Tavily tools via AgentCore Gateway.
+# MCP client wrapper for Tavily tools via AgentCore Gateway (built-in template).
 #
 # Per CLAUDE.md MCP ACCESS POLICY:
 # > ALL MCP tools and servers MUST be accessed ONLY via AWS Bedrock AgentCore Gateway.
 #
+# Gateway Configuration (Created via AWS Console - January 2026):
+#     Gateway ID: faiston-one-sga-gateway-tavily-se9zyznpyo
+#     Gateway URL: https://faiston-one-sga-gateway-tavily-se9zyznpyo.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp
+#     Auth Type: CUSTOM_JWT (Cognito OAuth2)
+#     Target Name: target-tavily
+#
 # Architecture:
-#     EnrichmentAgent -> TavilyGatewayAdapter -> MCPGatewayClient (SigV4) ->
-#     AgentCore Gateway -> Tavily API (OpenAPI Target)
+#     EnrichmentAgent -> TavilyGatewayAdapter -> CognitoMCPClient (OAuth2) ->
+#     AgentCore Gateway -> Tavily API (Built-in Template)
 #
 # Tool Naming Convention (per AWS docs):
 #     Format: {TargetName}___{ToolName} (THREE underscores)
-#     Example: TavilySearchMCP___tavily-search
+#     Example: target-tavily___TavilySearchPost
 #
-# Available Tools:
-#     - tavily-search: AI-optimized web search
-#     - tavily-extract: Content extraction from URLs
-#     - tavily-crawl: Systematic website crawling
-#     - tavily-map: Site structure mapping
+# Available Tools (Built-in Tavily Template):
+#     - TavilySearchPost: AI-optimized web search (POST /search)
+#     - TavilySearchExtract: Content extraction from URLs (POST /extract)
+#
+# NOTE: The built-in Tavily template does NOT include crawl/map tools.
+#       Only search and extract are available.
 #
 # Reference:
 #     - PRD: product-development/current-feature/PRD-tavily-enrichment.md
-#     - Tavily MCP: https://github.com/tavily-ai/tavily-mcp
-#     - Gateway: terraform/main/agentcore_gateway.tf
+#     - AWS Tavily Integration: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-integrations.html
 #
 # Author: Faiston NEXO Team
 # Date: January 2026
+# Updated: January 2026 - Use built-in Tavily template with OAuth2 (Cognito)
 # =============================================================================
 
 import json
@@ -36,9 +43,20 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from tools.mcp_gateway_client import MCPGatewayClient, MCPGatewayClientFactory
+from tools.cognito_mcp_client import CognitoMCPClient, CognitoMCPClientFactory
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Constants - Tavily Gateway Configuration
+# =============================================================================
+
+# Gateway details (from AWS Console creation)
+TAVILY_GATEWAY_ID = "faiston-one-sga-gateway-tavily-se9zyznpyo"
+TAVILY_GATEWAY_URL = f"https://{TAVILY_GATEWAY_ID}.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp"
+TAVILY_TOKEN_URL = "https://my-domain-ze9v2zyh.auth.us-east-2.amazoncognito.com/oauth2/token"
+TAVILY_COGNITO_CLIENT_ID = "5nq8g72i81uc25dd966tht601p"
 
 
 # =============================================================================
@@ -94,22 +112,6 @@ class ExtractResult:
     images: List[str] = field(default_factory=list)
 
 
-@dataclass
-class CrawlResult:
-    """Result from website crawl."""
-    base_url: str
-    pages_crawled: int
-    results: List[Dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
-class MapResult:
-    """Site map structure from Tavily map."""
-    base_url: str
-    urls: List[str] = field(default_factory=list)
-    depth_reached: int = 0
-
-
 # =============================================================================
 # Tavily Gateway Adapter
 # =============================================================================
@@ -117,21 +119,24 @@ class MapResult:
 
 class TavilyGatewayAdapter:
     """
-    Adapter for Tavily tools via AgentCore Gateway.
+    Adapter for Tavily tools via AgentCore Gateway (built-in template).
 
-    This adapter translates high-level search/extract/crawl operations
-    into MCP tool invocations via the Gateway. It handles:
-    - Tool name prefixing with target name
+    This adapter uses the AWS-provided Tavily integration template which
+    provides search and extract capabilities through the MCP protocol.
+
+    The adapter handles:
+    - Tool name prefixing with target name (target-tavily___)
+    - OAuth2 authentication via Cognito
     - Argument serialization
     - Response parsing into typed dataclasses
     - Error handling with sensible defaults
 
-    Note: All methods are SYNCHRONOUS. The MCPGatewayClient uses SigV4
-    signing and the requests library for HTTP calls.
+    Note: Uses CognitoMCPClient for OAuth2 authentication (CUSTOM_JWT).
+          NOT SigV4/IAM - the Tavily Gateway uses Cognito for auth.
 
     Attributes:
-        TARGET_PREFIX: MCP target name for Tavily tools
-        _client: MCPGatewayClient instance for Gateway communication
+        TARGET_PREFIX: MCP target name for Tavily tools (target-tavily)
+        _client: CognitoMCPClient instance for Gateway communication
 
     Example:
         ```python
@@ -154,17 +159,18 @@ class TavilyGatewayAdapter:
         ```
     """
 
-    TARGET_PREFIX = "TavilySearchMCP"
+    # MCP target name (from AWS Console - built-in Tavily template)
+    TARGET_PREFIX = "target-tavily"
 
-    def __init__(self, mcp_client: MCPGatewayClient):
+    def __init__(self, mcp_client: CognitoMCPClient):
         """
         Initialize Tavily Gateway Adapter.
 
         Args:
-            mcp_client: Configured MCPGatewayClient for Gateway communication
+            mcp_client: Configured CognitoMCPClient for Gateway communication
         """
         self._client = mcp_client
-        logger.info("[TavilyGatewayAdapter] Initialized with Gateway MCP client")
+        logger.info("[TavilyGatewayAdapter] Initialized with Cognito OAuth2 client")
 
     def _tool_name(self, tool: str) -> str:
         """
@@ -173,13 +179,15 @@ class TavilyGatewayAdapter:
         Per AWS MCP Gateway convention, tools are prefixed with:
         {TargetName}___{ToolName} (THREE underscores)
 
-        Note: Tavily tools use hyphens (tavily-search), not underscores.
+        Available tools in built-in Tavily template:
+        - TavilySearchPost -> POST /search
+        - TavilySearchExtract -> POST /extract
 
         Args:
-            tool: Base tool name (e.g., "tavily-search")
+            tool: Base tool name (e.g., "TavilySearchPost")
 
         Returns:
-            Full tool name (e.g., "TavilySearchMCP___tavily-search")
+            Full tool name (e.g., "target-tavily___TavilySearchPost")
         """
         return f"{self.TARGET_PREFIX}___{tool}"
 
@@ -196,7 +204,7 @@ class TavilyGatewayAdapter:
         return {k: v for k, v in data.items() if v is not None}
 
     # =========================================================================
-    # tavily-search: AI-Optimized Web Search
+    # TavilySearchPost: AI-Optimized Web Search
     # =========================================================================
 
     def search(
@@ -209,6 +217,7 @@ class TavilyGatewayAdapter:
         exclude_domains: Optional[List[str]] = None,
         include_images: bool = False,
         include_raw_content: bool = False,
+        include_answer: bool = True,
         time_range: Optional[TimeRange] = None,
         days: Optional[int] = None,
         country: Optional[str] = None,
@@ -216,6 +225,8 @@ class TavilyGatewayAdapter:
     ) -> List[SearchResult]:
         """
         Search the web using Tavily's AI-optimized search engine.
+
+        Uses the built-in TavilySearchPost tool via Gateway MCP.
 
         Tavily search is optimized for AI agents and provides:
         - Relevant, high-quality results
@@ -232,6 +243,7 @@ class TavilyGatewayAdapter:
             exclude_domains: Exclude results from these domains
             include_images: Include images in results
             include_raw_content: Include full page content
+            include_answer: Include AI-generated answer summary
             time_range: Filter by time (day, week, month, year)
             days: Number of days for news search
             country: Country for localized results
@@ -262,6 +274,7 @@ class TavilyGatewayAdapter:
             "exclude_domains": exclude_domains,
             "include_images": include_images,
             "include_raw_content": include_raw_content,
+            "include_answer": include_answer,
             "time_range": time_range.value if time_range else None,
             "days": days,
             "country": country,
@@ -269,7 +282,7 @@ class TavilyGatewayAdapter:
 
         try:
             result = self._client.call_tool(
-                tool_name=self._tool_name("tavily-search"),
+                tool_name=self._tool_name("TavilySearchPost"),
                 arguments=arguments,
                 timeout=timeout,
             )
@@ -308,7 +321,7 @@ class TavilyGatewayAdapter:
         return results
 
     # =========================================================================
-    # tavily-extract: Content Extraction from URLs
+    # TavilySearchExtract: Content Extraction from URLs
     # =========================================================================
 
     def extract(
@@ -322,6 +335,8 @@ class TavilyGatewayAdapter:
     ) -> List[ExtractResult]:
         """
         Extract and process content from specified URLs.
+
+        Uses the built-in TavilySearchExtract tool via Gateway MCP.
 
         Useful for:
         - Extracting datasheet content from manufacturer sites
@@ -361,7 +376,7 @@ class TavilyGatewayAdapter:
 
         try:
             result = self._client.call_tool(
-                tool_name=self._tool_name("tavily-extract"),
+                tool_name=self._tool_name("TavilySearchExtract"),
                 arguments=arguments,
                 timeout=timeout,
             )
@@ -408,211 +423,6 @@ class TavilyGatewayAdapter:
         return results
 
     # =========================================================================
-    # tavily-crawl: Systematic Website Crawling
-    # =========================================================================
-
-    def crawl(
-        self,
-        url: str,
-        max_depth: int = 2,
-        max_breadth: int = 10,
-        limit: int = 30,
-        instructions: Optional[str] = None,
-        select_paths: Optional[List[str]] = None,
-        select_domains: Optional[List[str]] = None,
-        allow_external: bool = False,
-        extract_depth: str = "basic",
-        format: ExtractFormat = ExtractFormat.MARKDOWN,
-        include_favicon: bool = False,
-        timeout: int = 180,
-    ) -> CrawlResult:
-        """
-        Systematically crawl a website to collect documentation.
-
-        Useful for:
-        - Crawling vendor documentation portals
-        - Collecting all product pages from a manufacturer
-        - Building comprehensive equipment knowledge bases
-
-        Args:
-            url: Starting URL for crawl
-            max_depth: How deep to follow links (default 2)
-            max_breadth: Maximum links per page (default 10)
-            limit: Maximum total pages to crawl (default 30)
-            instructions: Natural language crawl instructions
-            select_paths: Regex patterns for paths to include
-            select_domains: Regex patterns for domains to include
-            allow_external: Follow links to external domains
-            extract_depth: Content extraction depth
-            format: Output format for content
-            include_favicon: Include favicon URLs
-            timeout: Request timeout in seconds
-
-        Returns:
-            CrawlResult with list of crawled page data
-
-        Example:
-            ```python
-            # Crawl Cisco product documentation
-            crawl_result = adapter.crawl(
-                url="https://cisco.com/c/en/us/products/switches/catalyst-9200-series-switches/",
-                max_depth=3,
-                limit=50,
-                instructions="Collect all datasheets and installation guides",
-                select_paths=["/c/dam/.*\\.pdf", "/c/en/us/products/.*"],
-            )
-            ```
-        """
-        logger.info(f"[TavilyGatewayAdapter] crawl: url={url}, depth={max_depth}, limit={limit}")
-
-        arguments = self._clean_none_values({
-            "url": url,
-            "max_depth": max_depth,
-            "max_breadth": max_breadth,
-            "limit": limit,
-            "instructions": instructions,
-            "select_paths": select_paths,
-            "select_domains": select_domains,
-            "allow_external": allow_external,
-            "extract_depth": extract_depth,
-            "format": format.value,
-            "include_favicon": include_favicon,
-        })
-
-        try:
-            result = self._client.call_tool(
-                tool_name=self._tool_name("tavily-crawl"),
-                arguments=arguments,
-                timeout=timeout,
-            )
-
-            # Parse response into CrawlResult
-            crawl_result = self._parse_crawl_result(url, result)
-            logger.info(
-                f"[TavilyGatewayAdapter] crawl completed: "
-                f"{crawl_result.pages_crawled} pages"
-            )
-            return crawl_result
-
-        except Exception as e:
-            logger.error(f"[TavilyGatewayAdapter] crawl failed: {e}")
-            return CrawlResult(base_url=url, pages_crawled=0, results=[])
-
-    def _parse_crawl_result(self, base_url: str, response: Dict[str, Any]) -> CrawlResult:
-        """Parse Tavily crawl response into CrawlResult."""
-        results = response.get("results", [])
-        if not isinstance(results, list):
-            results = []
-
-        return CrawlResult(
-            base_url=base_url,
-            pages_crawled=len(results),
-            results=results,
-        )
-
-    # =========================================================================
-    # tavily-map: Site Structure Mapping
-    # =========================================================================
-
-    def map(
-        self,
-        url: str,
-        max_depth: int = 2,
-        max_breadth: int = 20,
-        limit: int = 50,
-        instructions: Optional[str] = None,
-        select_paths: Optional[List[str]] = None,
-        select_domains: Optional[List[str]] = None,
-        allow_external: bool = False,
-        timeout: int = 120,
-    ) -> MapResult:
-        """
-        Generate a site map to understand website structure.
-
-        Useful for:
-        - Discovering all documentation URLs on a vendor site
-        - Planning targeted crawls
-        - Understanding content organization
-
-        Args:
-            url: Starting URL for mapping
-            max_depth: How deep to explore (default 2)
-            max_breadth: Maximum links per page (default 20)
-            limit: Maximum total URLs to discover (default 50)
-            instructions: Natural language mapping instructions
-            select_paths: Regex patterns for paths to include
-            select_domains: Regex patterns for domains to include
-            allow_external: Include external domain links
-            timeout: Request timeout in seconds
-
-        Returns:
-            MapResult with list of discovered URLs
-
-        Example:
-            ```python
-            # Map Cisco documentation structure
-            site_map = adapter.map(
-                url="https://cisco.com/c/en/us/support/",
-                max_depth=3,
-                limit=100,
-                instructions="Find all product support pages",
-            )
-            print(f"Found {len(site_map.urls)} URLs")
-            ```
-        """
-        logger.info(f"[TavilyGatewayAdapter] map: url={url}, depth={max_depth}, limit={limit}")
-
-        arguments = self._clean_none_values({
-            "url": url,
-            "max_depth": max_depth,
-            "max_breadth": max_breadth,
-            "limit": limit,
-            "instructions": instructions,
-            "select_paths": select_paths,
-            "select_domains": select_domains,
-            "allow_external": allow_external,
-        })
-
-        try:
-            result = self._client.call_tool(
-                tool_name=self._tool_name("tavily-map"),
-                arguments=arguments,
-                timeout=timeout,
-            )
-
-            # Parse response into MapResult
-            map_result = self._parse_map_result(url, result)
-            logger.info(
-                f"[TavilyGatewayAdapter] map completed: "
-                f"{len(map_result.urls)} URLs discovered"
-            )
-            return map_result
-
-        except Exception as e:
-            logger.error(f"[TavilyGatewayAdapter] map failed: {e}")
-            return MapResult(base_url=url, urls=[], depth_reached=0)
-
-    def _parse_map_result(self, base_url: str, response: Dict[str, Any]) -> MapResult:
-        """Parse Tavily map response into MapResult."""
-        urls = response.get("urls", response.get("results", []))
-        if not isinstance(urls, list):
-            urls = []
-
-        # Extract URL strings if nested
-        url_list = []
-        for item in urls:
-            if isinstance(item, str):
-                url_list.append(item)
-            elif isinstance(item, dict) and "url" in item:
-                url_list.append(item["url"])
-
-        return MapResult(
-            base_url=base_url,
-            urls=url_list,
-            depth_reached=response.get("depth_reached", 0),
-        )
-
-    # =========================================================================
     # High-Level Equipment Research Methods
     # =========================================================================
 
@@ -623,10 +433,10 @@ class TavilyGatewayAdapter:
         search_types: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
-        Comprehensive equipment research using multiple Tavily tools.
+        Comprehensive equipment research using Tavily search and extract.
 
-        Combines search, extract, and optionally crawl to gather
-        complete documentation for a piece of equipment.
+        Combines search and extract tools to gather complete documentation
+        for a piece of equipment.
 
         Args:
             part_number: Equipment part number (e.g., "C9200-24P")
@@ -733,11 +543,11 @@ class TavilyGatewayAdapterFactory:
     """
     Factory for creating TavilyGatewayAdapter instances.
 
-    Handles the setup of MCPGatewayClient and adapter creation,
+    Handles the setup of CognitoMCPClient and adapter creation,
     abstracting the complexity from agent code.
 
-    Uses IAM-based authentication (SigV4) - no tokens required.
-    The AgentCore Runtime's execution role provides credentials.
+    Uses OAuth2 (Cognito) authentication - NOT IAM/SigV4.
+    The Tavily Gateway is configured with CUSTOM_JWT auth.
     """
 
     @staticmethod
@@ -745,13 +555,14 @@ class TavilyGatewayAdapterFactory:
         """
         Create adapter from environment variables.
 
-        Uses IAM SigV4 authentication (not Bearer tokens).
-        Credentials come from AgentCore Runtime's execution role.
+        Uses Cognito OAuth2 authentication.
 
         Environment Variables:
-            AGENTCORE_GATEWAY_URL: Full MCP endpoint URL
-            AGENTCORE_GATEWAY_ID: Gateway ID (alternative to full URL)
-            AWS_REGION: AWS region for URL construction and SigV4 signing
+            TAVILY_GATEWAY_URL: Full MCP endpoint URL
+            TAVILY_TOKEN_URL: Cognito OAuth2 token endpoint
+            TAVILY_CLIENT_ID: Cognito app client ID
+            TAVILY_CLIENT_SECRET_ARN: ARN of secret in Secrets Manager
+            TAVILY_CLIENT_SECRET: Client secret (fallback)
 
         Returns:
             Configured TavilyGatewayAdapter
@@ -759,29 +570,63 @@ class TavilyGatewayAdapterFactory:
         Raises:
             ValueError: If required environment variables are missing
         """
-        client = MCPGatewayClientFactory.create_from_env()
-        logger.info("[TavilyGatewayAdapterFactory] Created adapter with IAM auth (SigV4)")
+        client = CognitoMCPClientFactory.create_from_env()
+        logger.info("[TavilyGatewayAdapterFactory] Created adapter with Cognito OAuth2")
 
         return TavilyGatewayAdapter(client)
 
     @staticmethod
-    def create_with_url(
-        gateway_url: str,
-        region: str = "us-east-2"
-    ) -> TavilyGatewayAdapter:
+    def create_with_defaults(client_secret: str) -> TavilyGatewayAdapter:
         """
-        Create adapter with explicit Gateway URL.
+        Create adapter with default Gateway configuration.
 
-        Uses IAM SigV4 authentication (not Bearer tokens).
+        Uses the known Tavily Gateway created via AWS Console.
+        Only requires the Cognito client secret.
 
         Args:
-            gateway_url: Full Gateway MCP endpoint URL
-            region: AWS region for SigV4 signing
+            client_secret: Cognito app client secret
 
         Returns:
             Configured TavilyGatewayAdapter
         """
-        client = MCPGatewayClient(gateway_url=gateway_url, region=region)
+        client = CognitoMCPClient(
+            gateway_url=TAVILY_GATEWAY_URL,
+            token_url=TAVILY_TOKEN_URL,
+            client_id=TAVILY_COGNITO_CLIENT_ID,
+            client_secret=client_secret,
+        )
+        logger.info(
+            f"[TavilyGatewayAdapterFactory] Created adapter for "
+            f"Gateway {TAVILY_GATEWAY_ID}"
+        )
+
+        return TavilyGatewayAdapter(client)
+
+    @staticmethod
+    def create_with_config(
+        gateway_url: str,
+        token_url: str,
+        client_id: str,
+        client_secret: str,
+    ) -> TavilyGatewayAdapter:
+        """
+        Create adapter with explicit configuration.
+
+        Args:
+            gateway_url: Full Gateway MCP endpoint URL
+            token_url: Cognito OAuth2 token endpoint
+            client_id: Cognito app client ID
+            client_secret: Cognito app client secret
+
+        Returns:
+            Configured TavilyGatewayAdapter
+        """
+        client = CognitoMCPClient(
+            gateway_url=gateway_url,
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
         logger.info(f"[TavilyGatewayAdapterFactory] Created adapter for {gateway_url}")
 
         return TavilyGatewayAdapter(client)
@@ -792,6 +637,11 @@ class TavilyGatewayAdapterFactory:
 # =============================================================================
 
 __all__ = [
+    # Constants
+    "TAVILY_GATEWAY_ID",
+    "TAVILY_GATEWAY_URL",
+    "TAVILY_TOKEN_URL",
+    "TAVILY_COGNITO_CLIENT_ID",
     # Types
     "SearchDepth",
     "SearchTopic",
@@ -799,8 +649,6 @@ __all__ = [
     "ExtractFormat",
     "SearchResult",
     "ExtractResult",
-    "CrawlResult",
-    "MapResult",
     # Adapter
     "TavilyGatewayAdapter",
     "TavilyGatewayAdapterFactory",
