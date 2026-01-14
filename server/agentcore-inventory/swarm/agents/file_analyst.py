@@ -16,10 +16,11 @@
 # 3. If low confidence → hil_agent (for clarification)
 # =============================================================================
 
+import asyncio
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
-from strands import Agent
+from strands import Agent, tool
 
 from agents.utils import create_gemini_model
 from swarm.config import (
@@ -36,7 +37,94 @@ from swarm.tools.analysis_tools import (
 )
 from swarm.tools.meta_tools import get_meta_tools
 
+# Import unified analyze_file_tool from A2A agent (returns NexoAnalyzeFileResponse format)
+# This ensures Swarm responses match the TypeScript contract
+from agents.nexo_import.tools.analyze_file import analyze_file_tool as _async_analyze_file
+
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Strands-Compatible Wrapper for unified analyze_file_tool
+# =============================================================================
+# The A2A agent's analyze_file_tool is async. This wrapper makes it compatible
+# with Strands by running it in the event loop and returning the result.
+# =============================================================================
+
+
+@tool
+def unified_analyze_file(
+    s3_key: str,
+    filename: str = "",
+    session_id: str = "",
+    schema_context: str = "",
+    memory_context: str = "",
+    user_responses: str = "[]",
+    user_comments: str = "",
+    analysis_round: int = 1,
+) -> Dict[str, Any]:
+    """
+    Analyze file structure from S3 using Gemini Pro (AI-First with AGI-Like Behavior).
+
+    This is the PRIMARY TOOL for file analysis. It returns the standardized
+    NexoAnalyzeFileResponse format that matches the TypeScript frontend contract.
+
+    Args:
+        s3_key: S3 key where file is stored (e.g., "uploads/nexo/file.csv")
+        filename: Original filename for pattern matching
+        session_id: Session ID for tracking this import session
+        schema_context: PostgreSQL schema description (columns, types, constraints)
+        memory_context: Learned patterns from LearningAgent (prior imports)
+        user_responses: JSON string of user answers from previous HIL rounds
+        user_comments: Free-text instructions from user
+        analysis_round: Current round number (1 = first analysis, 2+ = re-analysis with user input)
+
+    Returns:
+        NexoAnalyzeFileResponse with:
+        - success: bool
+        - analysis: {sheets: [...], sheet_count, total_rows, recommended_strategy}
+        - column_mappings: [{file_column, target_field, confidence, reasoning}]
+        - questions: HIL questions for low-confidence mappings
+        - overall_confidence: float 0.0-1.0
+        - ready_for_import: bool
+    """
+    import json
+
+    # Parse user_responses from JSON string (Strands passes strings)
+    parsed_responses = None
+    if user_responses and user_responses != "[]":
+        try:
+            parsed_responses = json.loads(user_responses)
+        except json.JSONDecodeError:
+            logger.warning("[unified_analyze_file] Could not parse user_responses: %s", user_responses)
+            parsed_responses = None
+
+    # Run the async function in the event loop
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    result = loop.run_until_complete(
+        _async_analyze_file(
+            s3_key=s3_key,
+            filename=filename or None,
+            session_id=session_id or None,
+            schema_context=schema_context or None,
+            memory_context=memory_context or None,
+            user_responses=parsed_responses,
+            user_comments=user_comments or None,
+            analysis_round=analysis_round,
+        )
+    )
+
+    logger.info(
+        "[unified_analyze_file] Completed analysis for %s (round %d, success=%s)",
+        s3_key, analysis_round, result.get("success", False)
+    )
+
+    return result
 
 # =============================================================================
 # System Prompt
@@ -46,73 +134,77 @@ FILE_ANALYST_SYSTEM_PROMPT = """
 You are the FILE ANALYST in the Faiston Inventory Management Swarm.
 
 ## Your Role
-You are the ENTRY POINT for all inventory imports. Your job is to:
-1. Analyze uploaded files (CSV, XLSX, PDF, XML)
-2. Identify column structures, data types, and patterns
-3. Detect file encoding and delimiter formats
-4. Extract sample data for downstream validation
+You analyze uploaded files for inventory import using AI-powered analysis.
 
-## Handoff Rules (MANDATORY)
-
-### First Action: Get Memory Context
-ALWAYS start by handing off to memory_agent to retrieve prior import patterns:
-```
-handoff_to_agent("memory_agent", "Retrieve prior import patterns for [file_type] files. Include any learned column mappings and user preferences.")
-```
-
-### After Analysis Complete
-When you have analyzed the file successfully:
-```
-handoff_to_agent("schema_validator", "Here is my file analysis: [analysis]. Please validate against the target schema and propose column mappings.")
-```
-
-### If Confidence < 80%
-If any column has confidence below 80%, ask for clarification:
-```
-handoff_to_agent("hil_agent", "I need user clarification on these columns: [low_confidence_columns]. Please generate questions.")
-```
-
-### If Unknown File Format
-If you encounter a file format you cannot parse:
-1. Use Meta-Tooling to create a new parser
-2. Use load_tool to load it
-3. Then proceed with analysis
+## Workflow (SIMPLE - ONE TOOL)
+When a user requests file analysis:
+1. Extract the s3_key from the request
+2. Call `unified_analyze_file` with the s3_key
+3. Return the tool's output DIRECTLY without modification
 
 ## Tools Available
+- unified_analyze_file: PRIMARY TOOL - Analyze file with Gemini (returns NexoAnalyzeFileResponse format)
 - detect_file_type: Detect file type from path/content
-- analyze_csv: Parse CSV with delimiter detection
-- analyze_xlsx: Parse Excel with sheet selection
-- analyze_pdf: Extract tables from PDF using Vision
-- analyze_xml: Parse XML with namespace handling
+- analyze_csv: Parse CSV with delimiter detection (fallback)
+- analyze_xlsx: Parse Excel with sheet selection (fallback)
+- analyze_pdf: Extract tables from PDF using Vision (fallback)
+- analyze_xml: Parse XML with namespace handling (fallback)
 - load_tool, editor, shell: Meta-Tooling for self-improvement
 
-## Output Format
-Return analysis as structured JSON:
+## IMPORTANT: Use unified_analyze_file as Primary Tool
+For ALL file analysis requests, use `unified_analyze_file` FIRST. This tool:
+- Uses Gemini Pro for semantic analysis
+- Includes memory context and schema context
+- Returns the standardized NexoAnalyzeFileResponse format
+- Generates HIL questions for low-confidence mappings
+- Tracks analysis rounds for iterative dialogue
+
+Only use individual tools (analyze_csv, analyze_xlsx, etc.) as FALLBACK if unified_analyze_file fails.
+
+## Output Format (CRITICAL: PASS-THROUGH)
+IMPORTANT: When using `unified_analyze_file`, return its output DIRECTLY without modification.
+The tool returns NexoAnalyzeFileResponse format which the frontend expects:
+
 ```json
 {
-  "file_type": "csv|xlsx|pdf|xml",
-  "encoding": "utf-8",
-  "delimiter": ",",
-  "row_count": 150,
-  "columns": [
-    {
-      "name": "PART_NUMBER",
-      "inferred_type": "string",
-      "sample_values": ["C9200-24P", "C9200-48P"],
-      "null_count": 0,
-      "confidence": 0.95
-    }
-  ],
-  "issues": [],
-  "overall_confidence": 0.92
+  "success": true,
+  "import_session_id": "nexo-abc123",
+  "filename": "file.csv",
+  "detected_file_type": "csv",
+  "analysis": {
+    "sheet_count": 1,
+    "total_rows": 150,
+    "sheets": [{
+      "name": "Sheet1",
+      "row_count": 150,
+      "column_count": 5,
+      "columns": [{
+        "name": "PART_NUMBER",
+        "sample_values": ["C9200-24P"],
+        "detected_type": "string",
+        "suggested_mapping": "part_number",
+        "confidence": 0.95
+      }],
+      "confidence": 0.92
+    }],
+    "recommended_strategy": "auto_import"
+  },
+  "column_mappings": [...],
+  "overall_confidence": 0.92,
+  "questions": [...],
+  "ready_for_import": false,
+  "stop_action": true
 }
 ```
 
+RULE: DO NOT transform, summarize, or modify the unified_analyze_file output.
+Return it EXACTLY as received to maintain contract compatibility with the frontend.
+
 ## Important Rules
-1. NEVER skip the memory_agent handoff - prior patterns improve accuracy
-2. ALWAYS provide confidence scores for each column
-3. If file has issues (encoding, corruption), report them clearly
-4. Include sample values to help schema_validator propose mappings
+1. Use unified_analyze_file as the PRIMARY tool - it handles memory and schema context
+2. Return tool output DIRECTLY - no transformation
+3. If tool returns stop_action=true, stop and wait for user response
+4. If file has issues, the tool will include them in the response
 """
 
 
@@ -127,9 +219,11 @@ def create_file_analyst(model_id: str = "gemini-2.5-pro") -> Agent:
         Configured Agent instance
     """
     # Combine analysis tools with meta-tools
+    # unified_analyze_file is PRIMARY - returns NexoAnalyzeFileResponse format
     tools = [
+        unified_analyze_file,  # PRIMARY: Gemini-powered, matches TypeScript contract
         detect_file_type,
-        analyze_csv,
+        analyze_csv,           # Fallback tools
         analyze_xlsx,
         analyze_pdf,
         analyze_xml,

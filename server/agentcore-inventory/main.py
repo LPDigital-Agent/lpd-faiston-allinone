@@ -58,7 +58,10 @@ USE_DYNAMIC_DISCOVERY = os.environ.get("USE_DYNAMIC_DISCOVERY", "false").lower()
 # Feature flag for Swarm-based import (Phase 8)
 # Set to True to use Strands Swarm for NEXO import operations
 # When True: nexo_* actions route to autonomous 5-agent Swarm
-# When False: nexo_* actions route to legacy nexo_import A2A agent
+# When False: nexo_* actions route to nexo_import A2A agent
+#
+# NOTE: Swarm's file_analyst now uses the unified analyze_file_tool from
+# agents/nexo_import/tools/analyze_file.py which returns NexoAnalyzeFileResponse format
 USE_SWARM_IMPORT = os.environ.get("USE_SWARM_IMPORT", "true").lower() == "true"
 
 # =============================================================================
@@ -359,9 +362,14 @@ async def _invoke_swarm(
 
     # Handle different action types
     if action == "nexo_analyze_file":
+        # Extract s3_key from various possible payload keys
+        s3_key = payload.get("s3_key") or payload.get("file_path") or payload.get("key", "")
+        filename = payload.get("filename", "")
+
         # New import - reset session state
         session["context"] = {
-            "file_path": payload.get("file_path"),
+            "s3_key": s3_key,  # Store extracted s3_key for later rounds
+            "filename": filename,
             "target_table": payload.get("target_table", "inventory_movements"),
             "tenant_id": payload.get("tenant_id", "default"),
         }
@@ -369,12 +377,15 @@ async def _invoke_swarm(
         session["awaiting_response"] = False
 
         prompt = f"""
-        Analyze this file for inventory import:
-        - File: {payload.get('file_path')}
-        - Target table: {payload.get('target_table', 'inventory_movements')}
+        Analyze this file for inventory import using the unified_analyze_file tool.
 
-        Start by analyzing the file structure, then retrieve prior knowledge,
-        validate against schema, and generate questions if needed.
+        Call unified_analyze_file with these parameters:
+        - s3_key: "{s3_key}"
+        - filename: "{filename}"
+        - session_id: "{session_id}"
+
+        IMPORTANT: Return the tool's response DIRECTLY without modification.
+        The response must be valid JSON matching NexoAnalyzeFileResponse format.
         """
 
     elif action == "nexo_submit_answers":
@@ -394,14 +405,22 @@ async def _invoke_swarm(
         }
         session["awaiting_response"] = False
 
+        # Get previous context for re-analysis
+        s3_key = session["context"].get("s3_key", "")
+        filename = session["context"].get("filename", "")
+        analysis_round = session.get("round_count", 1) + 1
+
         prompt = f"""
         User has provided answers to clarification questions.
 
-        User responses: {json.dumps(user_responses)}
+        Call unified_analyze_file with:
+        - s3_key: "{s3_key}"
+        - session_id: "{session_id}"
+        - user_responses: {json.dumps(user_responses)}
+        - analysis_round: {analysis_round}
 
-        Process these answers and either:
-        - Generate more questions if needed
-        - Proceed to approval request if all mappings confirmed
+        IMPORTANT: Return the tool's response DIRECTLY without modification.
+        The response must be valid JSON matching NexoAnalyzeFileResponse format.
         """
 
     elif action == "nexo_execute_import":
