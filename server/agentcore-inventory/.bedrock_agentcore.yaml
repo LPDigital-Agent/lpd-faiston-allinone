@@ -906,3 +906,263 @@ agents:
     api_key_env_var_name: null
     api_key_credential_provider_name: null
     is_generated_by_agentcore_create: false
+
+  # =============================================================================
+  # DEV ENVIRONMENT AGENTS (Branch-specific deployments)
+  # =============================================================================
+  # These agents are deployed from feature branches for testing.
+  # They have separate runtime IDs from production agents.
+  # Deploy using: agentcore deploy --agent faiston_sga_carrier_dev
+  # =============================================================================
+
+  # -----------------------------------------------------------------------------
+  # DEV: Orchestrator Agent (faiston_asset_management_dev)
+  # -----------------------------------------------------------------------------
+  faiston_asset_management_dev:
+    name: faiston_asset_management_dev
+    entrypoint: main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: STM_AND_LTM
+      memory_id: nexo_sga_learning_memory-u3ypElEdl1
+      memory_arn: null
+      memory_name: nexo_sga_learning_memory
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration:
+      customJWTAuthorizer:
+        discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
+        allowedClients:
+          - 7ovjm09dr94e52mpejvbu9v1cg
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+
+  # -----------------------------------------------------------------------------
+  # DEV: Carrier Agent (faiston_sga_carrier_dev) - Main focus for testing
+  # -----------------------------------------------------------------------------
+  faiston_sga_carrier_dev:
+    name: faiston_sga_carrier_dev
+    entrypoint: agents/carrier/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+
+  # -----------------------------------------------------------------------------
+  # DEV: Expedition Agent (faiston_sga_expedition_dev)
+  # -----------------------------------------------------------------------------
+  faiston_sga_expedition_dev:
+    name: faiston_sga_expedition_dev
+    entrypoint: agents/expedition/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false
+
+  # -----------------------------------------------------------------------------
+  # DEV: Reverse Logistics Agent (faiston_sga_reverse_dev)
+  # -----------------------------------------------------------------------------
+  faiston_sga_reverse_dev:
+    name: faiston_sga_reverse_dev
+    entrypoint: agents/reverse/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      mode: NO_MEMORY
+      memory_id: null
+      memory_arn: null
+      memory_name: null
+      event_expiry_days: 30
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

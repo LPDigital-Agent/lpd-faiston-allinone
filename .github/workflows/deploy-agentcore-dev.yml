@@ -160,34 +160,24 @@ jobs:
           fi
 
   # ===========================================================================
-  # Deploy All Agents (Matrix Strategy) - DEV Environment
+  # Deploy Key Agents (Matrix Strategy) - DEV Environment
   # ===========================================================================
+  # Deploys only 4 key agents for carrier integration testing
+  # Agent names are defined in .bedrock_agentcore.yaml with _dev suffix
   deploy-agents:
-    name: Deploy ${{ matrix.agent }}_dev
+    name: Deploy ${{ matrix.agent }}
     runs-on: ubuntu-latest
     needs: [setup, fetch-credentials]
     if: ${{ github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status' }}
     strategy:
       matrix:
         agent:
-          # Orchestrator (HTTP protocol, JWT auth from frontend)
-          - faiston_asset_management
-          # Specialist agents (A2A protocol, SigV4 auth)
-          - faiston_sga_nexo_import
-          - faiston_sga_learning
-          - faiston_sga_validation
-          - faiston_sga_schema_evolution
-          - faiston_sga_intake
-          - faiston_sga_import
-          - faiston_sga_estoque_control
-          - faiston_sga_compliance
-          - faiston_sga_reconciliacao
-          - faiston_sga_expedition
-          - faiston_sga_carrier
-          - faiston_sga_reverse
-          - faiston_sga_observation
-          - faiston_sga_equipment_research
-      max-parallel: 3  # Deploy 3 agents at a time to avoid AWS rate limits
+          # Key agents for carrier integration testing (names match yaml configs)
+          - faiston_asset_management_dev      # Orchestrator (HTTP/JWT)
+          - faiston_sga_carrier_dev           # Carrier integration
+          - faiston_sga_expedition_dev        # Expedition flow
+          - faiston_sga_reverse_dev           # Reverse logistics
+      max-parallel: 2  # Deploy 2 agents at a time to avoid AWS rate limits
       fail-fast: false  # Continue deploying other agents if one fails
 
     outputs:
@@ -246,15 +236,14 @@ jobs:
 
           echo "Postal credentials loaded successfully"
 
-      - name: Deploy Agent ${{ matrix.agent }}_dev
+      - name: Deploy Agent ${{ matrix.agent }}
         working-directory: server/agentcore-inventory
         env:
-          AGENT_NAME_DEV: ${{ matrix.agent }}_dev
           CARRIER_MODE: ${{ needs.setup.outputs.carrier_mode }}
           ENVIRONMENT: ${{ needs.setup.outputs.environment }}
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          echo "=== Deploying ${AGENT_NAME_DEV} (Dev Environment) ==="
+          echo "=== Deploying ${{ matrix.agent }} (Dev Environment) ==="
 
           DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -274,7 +263,7 @@ jobs:
             --env DEPLOYED_AT=$DEPLOY_TIMESTAMP
             --env PROJECT_NAME=faiston-one
             --env ENVIRONMENT=${ENVIRONMENT}
-            --env AGENT_ID=${AGENT_NAME_DEV}
+            --env AGENT_ID=${{ matrix.agent }}
             --env CARRIER_MODE=${CARRIER_MODE}
           )
 
@@ -289,24 +278,21 @@ jobs:
             echo "Postal credentials included in deployment"
           fi
 
-          # Deploy using agentcore CLI with _dev suffix
-          # Note: This creates a NEW agent with _dev suffix in AgentCore
+          # Deploy using agentcore CLI
+          # Agent name is determined by .bedrock_agentcore.yaml config
           echo "y" | agentcore deploy --agent ${{ matrix.agent }} \
-            --agent-name "${AGENT_NAME_DEV}" \
             --auto-update-on-conflict \
             "${ENV_ARGS[@]}"
 
       - name: Check deployment status
         working-directory: server/agentcore-inventory
-        env:
-          AGENT_NAME_DEV: ${{ matrix.agent }}_dev
         run: |
-          echo "=== Checking Status for ${AGENT_NAME_DEV} ==="
-          agentcore status --agent "${AGENT_NAME_DEV}" 2>&1 || true
+          echo "=== Checking Status for ${{ matrix.agent }} ==="
+          agentcore status --agent "${{ matrix.agent }}" 2>&1 || true
 
       - name: Get Runtime ID (Orchestrator only)
         id: get-runtime-id
-        if: matrix.agent == 'faiston_asset_management'
+        if: matrix.agent == 'faiston_asset_management_dev'
         run: |
           pip install boto3 --quiet
           RUNTIME_ID=$(python3 -c "
@@ -495,22 +481,18 @@ jobs:
           echo "| Environment | \`${ENVIRONMENT}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Branch | \`${BRANCH}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Carrier Mode | \`${CARRIER_MODE}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Agent Suffix | \`_dev\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Region | \`us-east-2\` |" >> $GITHUB_STEP_SUMMARY
           echo "| AWS Account | \`377311924364\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Agents Deployed (15 - Dev Namespace)" >> $GITHUB_STEP_SUMMARY
+          echo "### Agents Deployed (4 - Carrier Integration Testing)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Orchestrator (HTTP/JWT):**" >> $GITHUB_STEP_SUMMARY
           echo "- \`faiston_asset_management_dev\` - Dev entry point" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Specialist Agents (A2A/SigV4):**" >> $GITHUB_STEP_SUMMARY
-          echo "All agents deployed with \`_dev\` suffix:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`faiston_sga_nexo_import_dev\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`faiston_sga_learning_dev\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`faiston_sga_validation_dev\`" >> $GITHUB_STEP_SUMMARY
           echo "- \`faiston_sga_carrier_dev\` (Carrier Mode: ${CARRIER_MODE})" >> $GITHUB_STEP_SUMMARY
-          echo "- ... and 10 more" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_sga_expedition_dev\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_sga_reverse_dev\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Environment Variables" >> $GITHUB_STEP_SUMMARY
           echo "| Variable | Value |" >> $GITHUB_STEP_SUMMARY
@@ -521,7 +503,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Notes" >> $GITHUB_STEP_SUMMARY
           echo "- Dev agents are **completely isolated** from production" >> $GITHUB_STEP_SUMMARY
-          echo "- Runtime IDs are different from production" >> $GITHUB_STEP_SUMMARY
+          echo "- Agent names defined in \`.bedrock_agentcore.yaml\` configs" >> $GITHUB_STEP_SUMMARY
           echo "- Use \`undeploy\` action to clean up dev agents" >> $GITHUB_STEP_SUMMARY
 
   # ===========================================================================
@@ -555,23 +537,12 @@ jobs:
       - name: Undeploy all dev agents
         working-directory: server/agentcore-inventory
         run: |
-          # All agents with _dev suffix
+          # Key dev agents for carrier integration testing
           AGENTS=(
             faiston_asset_management_dev
-            faiston_sga_nexo_import_dev
-            faiston_sga_learning_dev
-            faiston_sga_validation_dev
-            faiston_sga_schema_evolution_dev
-            faiston_sga_intake_dev
-            faiston_sga_import_dev
-            faiston_sga_estoque_control_dev
-            faiston_sga_compliance_dev
-            faiston_sga_reconciliacao_dev
-            faiston_sga_expedition_dev
             faiston_sga_carrier_dev
+            faiston_sga_expedition_dev
             faiston_sga_reverse_dev
-            faiston_sga_observation_dev
-            faiston_sga_equipment_research_dev
           )
 
           for agent in "${AGENTS[@]}"; do
@@ -585,7 +556,7 @@ jobs:
         run: |
           echo "## AgentCore DEV Agents Undeployed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All 15 dev agents have been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
+          echo "All 4 dev agents have been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Production agents remain **unaffected**." >> $GITHUB_STEP_SUMMARY
 
