@@ -53,12 +53,17 @@ This agent handles:
 1. QUOTES: Get shipping quotes from multiple carriers
 2. RECOMMENDATIONS: Recommend best carrier for shipment
 3. TRACKING: Track shipment status in real-time
+4. SHIPMENTS: Create shipping postings with tracking codes
+5. LIBERATION: Liberate shipments for tracking database access
+6. LABELS: Generate shipping labels in PDF or ZPL format
 
 Features:
 - Multi-carrier integration
 - Price/delivery optimization
 - Real-time tracking
 - Delivery estimation
+- Shipment creation via postal service API
+- Label generation for printing
 """
 
 # Model configuration
@@ -85,6 +90,21 @@ AGENT_SKILLS = [
         tags=["tracking", "shipment", "status", "delivery"],
     ),
     AgentSkill(
+        name="create_shipment",
+        description="Create shipping postings with tracking codes via postal service API. Generates real shipments that can be tracked and labeled.",
+        tags=["shipping", "shipment", "creation", "tracking"],
+    ),
+    AgentSkill(
+        name="liberate_shipment",
+        description="Liberate shipments for tracking database access. Required step before tracking data becomes available on some carrier APIs.",
+        tags=["shipping", "liberation", "tracking", "activation"],
+    ),
+    AgentSkill(
+        name="get_label",
+        description="Generate shipping labels in PDF or ZPL format for created shipments. Returns base64-encoded label data ready for printing.",
+        tags=["shipping", "label", "pdf", "printing"],
+    ),
+    AgentSkill(
         name="health_check",
         description="Check agent health status and retrieve agent metadata including version, model, protocol, and specialty.",
         tags=["monitoring", "health", "status"],
@@ -95,54 +115,76 @@ AGENT_SKILLS = [
 # System Prompt (Carrier Management Specialist)
 # =============================================================================
 
-SYSTEM_PROMPT = """Voce e o **CarrierAgent** do sistema SGA (Sistema de Gestao de Ativos).
+SYSTEM_PROMPT = """You are the **CarrierAgent** of the SGA system (Asset Management System).
 
-## Seu Papel
+## Your Role
 
-Voce e o **ESPECIALISTA** em gestao de transportadoras e logistica de envio.
+You are the **SPECIALIST** in carrier management and shipping logistics.
 
-## Suas Ferramentas
+## Your Tools
 
 ### 1. `get_quotes`
-Obtem cotacoes de frete de multiplas transportadoras:
-- Peso e dimensoes do pacote
-- Origem e destino
-- Prazo desejado
+Get shipping quotes from multiple carriers:
+- Package weight and dimensions
+- Origin and destination
+- Desired delivery time
 
 ### 2. `recommend_carrier`
-Recomenda a melhor transportadora:
-- Melhor custo-beneficio
-- Prazo mais rapido
-- Mais confiavel para a rota
+Recommend the best carrier:
+- Best cost-benefit
+- Fastest delivery
+- Most reliable for the route
 
 ### 3. `track_shipment`
-Rastreia envio em tempo real:
-- Status atual
-- Historico de movimentacao
-- Previsao de entrega
+Track shipment in real-time:
+- Current status
+- Movement history
+- Delivery estimation
 
-## Transportadoras Integradas
+### 4. `create_shipment`
+Create shipping postings with tracking codes:
+- Creates real postings via postal service API
+- Returns tracking code for the shipment
+- Auto-liberates for tracking by default
+- Warning: Real postings expire in 15 days if not shipped
 
-| Transportadora | Tipo | Cobertura |
-|---------------|------|-----------|
-| Correios | Convencional | Nacional |
-| Jadlog | Expresso | Nacional |
-| Azul Cargo | Aereo | Nacional |
-| Total Express | Porta-a-porta | Nacional |
+### 5. `liberate_shipment`
+Liberate shipments for tracking database access:
+- Required step before tracking data is available
+- Call after creating shipment if auto_liberate was disabled
+- Activates tracking in the carrier database
 
-## Criterios de Recomendacao
+### 6. `get_label`
+Generate shipping labels:
+- PDF format for standard printing
+- ZPL format for thermal printers
+- Returns base64-encoded label data
+- Requires valid tracking code from create_shipment
 
-1. **Custo**: Melhor preco para o servico
-2. **Prazo**: Cumprimento do prazo solicitado
-3. **Confiabilidade**: Historico de entregas
-4. **Cobertura**: Disponibilidade na regiao
+## Integrated Carriers
 
-## Regras Criticas
+| Carrier | Type | Coverage |
+|---------|------|----------|
+| Correios | Standard | National |
+| Jadlog | Express | National |
+| Azul Cargo | Air | National |
+| Total Express | Door-to-door | National |
 
-1. **SEMPRE** apresente multiplas opcoes
-2. Destaque o melhor custo-beneficio
-3. Alerte sobre restricoes de rota
-4. Inclua seguro quando necessario
+## Recommendation Criteria
+
+1. **Cost**: Best price for the service
+2. **Time**: Meeting the requested deadline
+3. **Reliability**: Delivery history
+4. **Coverage**: Regional availability
+
+## Critical Rules
+
+1. **ALWAYS** present multiple options when quoting
+2. Highlight the best cost-benefit option
+3. Alert about route restrictions
+4. Include insurance when necessary
+5. For shipment creation, verify all address fields are complete
+6. Always confirm tracking code after shipment creation
 """
 
 
@@ -308,6 +350,187 @@ async def track_shipment(
 
 
 @tool
+async def create_shipment(
+    destination_name: str,
+    destination_address: str,
+    destination_number: str,
+    destination_city: str,
+    destination_state: str,
+    destination_cep: str,
+    weight_grams: int,
+    length_cm: int = 30,
+    width_cm: int = 20,
+    height_cm: int = 10,
+    declared_value: float = 0.0,
+    destination_complement: str = "",
+    destination_neighborhood: str = "",
+    destination_phone: str = "",
+    destination_email: str = "",
+    invoice_number: Optional[str] = None,
+    invoice_date: Optional[str] = None,
+    invoice_value: Optional[float] = None,
+    service_code: Optional[str] = None,
+    auto_liberate: bool = True,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Create a shipment and get tracking code.
+
+    Creates a real posting via postal service API that can be tracked and labeled.
+    Warning: Real postings auto-expire in 15 days if not physically shipped.
+
+    Args:
+        destination_name: Recipient name
+        destination_address: Street address
+        destination_number: Street number (use "S/N" if none)
+        destination_city: City name
+        destination_state: State code (2 letters)
+        destination_cep: Postal code (8 digits)
+        weight_grams: Package weight in grams
+        length_cm: Package length in cm
+        width_cm: Package width in cm
+        height_cm: Package height in cm
+        declared_value: Declared value for insurance
+        destination_complement: Address complement
+        destination_neighborhood: Neighborhood
+        destination_phone: Phone number
+        destination_email: Email address
+        invoice_number: Invoice number
+        invoice_date: Invoice date (DD/MM/YYYY)
+        invoice_value: Invoice total value
+        service_code: Optional service code (e.g., "04162" for SEDEX)
+        auto_liberate: Automatically liberate for tracking (default: True)
+        session_id: Session ID for context
+
+    Returns:
+        Shipment details with tracking code
+    """
+    logger.info(f"[{AGENT_NAME}] Creating shipment to {destination_city}/{destination_state}")
+
+    try:
+        # Import tool implementation
+        from agents.carrier.tools.shipment import create_shipment_tool
+
+        result = await create_shipment_tool(
+            destination_name=destination_name,
+            destination_address=destination_address,
+            destination_number=destination_number,
+            destination_city=destination_city,
+            destination_state=destination_state,
+            destination_cep=destination_cep,
+            weight_grams=weight_grams,
+            length_cm=length_cm,
+            width_cm=width_cm,
+            height_cm=height_cm,
+            declared_value=declared_value,
+            destination_complement=destination_complement,
+            destination_neighborhood=destination_neighborhood,
+            destination_phone=destination_phone,
+            destination_email=destination_email,
+            invoice_number=invoice_number,
+            invoice_date=invoice_date,
+            invoice_value=invoice_value,
+            service_code=service_code,
+            auto_liberate=auto_liberate,
+            session_id=session_id,
+        )
+
+        # Log to ObservationAgent
+        if result.get("success"):
+            await a2a_client.invoke_agent("observation", {
+                "action": "log_event",
+                "event_type": "SHIPMENT_CREATED",
+                "agent_id": AGENT_ID,
+                "session_id": session_id,
+                "details": {
+                    "tracking_code": result.get("tracking_code"),
+                    "destination_city": destination_city,
+                    "destination_state": destination_state,
+                },
+            }, session_id)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] create_shipment failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@tool
+async def liberate_shipment(
+    tracking_code: str,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Liberate a shipment for tracking database access.
+
+    Some carrier APIs require a liberation step after creating a shipment
+    before tracking data becomes available. This tool handles that activation.
+
+    Args:
+        tracking_code: Tracking code to liberate
+        session_id: Session ID for context
+
+    Returns:
+        Liberation status
+    """
+    logger.info(f"[{AGENT_NAME}] Liberating shipment: {tracking_code}")
+
+    try:
+        # Import tool implementation
+        from agents.carrier.tools.tracking import liberate_shipment_tool
+
+        result = await liberate_shipment_tool(
+            tracking_code=tracking_code,
+            session_id=session_id,
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] liberate_shipment failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@tool
+async def get_label(
+    tracking_code: str,
+    format: str = "pdf",
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Generate shipping label for a tracking code.
+
+    Returns base64-encoded label data ready for printing or download.
+
+    Args:
+        tracking_code: Tracking code for the label
+        format: Output format ('pdf' or 'zpl')
+        session_id: Session ID for context
+
+    Returns:
+        Label data with base64 content
+    """
+    logger.info(f"[{AGENT_NAME}] Generating label for: {tracking_code}")
+
+    try:
+        # Import tool implementation
+        from agents.carrier.tools.shipment import get_label_tool
+
+        result = await get_label_tool(
+            tracking_code=tracking_code,
+            format=format,
+            session_id=session_id,
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] get_label failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@tool
 async def health_check() -> Dict[str, Any]:
     """
     Health check endpoint for monitoring.
@@ -347,6 +570,9 @@ def create_agent() -> Agent:
             get_quotes,
             recommend_carrier,
             track_shipment,
+            create_shipment,
+            liberate_shipment,
+            get_label,
             health_check,
         ],
         system_prompt=SYSTEM_PROMPT,

@@ -1,0 +1,665 @@
+# =============================================================================
+# AgentCore Development Deployment Workflow - Faiston SGA Multi-Agent System
+# =============================================================================
+# Deploys agents to AWS Bedrock AgentCore Runtime for DEVELOPMENT/TESTING
+# Isolated from production - uses _dev suffix for agent names
+#
+# Key Differences from Production:
+# - Agent names: {agent_name}_dev suffix (isolated namespace)
+# - Manual trigger with branch/environment inputs
+# - Triggers on feature branches (NOT main)
+# - Includes POSTAL_* credentials for carrier integration testing
+# - Environment variable CARRIER_MODE=real for real carrier API testing
+#
+# Framework: AWS Strands Agents
+# Model: All agents use gemini-3-pro-preview exclusively
+# AWS Account: 377311924364 (Faiston One)
+# AWS Profile: faiston-aio
+# AWS Region: us-east-2
+# =============================================================================
+
+name: Deploy AgentCore Dev
+
+on:
+  # Manual trigger with configurable inputs
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Deployment action'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - undeploy
+          - status
+      branch:
+        description: 'Branch to deploy from'
+        required: false
+        default: 'carriers-integration'
+        type: string
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+      agent:
+        description: 'Specific agent to deploy (leave empty for all)'
+        required: false
+        type: string
+      carrier_mode:
+        description: 'Carrier API mode (mock/real)'
+        required: true
+        default: 'real'
+        type: choice
+        options:
+          - real
+          - mock
+
+  # Auto-trigger on push to feature branches (NOT main)
+  push:
+    branches:
+      - 'carriers-integration'
+      - 'feature/**'
+      - 'dev/**'
+      - 'fabio/**'
+    paths:
+      - 'server/agentcore-inventory/**'
+      - '.github/workflows/deploy-agentcore-dev.yml'
+
+env:
+  AWS_REGION: us-east-2
+  AWS_ACCOUNT_ID: '377311924364'
+  PYTHON_VERSION: '3.11'
+  # Dev environment uses different DynamoDB tables (suffixed with -dev)
+  INVENTORY_TABLE_DEV: faiston-one-sga-inventory-dev
+  HIL_TASKS_TABLE_DEV: faiston-one-sga-hil-tasks-dev
+  AUDIT_LOG_TABLE_DEV: faiston-one-sga-audit-log-dev
+  SESSIONS_TABLE_DEV: faiston-one-sga-sessions-dev
+  DOCUMENTS_BUCKET_DEV: faiston-one-sga-documents-dev
+  # Cognito configuration (same as prod for now - can be separated later)
+  COGNITO_USER_POOL_ID: us-east-2_lkBXr4kjy
+  COGNITO_CLIENT_ID: 7ovjm09dr94e52mpejvbu9v1cg
+
+jobs:
+  # ===========================================================================
+  # Setup Job - Determine deployment parameters
+  # ===========================================================================
+  setup:
+    name: Setup Deployment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      agent_suffix: ${{ steps.set-env.outputs.agent_suffix }}
+      carrier_mode: ${{ steps.set-env.outputs.carrier_mode }}
+      branch: ${{ steps.set-env.outputs.branch }}
+
+    steps:
+      - name: Determine deployment parameters
+        id: set-env
+        run: |
+          # Determine environment (default to dev for push events)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            CARRIER_MODE="${{ github.event.inputs.carrier_mode }}"
+            BRANCH="${{ github.event.inputs.branch }}"
+          else
+            ENV="dev"
+            CARRIER_MODE="real"
+            BRANCH="${{ github.ref_name }}"
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "agent_suffix=_dev" >> $GITHUB_OUTPUT
+          echo "carrier_mode=$CARRIER_MODE" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
+          echo "=== Deployment Configuration ==="
+          echo "Environment: $ENV"
+          echo "Agent Suffix: _dev"
+          echo "Carrier Mode: $CARRIER_MODE"
+          echo "Branch: $BRANCH"
+
+  # ===========================================================================
+  # Fetch Postal Credentials from Secrets Manager
+  # ===========================================================================
+  fetch-credentials:
+    name: Fetch Postal Credentials
+    runs-on: ubuntu-latest
+    needs: setup
+    if: ${{ github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status' }}
+    outputs:
+      postal_credentials_exist: ${{ steps.fetch-postal.outputs.credentials_exist }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch Postal credentials from Secrets Manager
+        id: fetch-postal
+        run: |
+          echo "=== Fetching Postal credentials from Secrets Manager ==="
+
+          # Check if the secret exists
+          SECRET_NAME="faiston-one/postal/credentials"
+
+          if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" 2>/dev/null; then
+            echo "credentials_exist=true" >> $GITHUB_OUTPUT
+            echo "Postal credentials secret exists"
+          else
+            echo "credentials_exist=false" >> $GITHUB_OUTPUT
+            echo "::warning::Postal credentials secret not found: $SECRET_NAME"
+            echo "Deployment will proceed without Postal credentials"
+          fi
+
+  # ===========================================================================
+  # Deploy All Agents (Matrix Strategy) - DEV Environment
+  # ===========================================================================
+  deploy-agents:
+    name: Deploy ${{ matrix.agent }}_dev
+    runs-on: ubuntu-latest
+    needs: [setup, fetch-credentials]
+    if: ${{ github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status' }}
+    strategy:
+      matrix:
+        agent:
+          # Orchestrator (HTTP protocol, JWT auth from frontend)
+          - faiston_asset_management
+          # Specialist agents (A2A protocol, SigV4 auth)
+          - faiston_sga_nexo_import
+          - faiston_sga_learning
+          - faiston_sga_validation
+          - faiston_sga_schema_evolution
+          - faiston_sga_intake
+          - faiston_sga_import
+          - faiston_sga_estoque_control
+          - faiston_sga_compliance
+          - faiston_sga_reconciliacao
+          - faiston_sga_expedition
+          - faiston_sga_carrier
+          - faiston_sga_reverse
+          - faiston_sga_observation
+          - faiston_sga_equipment_research
+      max-parallel: 3  # Deploy 3 agents at a time to avoid AWS rate limits
+      fail-fast: false  # Continue deploying other agents if one fails
+
+    outputs:
+      orchestrator_runtime_id: ${{ steps.get-runtime-id.outputs.runtime_id }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.setup.outputs.branch }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install uv and AgentCore CLI
+        run: |
+          # Install uv (required for direct_code_deploy)
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          source $HOME/.local/bin/env 2>/dev/null || export PATH="$HOME/.local/bin:$PATH"
+          uv --version
+          # Install agentcore CLI
+          pip install bedrock-agentcore-starter-toolkit boto3 --quiet
+          agentcore --version || echo "AgentCore CLI installed"
+
+      - name: Fetch Postal credentials
+        id: postal-creds
+        if: needs.fetch-credentials.outputs.postal_credentials_exist == 'true'
+        run: |
+          SECRET_NAME="faiston-one/postal/credentials"
+          POSTAL_SECRET=$(aws secretsmanager get-secret-value --secret-id "$SECRET_NAME" --query SecretString --output text)
+
+          # Parse JSON and export as environment variables (masked)
+          POSTAL_API_KEY=$(echo "$POSTAL_SECRET" | jq -r '.POSTAL_API_KEY // empty')
+          POSTAL_API_URL=$(echo "$POSTAL_SECRET" | jq -r '.POSTAL_API_URL // empty')
+          POSTAL_SENDER_EMAIL=$(echo "$POSTAL_SECRET" | jq -r '.POSTAL_SENDER_EMAIL // empty')
+          POSTAL_WEBHOOK_SECRET=$(echo "$POSTAL_SECRET" | jq -r '.POSTAL_WEBHOOK_SECRET // empty')
+
+          # Mask secrets in logs
+          echo "::add-mask::$POSTAL_API_KEY"
+          echo "::add-mask::$POSTAL_WEBHOOK_SECRET"
+
+          # Export for next step
+          echo "POSTAL_API_KEY=$POSTAL_API_KEY" >> $GITHUB_ENV
+          echo "POSTAL_API_URL=$POSTAL_API_URL" >> $GITHUB_ENV
+          echo "POSTAL_SENDER_EMAIL=$POSTAL_SENDER_EMAIL" >> $GITHUB_ENV
+          echo "POSTAL_WEBHOOK_SECRET=$POSTAL_WEBHOOK_SECRET" >> $GITHUB_ENV
+
+          echo "Postal credentials loaded successfully"
+
+      - name: Deploy Agent ${{ matrix.agent }}_dev
+        working-directory: server/agentcore-inventory
+        env:
+          AGENT_NAME_DEV: ${{ matrix.agent }}_dev
+          CARRIER_MODE: ${{ needs.setup.outputs.carrier_mode }}
+          ENVIRONMENT: ${{ needs.setup.outputs.environment }}
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          echo "=== Deploying ${AGENT_NAME_DEV} (Dev Environment) ==="
+
+          DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Build environment variables for deployment
+          # Core configuration
+          ENV_ARGS=(
+            --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+            --env INVENTORY_TABLE=${{ env.INVENTORY_TABLE_DEV }}
+            --env HIL_TASKS_TABLE=${{ env.HIL_TASKS_TABLE_DEV }}
+            --env AUDIT_LOG_TABLE=${{ env.AUDIT_LOG_TABLE_DEV }}
+            --env SESSIONS_TABLE=${{ env.SESSIONS_TABLE_DEV }}
+            --env DOCUMENTS_BUCKET=${{ env.DOCUMENTS_BUCKET_DEV }}
+            --env USE_POSTGRES_MCP=true
+            --env AGENTCORE_GATEWAY_ID=faiston-one-sga-gateway-dev
+            --env GIT_COMMIT_SHA=${{ github.sha }}
+            --env GIT_BRANCH=${{ needs.setup.outputs.branch }}
+            --env DEPLOYED_AT=$DEPLOY_TIMESTAMP
+            --env PROJECT_NAME=faiston-one
+            --env ENVIRONMENT=${ENVIRONMENT}
+            --env AGENT_ID=${AGENT_NAME_DEV}
+            --env CARRIER_MODE=${CARRIER_MODE}
+          )
+
+          # Add Postal credentials if available
+          if [ -n "$POSTAL_API_KEY" ]; then
+            ENV_ARGS+=(
+              --env POSTAL_API_KEY=$POSTAL_API_KEY
+              --env POSTAL_API_URL=$POSTAL_API_URL
+              --env POSTAL_SENDER_EMAIL=$POSTAL_SENDER_EMAIL
+              --env POSTAL_WEBHOOK_SECRET=$POSTAL_WEBHOOK_SECRET
+            )
+            echo "Postal credentials included in deployment"
+          fi
+
+          # Deploy using agentcore CLI with _dev suffix
+          # Note: This creates a NEW agent with _dev suffix in AgentCore
+          echo "y" | agentcore deploy --agent ${{ matrix.agent }} \
+            --agent-name "${AGENT_NAME_DEV}" \
+            --auto-update-on-conflict \
+            "${ENV_ARGS[@]}"
+
+      - name: Check deployment status
+        working-directory: server/agentcore-inventory
+        env:
+          AGENT_NAME_DEV: ${{ matrix.agent }}_dev
+        run: |
+          echo "=== Checking Status for ${AGENT_NAME_DEV} ==="
+          agentcore status --agent "${AGENT_NAME_DEV}" 2>&1 || true
+
+      - name: Get Runtime ID (Orchestrator only)
+        id: get-runtime-id
+        if: matrix.agent == 'faiston_asset_management'
+        run: |
+          pip install boto3 --quiet
+          RUNTIME_ID=$(python3 -c "
+          import boto3
+          client = boto3.client('bedrock-agentcore-control', region_name='us-east-2')
+          paginator = client.get_paginator('list_agent_runtimes')
+          for page in paginator.paginate():
+              for rt in page.get('agentRuntimes', []):
+                  if rt['agentRuntimeName'] == 'faiston_asset_management_dev':
+                      print(rt['agentRuntimeId'])
+                      exit(0)
+          ")
+          echo "runtime_id=$RUNTIME_ID" >> $GITHUB_OUTPUT
+          echo "Dev Orchestrator Runtime ID: $RUNTIME_ID"
+
+  # ===========================================================================
+  # Configure Orchestrator JWT Authorizer (Dev)
+  # ===========================================================================
+  configure-orchestrator:
+    name: Configure Orchestrator JWT (Dev)
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-agents]
+    if: ${{ github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status' }}
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure JWT Authorizer for Dev Orchestrator
+        run: |
+          pip install --upgrade boto3 botocore --quiet
+
+          echo "Waiting 60s for AWS API propagation..."
+          sleep 60
+
+          python3 << 'PYTHON_SCRIPT'
+          import boto3
+          import os
+          import subprocess
+
+          def sleep_seconds(n):
+              """Sleep using OS-level command."""
+              subprocess.run(['sleep', str(n)], check=True)
+
+          REGION = "us-east-2"
+          COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
+          COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
+          DEV_ORCHESTRATOR_NAME = "faiston_asset_management_dev"
+
+          MAX_FIND_RETRIES = 15
+          FIND_RETRY_DELAY = 20
+
+          print("=== Configuring JWT Authorizer for Dev Orchestrator ===", flush=True)
+          print(f"  Agent: {DEV_ORCHESTRATOR_NAME}", flush=True)
+          print(f"  Cognito Pool: {COGNITO_POOL_ID}", flush=True)
+          print(f"  Cognito Client: {COGNITO_CLIENT_ID}", flush=True)
+
+          client = boto3.client("bedrock-agentcore-control", region_name=REGION)
+
+          def list_all_runtimes():
+              """Fetch all agent runtimes using pagination."""
+              all_runtimes = []
+              paginator = client.get_paginator("list_agent_runtimes")
+              for page in paginator.paginate():
+                  all_runtimes.extend(page.get("agentRuntimes", []))
+              return all_runtimes
+
+          # Find dev orchestrator runtime
+          agent_runtime_id = None
+          all_runtimes = []
+          for find_attempt in range(MAX_FIND_RETRIES):
+              all_runtimes = list_all_runtimes()
+              for rt in all_runtimes:
+                  if rt["agentRuntimeName"] == DEV_ORCHESTRATOR_NAME:
+                      agent_runtime_id = rt["agentRuntimeId"]
+                      print(f"  Found dev orchestrator runtime: {agent_runtime_id}", flush=True)
+                      break
+              if agent_runtime_id:
+                  break
+              print(f"  Dev orchestrator not found, retrying... ({find_attempt + 1}/{MAX_FIND_RETRIES})", flush=True)
+              sleep_seconds(FIND_RETRY_DELAY)
+
+          if not agent_runtime_id:
+              print("WARNING: Dev orchestrator runtime not found - may be first deployment", flush=True)
+              print("  Available runtimes:", flush=True)
+              for rt in all_runtimes:
+                  if "faiston" in rt["agentRuntimeName"].lower():
+                      print(f"    - {rt['agentRuntimeName']}: {rt['agentRuntimeId']}", flush=True)
+              exit(0)
+
+          # Wait for READY status
+          MAX_RETRIES = 10
+          RETRY_DELAY = 6
+          current_config = None
+
+          for attempt in range(MAX_RETRIES):
+              try:
+                  current_config = client.get_agent_runtime(agentRuntimeId=agent_runtime_id)
+                  status = current_config.get("status")
+                  print(f"  Current status: {status}", flush=True)
+                  if status == "READY":
+                      print("  Runtime is READY!", flush=True)
+                      break
+                  if status in ("CREATE_FAILED", "UPDATE_FAILED"):
+                      print(f"  Runtime in failed state: {status}", flush=True)
+                      exit(1)
+                  print(f"  Waiting for READY state... ({attempt + 1}/{MAX_RETRIES})", flush=True)
+                  sleep_seconds(RETRY_DELAY)
+              except Exception as e:
+                  print(f"  Waiting... {e}", flush=True)
+                  sleep_seconds(RETRY_DELAY)
+
+          if not current_config or current_config.get("status") != "READY":
+              print("WARNING: Runtime did not reach READY status - skipping JWT config")
+              exit(0)
+
+          # Check if JWT already configured
+          existing_auth = current_config.get("authorizerConfiguration", {})
+          existing_jwt = existing_auth.get("customJWTAuthorizer", {})
+          if existing_jwt:
+              existing_clients = existing_jwt.get("allowedClients", [])
+              print(f"  Existing allowedClients: {existing_clients}")
+              if COGNITO_CLIENT_ID in existing_clients:
+                  print("  JWT Authorizer already configured - skipping")
+                  exit(0)
+
+          # Build update payload
+          discovery_url = f"https://cognito-idp.{REGION}.amazonaws.com/{COGNITO_POOL_ID}/.well-known/openid-configuration"
+
+          update_params = {
+              "agentRuntimeId": agent_runtime_id,
+              "agentRuntimeArtifact": current_config.get("agentRuntimeArtifact"),
+              "networkConfiguration": current_config.get("networkConfiguration"),
+              "roleArn": current_config.get("roleArn"),
+              "authorizerConfiguration": {
+                  "customJWTAuthorizer": {
+                      "discoveryUrl": discovery_url,
+                      "allowedClients": [COGNITO_CLIENT_ID]
+                  }
+              }
+          }
+
+          # Preserve optional configurations
+          if current_config.get("protocolConfiguration"):
+              update_params["protocolConfiguration"] = current_config["protocolConfiguration"]
+          if current_config.get("environmentVariables"):
+              update_params["environmentVariables"] = current_config["environmentVariables"]
+          if current_config.get("description"):
+              update_params["description"] = current_config["description"]
+
+          try:
+              client.update_agent_runtime(**update_params)
+              print("JWT Authorizer configured successfully!")
+              print(f"  Discovery URL: {discovery_url}")
+          except client.exceptions.ConflictException:
+              print("JWT Authorizer already configured - skipping")
+          except Exception as e:
+              print(f"WARNING: Failed to update runtime: {e}")
+          PYTHON_SCRIPT
+
+  # ===========================================================================
+  # Deployment Summary
+  # ===========================================================================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-agents, configure-orchestrator]
+    if: always() && github.event.inputs.action != 'undeploy' && github.event.inputs.action != 'status'
+
+    steps:
+      - name: Generate Summary
+        env:
+          ENVIRONMENT: ${{ needs.setup.outputs.environment }}
+          CARRIER_MODE: ${{ needs.setup.outputs.carrier_mode }}
+          BRANCH: ${{ needs.setup.outputs.branch }}
+        run: |
+          echo "## AgentCore DEV Deployment Complete! (Development Environment)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | \`${ENVIRONMENT}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${BRANCH}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Carrier Mode | \`${CARRIER_MODE}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Agent Suffix | \`_dev\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Region | \`us-east-2\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| AWS Account | \`377311924364\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Agents Deployed (15 - Dev Namespace)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Orchestrator (HTTP/JWT):**" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_asset_management_dev\` - Dev entry point" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Specialist Agents (A2A/SigV4):**" >> $GITHUB_STEP_SUMMARY
+          echo "All agents deployed with \`_dev\` suffix:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_sga_nexo_import_dev\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_sga_learning_dev\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_sga_validation_dev\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_sga_carrier_dev\` (Carrier Mode: ${CARRIER_MODE})" >> $GITHUB_STEP_SUMMARY
+          echo "- ... and 10 more" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Environment Variables" >> $GITHUB_STEP_SUMMARY
+          echo "| Variable | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| CARRIER_MODE | \`${CARRIER_MODE}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| ENVIRONMENT | \`${ENVIRONMENT}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| POSTAL_* | Loaded from Secrets Manager |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Notes" >> $GITHUB_STEP_SUMMARY
+          echo "- Dev agents are **completely isolated** from production" >> $GITHUB_STEP_SUMMARY
+          echo "- Runtime IDs are different from production" >> $GITHUB_STEP_SUMMARY
+          echo "- Use \`undeploy\` action to clean up dev agents" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Undeploy All Dev Agents
+  # ===========================================================================
+  undeploy:
+    name: Undeploy All Dev Agents
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'undeploy' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install AgentCore CLI
+        run: |
+          pip install bedrock-agentcore-starter-toolkit --quiet
+
+      - name: Undeploy all dev agents
+        working-directory: server/agentcore-inventory
+        run: |
+          # All agents with _dev suffix
+          AGENTS=(
+            faiston_asset_management_dev
+            faiston_sga_nexo_import_dev
+            faiston_sga_learning_dev
+            faiston_sga_validation_dev
+            faiston_sga_schema_evolution_dev
+            faiston_sga_intake_dev
+            faiston_sga_import_dev
+            faiston_sga_estoque_control_dev
+            faiston_sga_compliance_dev
+            faiston_sga_reconciliacao_dev
+            faiston_sga_expedition_dev
+            faiston_sga_carrier_dev
+            faiston_sga_reverse_dev
+            faiston_sga_observation_dev
+            faiston_sga_equipment_research_dev
+          )
+
+          for agent in "${AGENTS[@]}"; do
+            echo "=== Undeploying $agent ==="
+            echo "y" | agentcore destroy --agent "$agent" 2>&1 || {
+              echo "::warning::Destroy returned non-zero for $agent"
+            }
+          done
+
+      - name: Undeploy Summary
+        run: |
+          echo "## AgentCore DEV Agents Undeployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All 15 dev agents have been undeployed from AgentCore Runtime." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Production agents remain **unaffected**." >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # Check Status (Dev Agents)
+  # ===========================================================================
+  status:
+    name: Check Dev AgentCore Status
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.action == 'status' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: |
+          pip install bedrock-agentcore-starter-toolkit boto3 --quiet
+
+      - name: Check all dev agent status
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import boto3
+
+          client = boto3.client("bedrock-agentcore-control", region_name="us-east-2")
+
+          # Use paginator to list ALL runtimes
+          all_runtimes = []
+          paginator = client.get_paginator("list_agent_runtimes")
+          for page in paginator.paginate():
+              all_runtimes.extend(page.get("agentRuntimes", []))
+
+          print("=== AgentCore DEV Runtime Status ===\n")
+
+          # Filter for dev agents only
+          dev_agents = []
+          prod_agents = []
+          for rt in all_runtimes:
+              name = rt["agentRuntimeName"]
+              if name.startswith("faiston"):
+                  if name.endswith("_dev"):
+                      dev_agents.append(rt)
+                  else:
+                      prod_agents.append(rt)
+
+          print("--- DEV AGENTS (_dev suffix) ---")
+          if not dev_agents:
+              print("No dev agents found.")
+          else:
+              print(f"{'Agent Name':<45} {'Status':<15} {'Runtime ID'}")
+              print("-" * 90)
+              for rt in sorted(dev_agents, key=lambda x: x['agentRuntimeName']):
+                  print(f"{rt['agentRuntimeName']:<45} {rt.get('status', 'UNKNOWN'):<15} {rt['agentRuntimeId']}")
+
+          print(f"\nTotal DEV agents: {len(dev_agents)}")
+          print(f"Total PROD agents: {len(prod_agents)}")
+          PYTHON_SCRIPT
+
+      - name: Status Summary
+        run: |
+          echo "## AgentCore DEV Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for detailed dev agent status." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Dev agents have \`_dev\` suffix and are isolated from production." >> $GITHUB_STEP_SUMMARY

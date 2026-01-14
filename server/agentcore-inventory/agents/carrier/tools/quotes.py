@@ -1,6 +1,17 @@
 # =============================================================================
 # Carrier Quotes Tools
 # =============================================================================
+"""
+Get shipping quotes from available carriers.
+
+Architecture (Option B):
+- Uses Correios Public API for quotes (no posting created)
+- Falls back to mock data if API unavailable
+- Returns real prices when CARRIER_MODE=real
+
+Environment Variables:
+- CARRIER_MODE: 'mock' or 'real' (default: 'mock')
+"""
 
 import logging
 from typing import Dict, Any, List, Optional
@@ -9,6 +20,8 @@ from datetime import datetime, timedelta
 
 from shared.audit_emitter import AgentAuditEmitter
 from shared.xray_tracer import trace_tool_call
+
+from ..adapters import get_shipping_adapter, is_mock_mode
 
 logger = logging.getLogger(__name__)
 AGENT_ID = "carrier"
@@ -182,8 +195,8 @@ async def get_quotes_tool(
     """
     Get shipping quotes from available carriers.
 
-    NOTE: Currently returns simulated data. Real implementation
-    requires API integrations with Correios, Loggi, Gollog.
+    Uses Correios Public API when CARRIER_MODE=real (Option B architecture).
+    No posting is created during quote retrieval.
 
     Args:
         origin_cep: Origin postal code
@@ -199,26 +212,67 @@ async def get_quotes_tool(
     )
 
     try:
-        # Generate mock quotes (replace with real API calls)
-        quotes = _generate_mock_quotes(
-            origin_cep, destination_cep, weight_kg, value, urgency
+        # Get adapter (real or mock based on CARRIER_MODE)
+        adapter = get_shipping_adapter()
+
+        # Convert dimensions
+        length_cm = int(dimensions.get("length", 30))
+        width_cm = int(dimensions.get("width", 20))
+        height_cm = int(dimensions.get("height", 10))
+        weight_grams = int(weight_kg * 1000)
+
+        # Get quotes via adapter
+        adapter_quotes = await adapter.get_quotes(
+            origin_cep=origin_cep,
+            destination_cep=destination_cep,
+            weight_grams=weight_grams,
+            length_cm=length_cm,
+            width_cm=width_cm,
+            height_cm=height_cm,
+            declared_value=value,
         )
+
+        # Convert to legacy format for backward compatibility
+        quotes = []
+        for aq in adapter_quotes:
+            quotes.append(ShippingQuote(
+                carrier=aq.carrier,
+                carrier_type=aq.carrier.upper().replace(" ", "_"),
+                modal=aq.service,
+                price=aq.price,
+                delivery_days=aq.delivery_days,
+                delivery_date=aq.delivery_date or "",
+                weight_limit=aq.weight_limit_kg,
+                dimensions_limit="100x60x60 cm",
+                available=aq.available,
+                reason=aq.reason,
+                is_simulated=aq.is_simulated,
+                simulation_note="Cotacao estimada." if aq.is_simulated else "",
+            ))
 
         # Get AI recommendation
         recommendation = _get_ai_recommendation(quotes, urgency)
 
+        is_simulated = adapter.is_mock
+
         audit.completed(
             message=f"Cotacoes obtidas: {len(quotes)} opcoes",
             session_id=session_id,
-            details={"quotes_count": len(quotes), "recommended": recommendation.get("carrier")},
+            details={
+                "quotes_count": len(quotes),
+                "recommended": recommendation.get("carrier"),
+                "is_simulated": is_simulated,
+                "adapter": adapter.adapter_name,
+            },
         )
 
         return {
             "success": True,
             "quotes": [_quote_to_dict(q) for q in quotes],
             "recommendation": recommendation,
-            "is_simulated": True,
-            "note": "Cotacoes simuladas. Integracao com APIs de transportadoras pendente.",
+            "is_simulated": is_simulated,
+            "adapter": adapter.adapter_name,
+            "note": "" if not is_simulated else "Cotacoes simuladas. Use CARRIER_MODE=real para cotacoes reais.",
         }
 
     except Exception as e:

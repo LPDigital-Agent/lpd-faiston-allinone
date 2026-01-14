@@ -16,6 +16,7 @@
 
 import os
 import sys
+import json
 import logging
 from typing import Dict, Any, Optional, List
 
@@ -442,8 +443,8 @@ async def complete_expedition(
 
     Args:
         expedition_id: Expedition ID to complete
-        carrier_id: Optional carrier ID
-        tracking_code: Optional tracking code
+        carrier_id: Optional carrier ID (service code for shipping)
+        tracking_code: Optional tracking code (if not provided and carrier_id is set, will request from CarrierAgent)
         session_id: Session ID for context
         user_id: User ID for audit
 
@@ -455,14 +456,109 @@ async def complete_expedition(
     try:
         # Import tool implementation
         from agents.expedition.tools.complete_expedition import complete_expedition_tool
+        from agents.expedition.tools.process_expedition import get_expedition_tool
 
+        # If carrier_id is provided but tracking_code is not, request shipment from CarrierAgent
+        final_tracking_code = tracking_code
+        carrier_response_data = None
+
+        if carrier_id and not tracking_code:
+            logger.info(f"[{AGENT_NAME}] Requesting shipment from CarrierAgent for expedition {expedition_id}")
+
+            # First, get expedition details to extract destination information
+            expedition_data = await get_expedition_tool(
+                expedition_id=expedition_id,
+                session_id=session_id,
+            )
+
+            if expedition_data.get("success") and expedition_data.get("expedition"):
+                expedition = expedition_data["expedition"]
+
+                # Extract destination details from expedition
+                # Note: Address parsing may need adjustment based on actual data format
+                destination_address = expedition.get("destination_address", "")
+                destination_client = expedition.get("destination_client", "")
+
+                # Calculate total weight from items (default 500g per item if not specified)
+                items = expedition.get("items", [])
+                total_weight = sum(
+                    item.get("weight_grams", 500) * item.get("quantity", 1)
+                    for item in items
+                )
+
+                # Build CarrierAgent request payload
+                carrier_payload = {
+                    "action": "create_shipment",
+                    "destination_name": destination_client,
+                    "destination_address": destination_address,
+                    "destination_city": expedition.get("destination_city", ""),
+                    "destination_state": expedition.get("destination_state", ""),
+                    "destination_cep": expedition.get("destination_cep", ""),
+                    "weight_grams": total_weight,
+                    "service_code": carrier_id,
+                    "auto_liberate": True,
+                    "expedition_id": expedition_id,
+                    "session_id": session_id,
+                }
+
+                try:
+                    # Call CarrierAgent via A2A protocol
+                    carrier_response = await a2a_client.invoke_agent(
+                        "carrier",
+                        carrier_payload,
+                        session_id,
+                    )
+
+                    if carrier_response.success and carrier_response.response:
+                        # Parse CarrierAgent response to extract tracking_code
+                        try:
+                            carrier_response_data = json.loads(carrier_response.response)
+                            final_tracking_code = carrier_response_data.get("tracking_code")
+
+                            if final_tracking_code:
+                                logger.info(
+                                    f"[{AGENT_NAME}] Obtained tracking_code from CarrierAgent: "
+                                    f"{final_tracking_code}"
+                                )
+                            else:
+                                logger.warning(
+                                    f"[{AGENT_NAME}] CarrierAgent response did not contain tracking_code: "
+                                    f"{carrier_response.response[:200]}"
+                                )
+                        except json.JSONDecodeError as json_err:
+                            logger.warning(
+                                f"[{AGENT_NAME}] Failed to parse CarrierAgent response as JSON: {json_err}. "
+                                f"Response: {carrier_response.response[:200]}"
+                            )
+                    else:
+                        logger.warning(
+                            f"[{AGENT_NAME}] CarrierAgent call failed: {carrier_response.error}. "
+                            f"Continuing expedition without tracking_code."
+                        )
+                except Exception as carrier_err:
+                    # Log error but continue - shipping integration failure should not block expedition
+                    logger.warning(
+                        f"[{AGENT_NAME}] Error calling CarrierAgent: {carrier_err}. "
+                        f"Continuing expedition without tracking_code."
+                    )
+            else:
+                logger.warning(
+                    f"[{AGENT_NAME}] Could not fetch expedition details for CarrierAgent call: "
+                    f"{expedition_data.get('error', 'Unknown error')}"
+                )
+
+        # Complete the expedition with the tracking_code (obtained or provided)
         result = await complete_expedition_tool(
             expedition_id=expedition_id,
             carrier_id=carrier_id,
-            tracking_code=tracking_code,
+            tracking_code=final_tracking_code,
             session_id=session_id,
             user_id=user_id,
         )
+
+        # Add carrier response info to result if available
+        if carrier_response_data:
+            result["carrier_shipment"] = carrier_response_data
 
         # Log to ObservationAgent
         await a2a_client.invoke_agent("observation", {
@@ -473,6 +569,8 @@ async def complete_expedition(
             "details": {
                 "expedition_id": expedition_id,
                 "nf_number": result.get("nf_number"),
+                "tracking_code": final_tracking_code,
+                "carrier_id": carrier_id,
             },
         }, session_id)
 

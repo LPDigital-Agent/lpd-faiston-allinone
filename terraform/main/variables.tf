@@ -106,3 +106,30 @@ variable "sga_rds_proxy_idle_timeout" {
   type        = number
   default     = 1800
 }
+
+# =============================================================================
+# POSTAL Service Configuration
+# =============================================================================
+# Credentials for POSTAL API integration (inventory operations)
+# Set via terraform.tfvars or environment variables (TF_VAR_postal_*)
+
+variable "postal_usuario" {
+  description = "POSTAL API username"
+  type        = string
+  sensitive   = true
+  default     = "PLACEHOLDER_SET_VIA_TFVARS"
+}
+
+variable "postal_token" {
+  description = "POSTAL API authentication token"
+  type        = string
+  sensitive   = true
+  default     = "PLACEHOLDER_SET_VIA_TFVARS"
+}
+
+variable "postal_id_perfil" {
+  description = "POSTAL API profile ID"
+  type        = string
+  sensitive   = true
+  default     = "PLACEHOLDER_SET_VIA_TFVARS"
+}
