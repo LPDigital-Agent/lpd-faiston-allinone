@@ -240,16 +240,8 @@ resource "aws_bedrockagent_data_source" "equipment_docs" {
 
     s3_configuration {
       bucket_arn = aws_s3_bucket.sga_equipment_docs.arn
-
-      # Include only equipment-related prefixes
-      inclusion_prefixes = [
-        "equipment/",
-        "part_numbers/",
-        "vendors/",
-        "datasheets/",
-        "manuals/",
-        "specifications/"
-      ]
+      # Note: inclusion_prefixes removed - AWS API limits to 1 element max
+      # All S3 content in this bucket is equipment-related by design
     }
   }
 

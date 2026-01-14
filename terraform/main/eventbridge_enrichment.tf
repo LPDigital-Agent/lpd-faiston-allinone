@@ -152,80 +152,57 @@ resource "aws_iam_role_policy" "eventbridge_invoke_agentcore" {
 }
 
 # =============================================================================
-# EventBridge Target: EnrichmentAgent (via AgentCore HTTP)
+# EventBridge Target: CloudWatch Logs (Monitoring & Audit)
 # =============================================================================
-# NOTE: AgentCore agents are invoked via HTTP endpoint.
-# The target configuration uses API destination for HTTP invocation.
+# NOTE: EventBridge API Destinations do NOT support AWS_IAM/SigV4 auth.
+# Valid authorization_type values: BASIC, OAUTH_CLIENT_CREDENTIALS, API_KEY
+#
+# Current Architecture:
+# - EventBridge captures ImportCompleted events for audit/monitoring
+# - EnrichmentAgent is invoked via orchestrator routing (manual/API trigger)
+# - Future: Lambda intermediary can invoke AgentCore with SigV4 if needed
 
-# API Destination Connection (SigV4 auth for AgentCore)
-resource "aws_cloudwatch_event_connection" "agentcore_enrichment" {
-  name               = "${var.project_name}-agentcore-enrichment-connection"
-  description        = "Connection to AgentCore for enrichment invocation"
-  authorization_type = "AWS_IAM"
+# CloudWatch Log Group for import events
+resource "aws_cloudwatch_log_group" "import_events" {
+  name              = "/aws/events/${var.project_name}/import-completed"
+  retention_in_days = 30
 
-  # Note: AWS_IAM authorization handles SigV4 signing automatically
-  auth_parameters {}
+  tags = {
+    Name        = "Import Completed Events"
+    Environment = var.environment
+    Module      = "Gestao de Ativos"
+    Feature     = "Equipment Enrichment"
+  }
 }
 
-# API Destination for EnrichmentAgent
-resource "aws_cloudwatch_event_api_destination" "enrichment_agent" {
-  name                             = "${var.project_name}-enrichment-agent-destination"
-  description                      = "API destination for EnrichmentAgent invocation"
-  invocation_endpoint              = "https://bedrock-agentcore.${var.aws_region}.amazonaws.com/agent-runtime"
-  http_method                      = "POST"
-  invocation_rate_limit_per_second = 10
-  connection_arn                   = aws_cloudwatch_event_connection.agentcore_enrichment.arn
-}
-
-# EventBridge Target
-resource "aws_cloudwatch_event_target" "enrichment_agent" {
+# EventBridge Target: CloudWatch Logs (for monitoring)
+resource "aws_cloudwatch_event_target" "import_logs" {
   rule           = aws_cloudwatch_event_rule.import_completed.name
   event_bus_name = data.aws_cloudwatch_event_bus.default.name
-  target_id      = "enrichment-agent"
+  target_id      = "import-logs"
 
-  # Target: API Destination (EnrichmentAgent via AgentCore HTTP)
-  arn      = aws_cloudwatch_event_api_destination.enrichment_agent.arn
-  role_arn = aws_iam_role.eventbridge_enrichment.arn
+  # Target: CloudWatch Logs
+  arn = aws_cloudwatch_log_group.import_events.arn
+}
 
-  # Transform event to agent invocation format
-  input_transformer {
-    input_paths = {
-      import_id       = "$.detail.import_id"
-      equipment_count = "$.detail.equipment_count"
-      new_items       = "$.detail.new_items"
-      updated_items   = "$.detail.updated_items"
-      timestamp       = "$.detail.timestamp"
-      tenant_id       = "$.detail.tenant_id"
-      user_id         = "$.detail.user_id"
-    }
+# EventBridge Target: DLQ (for failed events)
+resource "aws_cloudwatch_event_target" "enrichment_dlq" {
+  rule           = aws_cloudwatch_event_rule.import_completed.name
+  event_bus_name = data.aws_cloudwatch_event_bus.default.name
+  target_id      = "enrichment-dlq"
 
-    # Format for AgentCore invocation
-    input_template = <<-EOF
-      {
-        "agentName": "faiston_sga_enrichment",
-        "input": {
-          "task": "enrich_imported_equipment",
-          "import_id": <import_id>,
-          "equipment_count": <equipment_count>,
-          "new_items": <new_items>,
-          "updated_items": <updated_items>,
-          "timestamp": <timestamp>,
-          "tenant_id": <tenant_id>,
-          "user_id": <user_id>
-        }
-      }
-    EOF
-  }
+  # Target: SQS DLQ (for later processing/retry)
+  arn = aws_sqs_queue.enrichment_dlq.arn
 
-  # Dead letter queue for failed invocations
+  # Dead letter queue for this target itself
   dead_letter_config {
     arn = aws_sqs_queue.enrichment_dlq.arn
   }
 
   # Retry configuration
   retry_policy {
-    maximum_event_age_in_seconds = 3600 # 1 hour
-    maximum_retry_attempts       = 3
+    maximum_event_age_in_seconds = 86400 # 24 hours
+    maximum_retry_attempts       = 5
   }
 }
 
@@ -265,12 +242,15 @@ resource "aws_ssm_parameter" "enrichment_eventbridge_config" {
   description = "EventBridge configuration for equipment enrichment"
   type        = "String"
   value = jsonencode({
-    rule_name          = aws_cloudwatch_event_rule.import_completed.name
-    rule_arn           = aws_cloudwatch_event_rule.import_completed.arn
-    dlq_url            = aws_sqs_queue.enrichment_dlq.url
-    event_source       = "nexo.import"
-    event_detail_type  = "ImportCompleted"
-    api_destination_id = aws_cloudwatch_event_api_destination.enrichment_agent.id
+    rule_name         = aws_cloudwatch_event_rule.import_completed.name
+    rule_arn          = aws_cloudwatch_event_rule.import_completed.arn
+    dlq_url           = aws_sqs_queue.enrichment_dlq.url
+    log_group         = aws_cloudwatch_log_group.import_events.name
+    event_source      = "nexo.import"
+    event_detail_type = "ImportCompleted"
+    # Note: Direct AgentCore invocation via EventBridge not supported (no AWS_IAM auth)
+    # EnrichmentAgent is invoked via orchestrator routing instead
+    trigger_method = "orchestrator"
   })
 
   tags = {
