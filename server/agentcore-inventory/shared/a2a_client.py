@@ -73,7 +73,8 @@ JITTER_RANGE = 0.5  # ±50% jitter
 # Reference: terraform/main/agentcore_runtimes.tf
 # =============================================================================
 
-RUNTIME_IDS = {
+# Production runtime IDs
+PROD_RUNTIME_IDS = {
     "nexo_import": "faiston_sga_nexo_import-0zNtFDAo7M",
     "learning": "faiston_sga_learning-30cZIOFmzo",
     "validation": "faiston_sga_validation-3zgXMwCxGN",
@@ -89,6 +90,24 @@ RUNTIME_IDS = {
     "schema_evolution": "faiston_sga_schema_evolution-Ke1i76BvB0",
     "equipment_research": "faiston_sga_equipment_research-xs7hxg2SfS",
 }
+
+# Dev runtime IDs (only for agents that have dev deployments)
+# Agents without dev deployment will fall back to prod
+DEV_RUNTIME_IDS = {
+    **PROD_RUNTIME_IDS,  # Start with prod as fallback
+    # Override with dev runtime IDs for agents that have dev deployments
+    "carrier": "faiston_sga_carrier_dev-V0XnC28gWH",
+    "expedition": "faiston_sga_expedition_dev-p5wzSnDV5d",
+    "reverse": "faiston_sga_reverse_dev-67E3Uu7FxL",
+}
+
+# Select runtime IDs based on environment
+# Set ENVIRONMENT=dev for dev orchestrator, defaults to prod
+_ENVIRONMENT = os.environ.get("ENVIRONMENT", "prod").lower()
+RUNTIME_IDS = DEV_RUNTIME_IDS if _ENVIRONMENT == "dev" else PROD_RUNTIME_IDS
+
+# Log which environment is being used (once at module load)
+logger.info(f"[A2A] Using {_ENVIRONMENT.upper()} runtime IDs")
 
 
 def _get_httpx():
