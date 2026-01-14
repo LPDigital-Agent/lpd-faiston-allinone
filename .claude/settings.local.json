@@ -361,7 +361,8 @@
       "Bash(sort:*)",
       "Bash(cd /Users/fabio.santos/LPD Repos/lpd-faiston-allinone && git log:*)",
       "mcp__bedrock-agentcore-mcp-server__manage_agentcore_runtime",
-      "Bash(git status --short server/agentcore-inventory/agents/*/main.py)"
+      "Bash(git status --short server/agentcore-inventory/agents/*/main.py)",
+      "Bash(for f in server/agentcore-inventory/agents/*/Dockerfile)"
     ],
     "deny": [],
     "ask": []
