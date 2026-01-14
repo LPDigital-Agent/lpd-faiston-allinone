@@ -451,6 +451,44 @@ async def _invoke_swarm(
         # Extract response from Swarm result
         response = _process_swarm_result(result, session)
 
+        # =================================================================
+        # Response Validation (BUG-015 Fix)
+        # Ensure nexo_analyze_file returns valid analysis.sheets structure
+        # =================================================================
+        if action == "nexo_analyze_file":
+            analysis = response.get("analysis")
+            if not analysis or not isinstance(analysis, dict):
+                logger.error(
+                    f"[Swarm] BUG-015: Missing 'analysis' object in response. "
+                    f"Response keys: {list(response.keys())}"
+                )
+                return {
+                    "success": False,
+                    "error": "Internal error: File analysis did not return expected structure",
+                    "debug_keys": list(response.keys()),
+                    "session_id": session_id,
+                    "round": session["round_count"],
+                }
+
+            sheets = analysis.get("sheets")
+            if not sheets or not isinstance(sheets, list):
+                logger.error(
+                    f"[Swarm] BUG-015: Missing or invalid 'analysis.sheets' array. "
+                    f"Analysis keys: {list(analysis.keys())}"
+                )
+                return {
+                    "success": False,
+                    "error": "Internal error: File analysis missing sheets data",
+                    "debug_keys": list(analysis.keys()),
+                    "session_id": session_id,
+                    "round": session["round_count"],
+                }
+
+            logger.info(
+                f"[Swarm] Validated response: {len(sheets)} sheet(s), "
+                f"overall_confidence={response.get('overall_confidence', 'N/A')}"
+            )
+
         # Check for stop_action (HIL pause)
         if response.get("stop_action"):
             session["awaiting_response"] = True
@@ -484,32 +522,173 @@ async def _invoke_swarm(
         }
 
 
+# =============================================================================
+# Swarm Result Extraction - Official Strands Pattern (BUG-015 Fix)
+# =============================================================================
+# Uses result.results["agent_name"].result which is the OFFICIAL Strands pattern
+# Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/
+# =============================================================================
+
+
+def _extract_tool_output_from_swarm_result(
+    result, agent_name: str, tool_name: str
+) -> dict | None:
+    """
+    Extract structured tool output from SwarmResult.
+
+    Strands Swarm stores individual agent results in result.results dict.
+    We also check agent.messages for tool_result content blocks as fallback.
+
+    OFFICIAL STRANDS PATTERN (from documentation):
+    ```python
+    analyst_result = result.results["analyst"].result
+    print(f"Analysis: {analyst_result}")
+    ```
+
+    Args:
+        result: SwarmResult from Swarm execution
+        agent_name: Name of agent (e.g., "file_analyst")
+        tool_name: Name of tool to find (e.g., "unified_analyze_file")
+
+    Returns:
+        Tool output dict if found, None otherwise
+    """
+    # PRIORITY 1: Try result.results["agent_name"].result (OFFICIAL PATTERN)
+    if hasattr(result, "results") and result.results:
+        agent_result = result.results.get(agent_name)
+        if agent_result and hasattr(agent_result, "result"):
+            raw = agent_result.result
+            if isinstance(raw, dict):
+                logger.debug(f"[Swarm] Found dict result from {agent_name}")
+                return raw
+            if isinstance(raw, str):
+                try:
+                    parsed = json.loads(raw)
+                    logger.debug(f"[Swarm] Parsed JSON string from {agent_name}")
+                    return parsed
+                except json.JSONDecodeError:
+                    logger.debug(f"[Swarm] Could not parse result from {agent_name}: {raw[:100]}")
+
+    # PRIORITY 2: Try extracting from entry_point agent's messages
+    if hasattr(result, "entry_point") and hasattr(result.entry_point, "messages"):
+        for msg in reversed(result.entry_point.messages):
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content", [])
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    content_data = block.get("content")
+                    if content_data:
+                        try:
+                            parsed = (
+                                json.loads(content_data)
+                                if isinstance(content_data, str)
+                                else content_data
+                            )
+                            # Verify it has expected structure
+                            if isinstance(parsed, dict) and "analysis" in parsed:
+                                logger.debug(
+                                    f"[Swarm] Extracted tool_result from entry_point messages"
+                                )
+                                return parsed
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+
+    return None
+
+
 def _process_swarm_result(result, session: dict) -> dict:
     """
-    Process Swarm execution result.
+    Process Swarm execution result - extract tool output from SwarmResult.
 
-    Extracts relevant information from the Swarm response:
-    - stop_action: Whether to pause for HIL
-    - hil_questions: Questions for user
-    - proposed_mappings: Column mappings
-    - import_id: Completed import ID
-    - node_history: Agent collaboration sequence
+    Uses OFFICIAL Strands pattern: result.results["agent_name"].result
+
+    Priority order:
+    1. result.results["file_analyst"].result - agent's direct output (OFFICIAL)
+    2. agent.messages tool_result blocks - raw tool outputs
+    3. result.message as JSON - LLM-formatted response
+    4. Regex extraction from result.message - last resort for embedded JSON
+    5. Raw message text - final fallback
+
+    Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/
     """
+    import re
+
     response = {}
 
-    # Get the final message/response
-    if hasattr(result, "message"):
+    # PRIORITY 1: Extract structured tool output from SwarmResult (OFFICIAL PATTERN)
+    tool_output = _extract_tool_output_from_swarm_result(
+        result, agent_name="file_analyst", tool_name="unified_analyze_file"
+    )
+    if tool_output and isinstance(tool_output, dict):
+        logger.info("[Swarm] Extracted tool output from SwarmResult.results (official pattern)")
+        response = tool_output
+
+    # PRIORITY 2: Try to parse message as JSON
+    elif hasattr(result, "message") and result.message:
         try:
             response = json.loads(result.message)
+            logger.info("[Swarm] Parsed response from message JSON")
         except json.JSONDecodeError:
-            response["message"] = result.message
+            # PRIORITY 3: Try to extract JSON object from message text
+            # The LLM sometimes wraps JSON in natural language
+            # Try to find the largest valid JSON object
+            json_objects = []
 
-    # Get node history for observability
+            # Pattern to find JSON objects (greedy, will get largest match)
+            # Use a simple approach: find balanced braces
+            text = result.message
+            depth = 0
+            start = -1
+            for i, char in enumerate(text):
+                if char == "{":
+                    if depth == 0:
+                        start = i
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0 and start >= 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            parsed = json.loads(candidate)
+                            if isinstance(parsed, dict) and "analysis" in parsed:
+                                json_objects.append(parsed)
+                        except json.JSONDecodeError:
+                            pass
+                        start = -1
+
+            if json_objects:
+                # Use the first valid JSON with "analysis" key
+                response = json_objects[0]
+                logger.info("[Swarm] Extracted JSON from message text via parsing")
+            else:
+                # PRIORITY 4: Try simple regex for any JSON object
+                simple_match = re.search(r"\{[^{}]*\}", text)
+                if simple_match:
+                    try:
+                        response = json.loads(simple_match.group())
+                        logger.info("[Swarm] Extracted JSON from message (simple pattern)")
+                    except json.JSONDecodeError:
+                        response["message"] = result.message
+                        logger.warning("[Swarm] Could not parse JSON, using raw text")
+                else:
+                    response["message"] = result.message
+                    logger.warning("[Swarm] No JSON found in message")
+
+    # Add node history for observability
     if hasattr(result, "node_history"):
         response["agent_sequence"] = [n.node_id for n in result.node_history]
 
     # Update session context with any new information
-    for key in ["file_analysis", "proposed_mappings", "unmapped_columns", "validation_issues"]:
+    for key in [
+        "file_analysis",
+        "analysis",
+        "proposed_mappings",
+        "unmapped_columns",
+        "validation_issues",
+    ]:
         if key in response:
             session["context"][key] = response[key]
 
