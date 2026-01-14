@@ -34,6 +34,9 @@ from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gem
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
 
+# NEXO Mind - Direct Memory Access (Hippocampus)
+from shared.memory_manager import AgentMemoryManager
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -181,6 +184,26 @@ Português brasileiro (pt-BR) para interações com usuário.
 
 # A2A client instance for inter-agent communication
 a2a_client = A2AClient()
+
+
+def _get_memory(actor_id: str = "system") -> AgentMemoryManager:
+    """
+    Get AgentMemoryManager instance for direct memory access.
+
+    NEXO Mind Architecture: Each agent has its own "hippocampal" connection
+    to the shared brain (AgentCore Memory). No A2A gargalo!
+
+    Args:
+        actor_id: User/actor ID for namespace isolation
+
+    Returns:
+        AgentMemoryManager instance
+    """
+    return AgentMemoryManager(
+        agent_id=AGENT_ID,
+        actor_id=actor_id,
+        use_global_namespace=True,  # Share patterns across users
+    )
 
 
 @tool
@@ -335,14 +358,20 @@ async def process_entry(
             },
         }, session_id)
 
-        # If low confidence, also notify LearningAgent
+        # NEXO Mind: LEARN - Record low confidence events directly
         if result.get("confidence", 1.0) < 0.8:
-            await a2a_client.invoke_agent("learning", {
-                "action": "record_low_confidence_event",
-                "event_type": "NF_ENTRY",
-                "confidence": result.get("confidence"),
-                "extraction": extraction,
-            }, session_id)
+            memory = _get_memory(actor_id=user_id or "system")
+            await memory.learn_inference(
+                inference=(
+                    f"Low confidence NF entry (conf={result.get('confidence', 0):.0%}): "
+                    f"NF {extraction.get('nf_number', 'unknown')} with {len(extraction.get('items', []))} items"
+                ),
+                category="nf_low_confidence",
+                confidence=result.get("confidence", 0.5),
+                emotional_weight=0.4,  # Lower weight - needs human validation
+                session_id=session_id,
+            )
+            logger.info(f"[{AGENT_NAME}] Recorded low-confidence event in memory")
 
         return result
 
@@ -402,15 +431,32 @@ async def confirm_entry(
                 except json.JSONDecodeError:
                     pass
 
-        # Store successful pattern in LearningAgent
+        # NEXO Mind: LEARN - Store successful patterns directly
         if result.get("success"):
-            await a2a_client.invoke_agent("learning", {
-                "action": "store_pattern",
-                "pattern_type": "nf_confirmation",
-                "entry_id": entry_id,
-                "manual_mappings": manual_mappings,
-                "success": True,
-            }, session_id)
+            memory = _get_memory(actor_id=user_id or "system")
+
+            # Store manual mappings as confirmed FACTS (HIL validation)
+            if manual_mappings:
+                for supplier_code, part_number in manual_mappings.items():
+                    await memory.learn_fact(
+                        fact=f"Supplier code '{supplier_code}' → Part Number '{part_number}'",
+                        category="supplier_mapping",
+                        emotional_weight=0.9,  # High weight - human confirmed
+                        session_id=session_id,
+                    )
+                logger.info(f"[{AGENT_NAME}] LEARNED: {len(manual_mappings)} supplier mappings as FACTs")
+
+            # Store the confirmation episode
+            await memory.learn_episode(
+                episode_content=(
+                    f"NF entry {entry_id} confirmed successfully with "
+                    f"{len(result.get('items', []))} items processed"
+                ),
+                category="nf_confirmed",
+                outcome="success",
+                emotional_weight=0.7,
+                session_id=session_id,
+            )
 
         # Log to ObservationAgent
         await a2a_client.invoke_agent("observation", {

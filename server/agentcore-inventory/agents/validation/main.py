@@ -34,6 +34,10 @@ from agents.utils import get_model, AGENT_VERSION, create_gemini_model
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
 
+# NEXO Mind - Direct Memory Access (Hippocampus)
+# ValidationAgent can query/learn validation patterns
+from shared.memory_manager import AgentMemoryManager
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -70,77 +74,28 @@ MODEL_ID = get_model(AGENT_ID)  # gemini-3.0-flash (operational agent)
 
 AGENT_SKILLS = [
     AgentSkill(
-        name="validate_schema",
+        id="validate_schema",
+        name="Validate Schema",
         description="Validate column mappings against PostgreSQL schema. Checks if target fields exist, no duplicate mappings, required fields are mapped, and auto-generated fields are not mapped.",
-        parameters={
-            "column_mappings": {
-                "type": "object",
-                "description": "Proposed mappings from source columns to target fields",
-                "required": True,
-            },
-            "target_table": {
-                "type": "string",
-                "description": "Target table for validation",
-                "default": "pending_entry_items",
-            },
-            "session_id": {
-                "type": "string",
-                "description": "Optional session ID for audit",
-                "required": False,
-            },
-        },
+        tags=["validation", "schema", "mapping", "import"],
     ),
     AgentSkill(
-        name="validate_data",
+        id="validate_data",
+        name="Validate Data",
         description="Validate data rows against schema constraints. Checks required fields, type matching, length limits, and allowed patterns.",
-        parameters={
-            "rows": {
-                "type": "array",
-                "description": "Data rows to validate",
-                "required": True,
-            },
-            "column_mappings": {
-                "type": "object",
-                "description": "Column mappings to apply",
-                "required": True,
-            },
-            "target_table": {
-                "type": "string",
-                "description": "Target table for schema reference",
-                "default": "pending_entry_items",
-            },
-            "session_id": {
-                "type": "string",
-                "description": "Optional session ID for audit",
-                "required": False,
-            },
-        },
+        tags=["validation", "data", "constraints", "import"],
     ),
     AgentSkill(
-        name="check_constraints",
+        id="check_constraints",
+        name="Check Constraints",
         description="Check database constraints for data rows. Validates foreign key references, unique constraints, and check constraints.",
-        parameters={
-            "rows": {
-                "type": "array",
-                "description": "Data rows to check",
-                "required": True,
-            },
-            "target_table": {
-                "type": "string",
-                "description": "Target table for constraint reference",
-                "default": "pending_entry_items",
-            },
-            "session_id": {
-                "type": "string",
-                "description": "Optional session ID for audit",
-                "required": False,
-            },
-        },
+        tags=["validation", "constraints", "database", "import"],
     ),
     AgentSkill(
-        name="health_check",
+        id="health_check",
+        name="Health Check",
         description="Health check endpoint for monitoring. Returns health status with agent info.",
-        parameters={},
+        tags=["validation", "monitoring", "health"],
     ),
 ]
 
@@ -213,6 +168,26 @@ Portugues brasileiro (pt-BR) para mensagens de erro.
 
 # A2A client instance for inter-agent communication
 a2a_client = A2AClient()
+
+
+def _get_memory(actor_id: str = "system") -> AgentMemoryManager:
+    """
+    Get AgentMemoryManager instance for direct memory access.
+
+    NEXO Mind Architecture: ValidationAgent can learn from validation patterns.
+    For example: "Columns X and Y always fail together" or "File format Z always has encoding issues".
+
+    Args:
+        actor_id: User/actor ID for namespace isolation
+
+    Returns:
+        AgentMemoryManager instance
+    """
+    return AgentMemoryManager(
+        agent_id=AGENT_ID,
+        actor_id=actor_id,
+        use_global_namespace=True,  # Share validation patterns
+    )
 
 
 @tool

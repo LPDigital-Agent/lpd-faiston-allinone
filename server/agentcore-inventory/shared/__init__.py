@@ -44,6 +44,32 @@ from shared.xray_tracer import (
     add_trace_metadata,
 )
 
+# Genesis Kernel exports (NEXO Mind DNA)
+from shared.genesis_kernel import (
+    GeneticLaw,
+    UserRole,
+    get_role_priority,
+    MemoryOriginType,
+    MemorySourceType,
+    LawAlignment,
+    check_command_safety,
+    validate_tutor_action,
+    check_autopoiesis_approval,
+    is_consolidation_period,
+    get_system_prompt_core,
+    get_reflection_prompt,
+    NexoMemoryMetadata,
+    interpret_hebbian_weight,
+    should_forget,
+)
+
+# Memory Manager exports (NEXO Mind Hippocampus)
+from shared.memory_manager import (
+    AgentMemoryManager,
+    observe_patterns,
+    learn_pattern,
+)
+
 __all__ = [
     # Audit Emitter
     "AgentAuditEmitter",
@@ -65,4 +91,24 @@ __all__ = [
     "trace_subsegment",
     "add_trace_annotation",
     "add_trace_metadata",
+    # Genesis Kernel (NEXO Mind DNA)
+    "GeneticLaw",
+    "UserRole",
+    "get_role_priority",
+    "MemoryOriginType",
+    "MemorySourceType",
+    "LawAlignment",
+    "check_command_safety",
+    "validate_tutor_action",
+    "check_autopoiesis_approval",
+    "is_consolidation_period",
+    "get_system_prompt_core",
+    "get_reflection_prompt",
+    "NexoMemoryMetadata",
+    "interpret_hebbian_weight",
+    "should_forget",
+    # Memory Manager (NEXO Mind Hippocampus)
+    "AgentMemoryManager",
+    "observe_patterns",
+    "learn_pattern",
 ]

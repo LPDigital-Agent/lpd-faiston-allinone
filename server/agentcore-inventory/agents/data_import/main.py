@@ -34,6 +34,9 @@ from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gem
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
 
+# NEXO Mind - Direct Memory Access (Hippocampus)
+from shared.memory_manager import AgentMemoryManager
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -185,6 +188,26 @@ Português brasileiro (pt-BR) para interações com usuário.
 a2a_client = A2AClient()
 
 
+def _get_memory(actor_id: str = "system") -> AgentMemoryManager:
+    """
+    Get AgentMemoryManager instance for direct memory access.
+
+    NEXO Mind Architecture: Each agent has its own "hippocampal" connection
+    to the shared brain (AgentCore Memory). No A2A gargalo!
+
+    Args:
+        actor_id: User/actor ID for namespace isolation
+
+    Returns:
+        AgentMemoryManager instance
+    """
+    return AgentMemoryManager(
+        agent_id=AGENT_ID,
+        actor_id=actor_id,
+        use_global_namespace=True,  # Share patterns across users
+    )
+
+
 @tool
 async def preview_import(
     s3_key: str,
@@ -259,19 +282,31 @@ async def detect_columns(
     logger.info(f"[{AGENT_NAME}] THINK: Detecting column purposes")
 
     try:
-        # Query LearningAgent for prior column mappings
-        prior_response = await a2a_client.invoke_agent("learning", {
-            "action": "retrieve_column_mappings",
-            "columns": columns,
-        }, session_id)
-
+        # NEXO Mind: Direct memory access for prior column mappings
+        memory = _get_memory()
         prior_mappings = {}
-        if prior_response.success:
-            import json
-            try:
-                prior_mappings = json.loads(prior_response.response)
-            except json.JSONDecodeError:
-                pass
+
+        # OBSERVE: Query memory for patterns on these column names
+        for col in columns:
+            prior_patterns = await memory.observe(
+                query=f"column mapping for '{col}'",
+                limit=3,
+                include_facts=True,
+                include_episodes=False,
+                include_global=True,  # Company-wide patterns
+            )
+
+            # Extract mapping from prior knowledge
+            for pattern in prior_patterns:
+                content = pattern.get("content", "")
+                # Parse patterns like "Column 'SERIAL' → 'serial_number'"
+                if "→" in content and col.lower() in content.lower():
+                    parts = content.split("→")
+                    if len(parts) == 2:
+                        target = parts[1].strip().strip("'\"")
+                        prior_mappings[col.lower()] = target
+                        logger.info(f"[{AGENT_NAME}] Memory found: {col} → {target}")
+                        break
 
         # Import tool implementation (if exists)
         try:
@@ -424,16 +459,32 @@ async def execute_import(
             user_id=user_id,
         )
 
-        # LEARN: Store successful pattern via LearningAgent
+        # NEXO Mind: LEARN - Store successful patterns directly in memory
         if result.get("success") and result.get("rows_imported", 0) > 0:
-            await a2a_client.invoke_agent("learning", {
-                "action": "store_pattern",
-                "pattern_type": "import_mapping",
-                "column_mappings": column_mappings,
-                "target_table": target_table,
-                "rows_imported": result.get("rows_imported", 0),
-                "success": True,
-            }, session_id)
+            memory = _get_memory(actor_id=user_id or "system")
+
+            # Store each column mapping as a confirmed FACT
+            for source_col, target_field in column_mappings.items():
+                if target_field:  # Only store successful mappings
+                    await memory.learn_fact(
+                        fact=f"Column '{source_col}' → '{target_field}'",
+                        category="column_mapping",
+                        emotional_weight=0.8,  # Confirmed by successful import
+                        session_id=session_id,
+                    )
+
+            # Store the overall import episode
+            await memory.learn_episode(
+                episode_content=(
+                    f"Import successful: {result.get('rows_imported', 0)} rows "
+                    f"to {target_table} with mappings: {column_mappings}"
+                ),
+                category="import_completed",
+                outcome="success",
+                emotional_weight=0.7,
+                session_id=session_id,
+            )
+            logger.info(f"[{AGENT_NAME}] LEARNED: Stored {len(column_mappings)} patterns in memory")
 
         # Log to ObservationAgent
         await a2a_client.invoke_agent("observation", {

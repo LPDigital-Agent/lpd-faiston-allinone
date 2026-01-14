@@ -36,6 +36,11 @@ from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gem
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
 
+# NEXO Mind - Direct Memory Access (Hippocampus)
+# LearningAgent is the "Sonhador" (Dreamer) that manages memory consolidation
+# It uses AgentMemoryManager for ALL memory operations (no A2A self-calls)
+from shared.memory_manager import AgentMemoryManager
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -213,6 +218,30 @@ Português brasileiro (pt-BR) para interações com usuário.
 
 # A2A client instance for inter-agent communication
 a2a_client = A2AClient()
+
+
+def _get_memory(actor_id: str = "system") -> AgentMemoryManager:
+    """
+    Get AgentMemoryManager instance for direct memory access.
+
+    NEXO Mind Architecture: LearningAgent is the "Sonhador" (Dreamer).
+    It uses AgentMemoryManager directly for:
+    - Storing episodes (learn_episode)
+    - Retrieving prior knowledge (observe)
+    - Generating reflections (observe_reflections)
+    - Sleep cycle consolidation (future)
+
+    Args:
+        actor_id: User/actor ID for namespace isolation
+
+    Returns:
+        AgentMemoryManager instance
+    """
+    return AgentMemoryManager(
+        agent_id=AGENT_ID,
+        actor_id=actor_id,
+        use_global_namespace=True,  # Global learning: "João aprende, Maria usa"
+    )
 
 
 @tool

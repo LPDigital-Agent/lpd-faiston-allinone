@@ -37,6 +37,9 @@ from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gem
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
 
+# NEXO MIND: Direct memory access (replaces A2A for memory operations)
+from shared.memory_manager import AgentMemoryManager, MemoryOriginType
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -254,8 +257,34 @@ Portuguese Brazilian (pt-BR) for user-facing messages only.
 # Tools (Strands @tool decorator)
 # =============================================================================
 
-# A2A client instance for inter-agent communication
+# A2A client instance for inter-agent communication (for NON-memory operations)
 a2a_client = A2AClient()
+
+# NEXO MIND: Memory Manager singleton (replaces A2A calls to LearningAgent)
+_memory_manager_cache: dict = {}
+
+
+def get_memory_manager(actor_id: str = "system") -> AgentMemoryManager:
+    """
+    Get or create AgentMemoryManager instance for this agent.
+
+    NEXO MIND Architecture: Each agent accesses memory DIRECTLY (no A2A).
+    The actor_id enables namespace isolation per user/session.
+
+    Args:
+        actor_id: User/session ID for namespace isolation
+
+    Returns:
+        AgentMemoryManager instance (cached by actor_id)
+    """
+    if actor_id not in _memory_manager_cache:
+        _memory_manager_cache[actor_id] = AgentMemoryManager(
+            agent_id=AGENT_ID,
+            actor_id=actor_id,
+            use_global_namespace=True,  # Share patterns across users
+        )
+        logger.info(f"[{AGENT_NAME}] Created memory manager for actor={actor_id}")
+    return _memory_manager_cache[actor_id]
 
 
 @tool
@@ -263,23 +292,72 @@ async def analyze_file(
     s3_key: str,
     filename: Optional[str] = None,
     session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Analyze file structure from S3.
 
     OBSERVE phase: Detect file type, extract structure, identify columns.
 
+    NEXO MIND: Enriches Gemini context with prior knowledge from AgentCore Memory.
+
     Args:
         s3_key: S3 key where file is stored
         filename: Original filename for type detection
         session_id: Session ID for context
+        user_id: User ID for memory namespace
 
     Returns:
         File analysis with columns, types, and routing recommendation
     """
-    logger.info(f"[{AGENT_NAME}] OBSERVE: Analyzing file {filename or s3_key}")
+    logger.info(f"[{AGENT_NAME}] OBSERVE: Analyzing file {filename or s3_key} (NEXO MIND)")
 
     try:
+        # ═══════════════════════════════════════════════════════════════════
+        # NEXO MIND: Fetch memory context to enrich Gemini analysis
+        # ═══════════════════════════════════════════════════════════════════
+        memory_context = None
+        try:
+            memory = get_memory_manager(actor_id=user_id or "system")
+
+            # Build query based on filename patterns
+            query_terms = ["column mapping patterns", "import patterns"]
+            if filename:
+                # Extract keywords from filename for more relevant search
+                clean_name = filename.lower().replace("_", " ").replace("-", " ")
+                query_terms.append(f"file patterns for {clean_name}")
+
+            query = "; ".join(query_terms)
+            logger.info(f"[{AGENT_NAME}] OBSERVE: Querying memory: {query[:80]}...")
+
+            # Fetch relevant patterns from memory
+            memories = await memory.observe(
+                query=query,
+                limit=10,
+                include_facts=True,
+                include_episodes=True,
+                include_global=True,
+            )
+
+            if memories:
+                # Build memory context string for Gemini
+                context_parts = []
+                for mem in memories:
+                    content = mem.get("content", "")
+                    mem_type = mem.get("type", "unknown")
+                    if content:
+                        context_parts.append(f"[{mem_type}] {content}")
+
+                if context_parts:
+                    memory_context = "\n".join(context_parts[:10])  # Limit to 10 patterns
+                    logger.info(
+                        f"[{AGENT_NAME}] OBSERVE: Enriching Gemini with {len(context_parts)} patterns"
+                    )
+
+        except Exception as mem_error:
+            # Memory errors should not block analysis
+            logger.warning(f"[{AGENT_NAME}] Memory fetch failed (non-blocking): {mem_error}")
+
         # Import tool implementation
         from agents.nexo_import.tools.analyze_file import analyze_file_impl
 
@@ -287,6 +365,7 @@ async def analyze_file(
             s3_key=s3_key,
             filename=filename,
             session_id=session_id,
+            memory_context=memory_context,  # NEXO MIND: Pass memory to Gemini
         )
 
         # Log to ObservationAgent via A2A
@@ -309,35 +388,73 @@ async def analyze_file(
 async def reason_mappings(
     file_analysis: Dict[str, Any],
     session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Reason about column mappings using schema context and prior knowledge.
 
     THINK phase: Use Gemini 3.0 Pro to reason about mappings.
 
+    NEXO MIND: Uses AgentMemoryManager directly (no A2A to LearningAgent).
+
     Args:
         file_analysis: Result from analyze_file
         session_id: Session ID for context
+        user_id: User ID for memory namespace
 
     Returns:
         Mapping recommendations with confidence scores
     """
-    logger.info(f"[{AGENT_NAME}] THINK: Reasoning about mappings")
+    logger.info(f"[{AGENT_NAME}] THINK: Reasoning about mappings (NEXO MIND)")
 
     try:
-        # Query LearningAgent for prior knowledge via A2A
-        prior_response = await a2a_client.invoke_agent("learning", {
-            "action": "retrieve_prior_knowledge",
-            "file_analysis": file_analysis,
-        }, session_id)
+        # ═══════════════════════════════════════════════════════════════════
+        # NEXO MIND: Query memory DIRECTLY (no A2A to LearningAgent)
+        # ═══════════════════════════════════════════════════════════════════
+        memory = get_memory_manager(actor_id=user_id or "system")
 
+        # Extract column names for memory query
+        columns = file_analysis.get("columns", [])
+        column_names = [c.get("name", "") for c in columns if c.get("name")]
+
+        # OBSERVE: Search for prior patterns matching these columns
         prior_knowledge = {}
-        if prior_response.success:
-            import json
-            try:
-                prior_knowledge = json.loads(prior_response.response)
-            except json.JSONDecodeError:
-                pass
+        if column_names:
+            query = f"column mapping patterns for: {', '.join(column_names[:10])}"
+            logger.info(f"[{AGENT_NAME}] OBSERVE: Querying memory: {query[:100]}...")
+
+            # Query facts (human-confirmed patterns) and global patterns
+            memories = await memory.observe(
+                query=query,
+                limit=15,
+                include_facts=True,
+                include_episodes=False,  # Episodes are less relevant for mappings
+                include_global=True,     # Global patterns from all users
+            )
+
+            # Convert memories to prior_knowledge format
+            for mem in memories:
+                content = mem.get("content", "")
+                metadata = mem.get("metadata", {})
+                category = metadata.get("category", "")
+
+                if category == "column_mapping" and "→" in content:
+                    # Parse "Column 'X' → field 'Y'" patterns
+                    try:
+                        parts = content.split("→")
+                        source = parts[0].strip().strip("'\"").replace("Column ", "").strip()
+                        target = parts[1].strip().strip("'\"").replace("field ", "").strip()
+                        confidence = metadata.get("confidence_level", 0.8)
+
+                        prior_knowledge[source] = {
+                            "field": target,
+                            "confidence": confidence,
+                            "origin": mem.get("type", "fact"),
+                        }
+                    except (IndexError, ValueError):
+                        pass
+
+            logger.info(f"[{AGENT_NAME}] OBSERVE: Found {len(prior_knowledge)} prior patterns")
 
         # Import tool implementation
         from agents.nexo_import.tools.reason_mappings import reason_mappings_impl
@@ -405,6 +522,8 @@ async def execute_import(
 
     ACT phase: Delegate to EstoqueControlAgent for movement creation.
 
+    NEXO MIND: Uses AgentMemoryManager directly (no A2A to LearningAgent).
+
     Args:
         s3_key: S3 key of file to import
         column_mappings: Validated column mappings
@@ -415,7 +534,7 @@ async def execute_import(
     Returns:
         Import result with row counts
     """
-    logger.info(f"[{AGENT_NAME}] ACT: Executing import to {target_table}")
+    logger.info(f"[{AGENT_NAME}] ACT: Executing import to {target_table} (NEXO MIND)")
 
     try:
         # Delegate to ImportAgent for actual import execution
@@ -433,17 +552,48 @@ async def execute_import(
         import json
         result = json.loads(import_response.response)
 
-        # LEARN: Store successful pattern via LearningAgent
+        # ═══════════════════════════════════════════════════════════════════
+        # NEXO MIND LEARN: Store successful patterns DIRECTLY (no A2A)
+        # ═══════════════════════════════════════════════════════════════════
         if result.get("success") and result.get("rows_imported", 0) > 0:
-            await a2a_client.invoke_agent("learning", {
-                "action": "store_pattern",
-                "pattern_type": "column_mapping",
-                "column_mappings": column_mappings,
-                "target_table": target_table,
-                "success": True,
-            }, session_id)
+            memory = get_memory_manager(actor_id=user_id or "system")
 
-        # Log to ObservationAgent
+            # Store each column mapping as a FACT (human-confirmed via HIL)
+            for source_col, target_field in column_mappings.items():
+                fact = f"Column '{source_col}' → field '{target_field}'"
+                logger.info(f"[{AGENT_NAME}] LEARN: Storing fact: {fact}")
+
+                await memory.learn_fact(
+                    fact=fact,
+                    category="column_mapping",
+                    emotional_weight=0.85,  # High weight (HIL confirmed)
+                    confidence=0.9,         # High confidence (successful import)
+                    session_id=session_id,
+                    use_global=True,        # Share across all users/sessions
+                    target_table=target_table,
+                    rows_imported=result.get("rows_imported", 0),
+                )
+
+            # Store episode for complete import cycle
+            episode = (
+                f"Import successful: {result.get('rows_imported', 0)} rows to {target_table}. "
+                f"Mappings: {len(column_mappings)} columns. File: {s3_key}"
+            )
+            await memory.learn_episode(
+                episode_content=episode,
+                category="import_completed",
+                outcome="success",
+                emotional_weight=0.7,
+                session_id=session_id,
+                s3_key=s3_key,
+                mappings_count=len(column_mappings),
+            )
+
+            logger.info(
+                f"[{AGENT_NAME}] LEARN: Stored {len(column_mappings)} facts + 1 episode"
+            )
+
+        # Log to ObservationAgent (still via A2A - this is audit, not memory)
         await a2a_client.invoke_agent("observation", {
             "action": "log_event",
             "event_type": "IMPORT_COMPLETED",

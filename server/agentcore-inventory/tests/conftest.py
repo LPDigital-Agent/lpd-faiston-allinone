@@ -4,6 +4,57 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime, timedelta
 
 
+# =============================================================================
+# X-Ray Tracer Mock (auto-use to prevent failures in test environment)
+# =============================================================================
+
+@pytest.fixture(autouse=True)
+def mock_xray_tracer():
+    """
+    Mock X-Ray tracer to prevent failures when SDK is installed but no segment exists.
+
+    The X-Ray decorators (@trace_memory_operation, @trace_tool_call) fail in tests
+    because there's no active X-Ray segment. This fixture mocks the module-level
+    recorder to use NoOp implementations.
+    """
+    class MockSubsegment:
+        def put_annotation(self, key, value):
+            pass
+
+        def put_metadata(self, key, value, namespace="default"):
+            pass
+
+        def add_exception(self, exception, stack=None):
+            pass
+
+    class MockContext:
+        def __enter__(self):
+            return MockSubsegment()
+
+        def __exit__(self, *args):
+            pass
+
+    class MockRecorder:
+        def in_subsegment(self, name):
+            return MockContext()
+
+        def begin_subsegment(self, name):
+            return MockSubsegment()
+
+        def end_subsegment(self):
+            pass
+
+        def put_annotation(self, key, value):
+            pass
+
+        def put_metadata(self, key, value, namespace="default"):
+            pass
+
+    # Patch the xray_tracer module to use our mock recorder
+    with patch("shared.xray_tracer._get_xray_recorder", return_value=MockRecorder()):
+        yield
+
+
 @pytest.fixture
 def mock_dynamodb_client():
     """Mock DynamoDB client for testing."""
