@@ -234,13 +234,21 @@ async def get_quotes(
         # Import tool implementation
         from agents.carrier.tools.quotes import get_quotes_tool
 
+        # Map service_type to urgency parameter expected by get_quotes_tool
+        urgency_map = {
+            "same_day": "URGENT",
+            "express": "HIGH",
+            "standard": "NORMAL",
+        }
+        urgency = urgency_map.get(service_type, "NORMAL")
+
         result = await get_quotes_tool(
             origin_cep=origin_cep,
             destination_cep=destination_cep,
             weight_kg=weight_kg,
-            dimensions=dimensions,
-            declared_value=declared_value,
-            service_type=service_type,
+            dimensions=dimensions or {"length": 30, "width": 20, "height": 10},
+            value=declared_value or 0.0,
+            urgency=urgency,
             session_id=session_id,
         )
 
