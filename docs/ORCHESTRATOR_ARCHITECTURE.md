@@ -186,30 +186,55 @@ The LLM (Gemini Flash) reads the system prompt and decides which specialist to i
 
 ---
 
-## Backward Compatibility
+## Routing Architecture (ADR-002 Compliant)
 
-For existing frontend code that uses direct action names, a mapping table provides backward compatibility:
+> **Updated:** 2026-01-14 (ADR-002 Phase 2 + BUG-017 Fix)
 
-```python
-ACTION_TO_SPECIALIST = {
-    # EstoqueControl
-    "where_is_serial": ("estoque_control", "query_asset_location"),
-    "get_balance": ("estoque_control", "query_balance"),
-    "create_reservation": ("estoque_control", "create_reservation"),
+Per ADR-002, the old `ACTION_TO_SPECIALIST` mapping was **removed** (breaking change). The new routing architecture maintains **100% Agentic AI** for business logic:
 
-    # Intake
-    "process_nf_upload": ("intake", "process_nf"),
-    "process_image_ocr": ("intake", "parse_nf_image"),
+### Routing Decision Tree
 
-    # NexoImport
-    "nexo_analyze_file": ("nexo_import", "analyze_file"),
-    "nexo_submit_answers": ("nexo_import", "submit_answers"),
-
-    # ... 40+ more mappings
-}
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ROUTING DECISION TREE                                │
+│                                                                             │
+│   Request (action or prompt)                                                │
+│            │                                                                │
+│            ├── action == "health_check" ?                                   │
+│            │        │                                                       │
+│            │        YES → Mode 1: Direct health response                    │
+│            │                                                                │
+│            ├── action in SWARM_ACTIONS ?                                    │
+│            │        │                                                       │
+│            │        YES → Mode 2: Autonomous 5-agent Swarm                  │
+│            │                                                                │
+│            ├── action in INFRASTRUCTURE_ACTIONS ?                           │
+│            │        │                                                       │
+│            │        YES → Mode 2.5: Deterministic routing (S3 only)         │
+│            │                                                                │
+│            └── else                                                         │
+│                     │                                                       │
+│                     └── Mode 3: LLM-based routing (100% Agentic)            │
+│                          - Natural language → Gemini reasoning              │
+│                          - Business data → Gemini → A2A → MCP → DB          │
+│                          - Unknown actions → Gemini decides specialist      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-When `payload.action` is provided, the orchestrator bypasses LLM routing and directly invokes the mapped specialist.
+### What Goes Where
+
+| Category | Mode | LLM Used? | Example |
+|----------|------|-----------|---------|
+| Health Check | 1 | ❌ No | `{"action": "health_check"}` |
+| NEXO Import | 2 | ❌ (Swarm) | `{"action": "nexo_analyze_file", ...}` |
+| S3 URLs | 2.5 | ❌ No | `{"action": "get_nf_upload_url", ...}` |
+| Business Data | 3 | ✅ Yes | `{"prompt": "Get balance for C9200-24P"}` |
+| Natural Language | 3 | ✅ Yes | `{"prompt": "Where is serial TSP001?"}` |
+
+### Why Mode 2.5 Exists
+
+BUG-017 (2026-01-14): The ADR-002 migration removed `ACTION_TO_SPECIALIST` which broke S3 upload URLs. Mode 2.5 restores **deterministic routing for infrastructure operations only**, while preserving the 100% Agentic AI principle for all business logic.
 
 ---
 
@@ -223,7 +248,7 @@ When `payload.action` is provided, the orchestrator bypasses LLM routing and dir
 
 Returns system status, version, deployed commit, and available specialists.
 
-### Mode 2: Direct Action (Backward Compatibility)
+### Mode 2: Swarm Routing (NEXO Imports)
 
 ```json
 {
@@ -233,7 +258,33 @@ Returns system status, version, deployed commit, and available specialists.
 }
 ```
 
-Uses `ACTION_TO_SPECIALIST` mapping to route directly.
+Actions in `SWARM_ACTIONS` (nexo_*) are routed to the autonomous 5-agent Swarm for intelligent file import processing.
+
+### Mode 2.5: Infrastructure Actions (Deterministic Routing)
+
+> **Added:** 2026-01-14 (BUG-017 Fix)
+
+```json
+{
+  "action": "get_nf_upload_url",
+  "filename": "inventory.csv",
+  "content_type": "text/csv"
+}
+```
+
+**IMPORTANT:** This mode is ONLY for pure infrastructure operations (S3 presigned URLs, etc.) that:
+- Do NOT require LLM reasoning
+- Do NOT involve business data
+- ARE pure technical operations
+
+```python
+INFRASTRUCTURE_ACTIONS = {
+    "get_nf_upload_url": ("intake", "get_upload_url"),
+    "get_presigned_download_url": ("intake", "get_download_url"),
+}
+```
+
+**100% Agentic AI Principle:** ALL business data queries (query_balance, query_asset_location, etc.) MUST go through Mode 3 (LLM routing). Only pure infrastructure operations can use Mode 2.5.
 
 ### Mode 3: Natural Language (LLM Routing)
 
@@ -245,6 +296,11 @@ Uses `ACTION_TO_SPECIALIST` mapping to route directly.
 ```
 
 The Strands Agent (Gemini) interprets intent and calls `invoke_specialist`.
+
+**This mode handles:**
+- Natural language requests
+- Business data queries (query_balance, query_asset_location)
+- All operations NOT in SWARM_ACTIONS or INFRASTRUCTURE_ACTIONS
 
 ---
 

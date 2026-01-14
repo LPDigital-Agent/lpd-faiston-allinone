@@ -15,9 +15,10 @@
 # - No hardcoded ACTION_TO_SPECIALIST mapping (breaking change per ADR-002)
 #
 # MODES:
-# 1. Natural Language → LLM-based routing to specialists
+# 1. Health Check → System status
 # 2. Swarm (nexo_*) → Autonomous 5-agent Swarm for imports
-# 3. Health Check → System status
+# 2.5. Infrastructure → Deterministic routing for pure infra ops (S3 URLs)
+# 3. LLM-based Routing → Natural language + business data queries (100% Agentic)
 #
 # Reference:
 # - https://strandsagents.com/latest/
@@ -116,6 +117,23 @@ SWARM_ACTIONS = {
     "nexo_prepare_processing",
     "nexo_get_prior_knowledge",
     "nexo_get_adaptive_threshold",
+}
+
+# =============================================================================
+# Infrastructure Actions (Deterministic Routing - No LLM Needed)
+# =============================================================================
+#
+# IMPORTANT: Only INFRASTRUCTURE operations go here!
+# ALL business data queries MUST use LLM → A2A → MCP Gateway → DB
+# This maintains the 100% Agentic AI principle for business logic.
+#
+# Infrastructure ops are pure technical operations (S3 URLs, health checks)
+# that don't require LLM reasoning but DO need specialist agent execution.
+#
+INFRASTRUCTURE_ACTIONS = {
+    # S3 presigned URLs (pure infrastructure, no business logic)
+    "get_nf_upload_url": ("intake", "get_upload_url"),
+    "get_presigned_download_url": ("intake", "get_download_url"),
 }
 
 # Lazy-loaded Swarm instance
@@ -664,15 +682,20 @@ def invoke(payload: dict, context) -> dict:
     """
     Main entrypoint for AgentCore Runtime.
 
-    Routing:
+    Routing Modes:
     1. Health check → Direct response
     2. NEXO Swarm actions → Autonomous 5-agent Swarm
-    3. Natural language or action → LLM-based routing
+    2.5. Infrastructure actions → Deterministic routing for pure infra (S3 URLs)
+    3. Natural language or action → LLM-based routing (100% Agentic)
+
+    IMPORTANT: Business data queries (query_balance, query_asset_location, etc.)
+    MUST go through Mode 3 (LLM) to maintain 100% Agentic AI principle.
+    Only pure infrastructure ops (S3 URLs) bypass LLM via Mode 2.5.
 
     Args:
         payload: Request with either:
             - prompt: Natural language request
-            - action: Direct action name (for Swarm)
+            - action: Direct action name (for Swarm/Infrastructure)
         context: AgentCore context with session_id, identity
 
     Returns:
@@ -711,6 +734,22 @@ def invoke(payload: dict, context) -> dict:
                     payload=payload,
                     user_id=user_id,
                     session_id=session_id,
+                )
+            )
+
+        # Mode 2.5: Infrastructure Actions (bypass LLM for pure infrastructure)
+        # NOTE: Only S3/infrastructure ops - business data MUST go through LLM
+        # This preserves the 100% Agentic AI principle for all business logic.
+        if action and action in INFRASTRUCTURE_ACTIONS:
+            agent_id, target_action = INFRASTRUCTURE_ACTIONS[action]
+            logger.info(f"[Orchestrator] Infrastructure routing: {action} → {agent_id}.{target_action}")
+            return asyncio.run(
+                _invoke_agent_via_a2a(
+                    agent_id=agent_id,
+                    action=target_action,
+                    payload=payload,
+                    session_id=session_id,
+                    user_id=user_id,
                 )
             )
 

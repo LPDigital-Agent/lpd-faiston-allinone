@@ -4,6 +4,33 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-14 (Session 3) - BUG-017 FIX
+
+**Bug:** NEXO Smart Import upload URL failure ("Falha ao obter URL de upload")
+
+**Root Cause:** ADR-002 migration removed `ACTION_TO_SPECIALIST` mapping which broke deterministic routing for `get_nf_upload_url` action.
+
+**Solution Implemented:**
+- Added `INFRASTRUCTURE_ACTIONS` mapping for S3 presigned URL operations ONLY
+- Added Mode 2.5 routing in orchestrator's `invoke()` entrypoint
+- **100% Agentic AI preserved:** Business data queries still use LLM → A2A → MCP → DB
+
+**Key Principle:** Only pure infrastructure operations (S3 URLs) can bypass LLM. ALL business data queries MUST go through LLM reasoning to maintain Agentic AI architecture.
+
+**Files Modified:**
+- `server/agentcore-inventory/agents/orchestrators/estoque/main.py` - Added INFRASTRUCTURE_ACTIONS + Mode 2.5
+- `docs/ORCHESTRATOR_ARCHITECTURE.md` - Documented Mode 2.5 routing
+
+**Routing Modes (Final):**
+1. Mode 1: Health Check (direct)
+2. Mode 2: Swarm (NEXO imports)
+3. Mode 2.5: Infrastructure (S3 URLs only) ← NEW
+4. Mode 3: LLM-based (business data + natural language)
+
+**Status:** Code complete, pending deployment via GitHub Actions
+
+---
+
 ## 2026-01-14 (Session 1) - MAJOR REFACTORING
 
 **User asked:** Transform main.py from 4,426-line monolith to Strands Orchestrator Agent
@@ -2124,6 +2151,30 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-14 21:54:15 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 22:15:53 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 22:29:51 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 22:40:01 UTC
 
 **User:** (no user message captured)
 
