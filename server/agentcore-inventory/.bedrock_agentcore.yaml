@@ -96,7 +96,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_nexo_import:
     name: faiston_sga_nexo_import
-    entrypoint: agents/nexo_import/main.py
+    entrypoint: agents/specialists/nexo_import/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -154,7 +154,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_learning:
     name: faiston_sga_learning
-    entrypoint: agents/learning/main.py
+    entrypoint: agents/specialists/learning/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -212,7 +212,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_validation:
     name: faiston_sga_validation
-    entrypoint: agents/validation/main.py
+    entrypoint: agents/specialists/validation/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -270,7 +270,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_schema_evolution:
     name: faiston_sga_schema_evolution
-    entrypoint: agents/schema_evolution/main.py
+    entrypoint: agents/specialists/schema_evolution/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -328,7 +328,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_intake:
     name: faiston_sga_intake
-    entrypoint: agents/intake/main.py
+    entrypoint: agents/specialists/intake/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -386,7 +386,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_import:
     name: faiston_sga_import
-    entrypoint: agents/data_import/main.py
+    entrypoint: agents/specialists/data_import/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -444,7 +444,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_estoque_control:
     name: faiston_sga_estoque_control
-    entrypoint: agents/estoque_control/main.py
+    entrypoint: agents/specialists/estoque_control/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -502,7 +502,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_compliance:
     name: faiston_sga_compliance
-    entrypoint: agents/compliance/main.py
+    entrypoint: agents/specialists/compliance/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -560,7 +560,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_reconciliacao:
     name: faiston_sga_reconciliacao
-    entrypoint: agents/reconciliacao/main.py
+    entrypoint: agents/specialists/reconciliacao/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -618,7 +618,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_expedition:
     name: faiston_sga_expedition
-    entrypoint: agents/expedition/main.py
+    entrypoint: agents/specialists/expedition/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -676,7 +676,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_carrier:
     name: faiston_sga_carrier
-    entrypoint: agents/carrier/main.py
+    entrypoint: agents/specialists/carrier/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -734,7 +734,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_reverse:
     name: faiston_sga_reverse
-    entrypoint: agents/reverse/main.py
+    entrypoint: agents/specialists/reverse/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -792,7 +792,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_observation:
     name: faiston_sga_observation
-    entrypoint: agents/observation/main.py
+    entrypoint: agents/specialists/observation/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
@@ -850,7 +850,7 @@ agents:
     is_generated_by_agentcore_create: false
   faiston_sga_equipment_research:
     name: faiston_sga_equipment_research
-    entrypoint: agents/equipment_research/main.py
+    entrypoint: agents/specialists/equipment_research/main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
     platform: linux/arm64
