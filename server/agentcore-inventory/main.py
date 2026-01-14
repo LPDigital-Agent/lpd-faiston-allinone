@@ -563,11 +563,21 @@ async def _invoke_specialist_internal(
         f"user_id={user_id}, session_id={session_id}, request_id={request_id}"
     )
 
+    # BUG-013 FIX: Remove 'action' from payload to prevent overwriting mapped action
+    # Python dict spread (**payload) would overwrite 'action' if payload contains it
+    original_action = payload.get("action")
+    payload_without_action = {k: v for k, v in payload.items() if k != "action"}
+
+    if original_action and original_action != action:
+        logger.info(
+            f"[Orchestrator] Action mapped: original={original_action} → mapped={action}"
+        )
+
     # Build A2A payload with context
     a2a_payload = {
-        "action": action,
+        "action": action,  # Use the mapped action (e.g., "get_upload_url")
         "user_id": user_id,  # Propagate user context to specialist
-        **payload,
+        **payload_without_action,
     }
 
     # Add debug context if enabled
