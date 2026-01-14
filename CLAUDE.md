@@ -146,6 +146,24 @@ To be used on web research we are in year 2026.
 
 ---
 
+## 🌐 AGENT PROMPTS LANGUAGE — IMMUTABLE & MANDATORY
+
+- **ALL agent system prompts, instructions, and tool descriptions MUST be written in ENGLISH.**
+- Portuguese (or any other language) is **FORBIDDEN** in:
+  - System prompts (`SYSTEM_PROMPT`)
+  - Tool docstrings (`@tool` decorated functions)
+  - Agent descriptions (`AGENT_DESCRIPTION`)
+  - Skill definitions (`AgentSkill`)
+- **WHY:** LLMs are primarily trained on English data. English prompts provide:
+  - Better instruction following
+  - More consistent behavior
+  - Reduced token usage (no translation overhead)
+  - Easier debugging and maintenance
+- User-facing messages (UI labels, error messages displayed to users) MAY be in Portuguese (pt-BR) for UX.
+- **ENFORCEMENT:** Any agent prompt found in Portuguese MUST be migrated to English immediately.
+
+---
+
 ## 🤖 NEXO AGENT — AGI-LIKE BEHAVIOR (IMMUTABLE & MEGA MANDATORY)
 
 > **DETAILED ARCHITECTURE**: See `docs/SMART_IMPORT_ARCHITECTURE.md` for complete flow diagrams, runtime IDs, and code locations.

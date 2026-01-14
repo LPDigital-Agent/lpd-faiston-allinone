@@ -668,6 +668,17 @@ class A2AClient:
         Returns:
             Parsed A2AResponse
         """
+        # DEBUG: Log raw response structure for troubleshooting empty responses
+        result_preview = response.get("result", {})
+        message_preview = result_preview.get("message", {})
+        parts_preview = message_preview.get("parts", [])
+        logger.debug(
+            f"[A2A-PARSE] agent={agent_id} | "
+            f"result_keys={list(result_preview.keys())} | "
+            f"message_keys={list(message_preview.keys())} | "
+            f"parts_count={len(parts_preview)}"
+        )
+
         # Check for JSON-RPC error
         if "error" in response:
             return A2AResponse(
@@ -704,6 +715,23 @@ class A2AClient:
                         f"[A2A] Response from {agent_id} contains braces but JSON extraction failed. "
                         f"Preview: {response_text[:200]}..."
                     )
+
+        # FALLBACK: If no text parts found, check for tool_results in raw response
+        # This handles edge cases where Strands returns tool results directly
+        if not response_text:
+            tool_results = result.get("tool_results", [])
+            if tool_results:
+                # Use last tool result as response
+                response_text = json.dumps(tool_results[-1])
+                logger.info(f"[A2A] Using tool_result as response for {agent_id}")
+            else:
+                # Log warning for debugging empty responses
+                logger.warning(
+                    f"[A2A] Empty response from {agent_id}. "
+                    f"result_keys={list(result.keys())}, "
+                    f"message_keys={list(message.keys())}, "
+                    f"parts_count={len(parts)}"
+                )
 
         return A2AResponse(
             success=True,
