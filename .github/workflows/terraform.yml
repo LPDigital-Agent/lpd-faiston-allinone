@@ -76,6 +76,30 @@ jobs:
         id: init
         run: terraform init
 
+      # =========================================================================
+      # One-time State Cleanup: Remove Orphaned Resources
+      # =========================================================================
+      # Background: Commit 32f4caf renamed agent key from "import" → "data_import"
+      # The old key remains in state as an orphaned instance. AWS won't allow
+      # deleting DEFAULT endpoints directly, so we must remove it from state.
+      #
+      # This step uses "|| true" to ignore errors if the resource doesn't exist.
+      # Once cleanup is complete, this step becomes a no-op.
+      # =========================================================================
+      - name: Cleanup Orphaned State Entries
+        id: state_cleanup
+        run: |
+          echo "🧹 Checking for orphaned state entries..."
+
+          # Remove orphaned AgentCore endpoint (renamed from "import" to "data_import")
+          if terraform state list 2>/dev/null | grep -q 'sga_agents\["import"\]'; then
+            echo "Found orphaned sga_agents[\"import\"] - removing from state..."
+            terraform state rm 'aws_bedrockagentcore_agent_runtime_endpoint.sga_agents["import"]' || true
+          else
+            echo "No orphaned sga_agents[\"import\"] found in state."
+          fi
+        continue-on-error: true
+
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
