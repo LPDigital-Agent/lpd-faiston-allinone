@@ -709,8 +709,8 @@ agents:
         idle_runtime_session_timeout: 300
         max_lifetime: 3600
     bedrock_agentcore:
-      agent_id: null
-      agent_arn: null
+      agent_id: faiston_sga_carrier-fVOntdCJaZ
+      agent_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_sga_carrier-fVOntdCJaZ
       agent_session_id: null
     codebuild:
       project_name: null
