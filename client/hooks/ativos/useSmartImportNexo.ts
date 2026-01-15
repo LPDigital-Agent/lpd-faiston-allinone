@@ -411,15 +411,23 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       // We need the inner response where analysis.sheets actually lives
       const data = extractAgentResponse<NexoAnalyzeFileResponse>(analysisResult.data);
 
+      // BUG-020 v5 FIX: Early validation (fail-fast with user-friendly message)
+      // This prevents crashes when backend returns response without analysis key
+      if (!data?.analysis?.sheets) {
+        console.error('[NEXO] BUG-020 v5: Backend response missing analysis.sheets:', data);
+        throw new Error('Erro ao analisar arquivo: resposta incompleta do servidor');
+      }
+
       // Build analysis result
+      // BUG-020 v5: Add optional chaining for defense in depth
       const analysis: NexoAnalysisResult = {
         sessionId: data.import_session_id,
         filename: data.filename,
         detectedType: data.detected_file_type,
-        sheets: data.analysis.sheets,
+        sheets: data?.analysis?.sheets ?? [],
         columnMappings: data.column_mappings,
         overallConfidence: data.overall_confidence,
-        recommendedStrategy: data.analysis.recommended_strategy,
+        recommendedStrategy: data?.analysis?.recommended_strategy ?? 'manual_review',
         reasoningTrace: data.reasoning_trace,
       };
 
@@ -431,12 +439,13 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         filename: data.filename,
         s3_key: uploadUrlData.s3_key,
         stage: data.questions && data.questions.length > 0 ? 'questioning' : 'processing',
+        // BUG-020 v5: Optional chaining for defense in depth
         file_analysis: {
-          sheets: data.analysis.sheets,
-          sheet_count: data.analysis.sheet_count,
-          total_rows: data.analysis.total_rows,
+          sheets: data?.analysis?.sheets ?? [],
+          sheet_count: data?.analysis?.sheet_count ?? 0,
+          total_rows: data?.analysis?.total_rows ?? 0,
           detected_type: data.detected_file_type,
-          recommended_strategy: data.analysis.recommended_strategy,
+          recommended_strategy: data?.analysis?.recommended_strategy ?? 'manual_review',
         },
         reasoning_trace: data.reasoning_trace,
         questions: data.questions,

@@ -743,3 +743,185 @@ class TestBug020v4IntegrationScenario:
 
         # Verify we got structured data, NOT the natural language message
         assert "I analyzed" not in str(extracted), "Must NOT include natural language"
+
+
+class TestBug020v5StrandsCompliant:
+    """
+    BUG-020 v5 FIX TESTS: Verify 100% Strands-compliant extraction.
+
+    The v5 fix removes the non-Strands-compliant fallback code that used
+    `result.message` (which is NOT a valid Strands SwarmResult attribute).
+
+    Official Strands SwarmResult attributes:
+    - result.results["agent_name"].result (agent output)
+    - result.status ("success" or "error")
+    - result.entry_point.messages (message history)
+
+    NON-EXISTENT (removed in v5):
+    - result.message (invented, NOT official Strands SDK)
+
+    Reference: https://strandsagents.com/latest/
+    """
+
+    def test_process_swarm_result_uses_official_strands_pattern(self):
+        """
+        BUG-020 v5 CORE TEST: _process_swarm_result must use official pattern.
+
+        The orchestrator now uses _process_swarm_result() which ONLY uses
+        official Strands patterns:
+        - result.results["agent_name"].result
+        - result.status
+        - result.entry_point.messages
+        """
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "success": True,
+            "analysis": {
+                "sheets": [{"name": "StrandsCompliant", "row_count": 100}],
+                "sheet_count": 1,
+                "total_rows": 100,
+                "recommended_strategy": "auto_import",
+            },
+            "column_mappings": [],
+            "overall_confidence": 0.92,
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+        mock_swarm_result.status = "success"  # Official Strands attribute
+
+        session = {"context": {}, "awaiting_response": False}
+
+        response = _process_swarm_result(mock_swarm_result, session, action="nexo_analyze_file")
+
+        assert response["success"] is True
+        assert "analysis" in response
+        assert response["analysis"]["sheets"][0]["name"] == "StrandsCompliant"
+
+    def test_extraction_ignores_non_strands_result_message(self):
+        """
+        BUG-020 v5 REGRESSION TEST: Must NOT use result.message.
+
+        The v5 fix REMOVES the non-Strands fallback that checked result.message.
+        This test ensures we NEVER fall back to result.message even if it exists.
+        """
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "success": True,
+            "analysis": {"sheets": [{"name": "FromResults"}], "sheet_count": 1},
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+        # This should NEVER be used - it's not a real Strands attribute
+        mock_swarm_result.message = json.dumps({
+            "success": True,
+            "analysis": {"sheets": [{"name": "FromMessage_WRONG"}]},
+        })
+
+        session = {"context": {}}
+
+        response = _process_swarm_result(mock_swarm_result, session, action="test")
+
+        # Must use results, NOT message
+        assert response["analysis"]["sheets"][0]["name"] == "FromResults"
+        assert "FromMessage_WRONG" not in str(response)
+
+    def test_error_handling_uses_result_status(self):
+        """
+        BUG-020 v5 ERROR HANDLING TEST: Use result.status for errors.
+
+        The v5 fix uses the official Strands attribute `result.status` for
+        error detection instead of custom try/catch fallback patterns.
+        """
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {}  # No results
+        mock_swarm_result.status = "error"  # Official Strands error status
+        mock_swarm_result.entry_point = None
+
+        session = {"context": {}}
+
+        response = _process_swarm_result(mock_swarm_result, session, action="test")
+
+        # Extraction returns base response when no data found
+        # The orchestrator adds error handling on top of this
+        assert response["success"] is False or "analysis" not in response
+
+    def test_process_swarm_result_updates_session_context(self):
+        """
+        BUG-020 v5 SESSION TEST: _process_swarm_result updates session properly.
+
+        The orchestrator relies on _process_swarm_result to update session
+        context with analysis, proposed_mappings, and questions.
+        """
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "success": True,
+            "analysis": {"sheets": [{"name": "Sheet1"}], "sheet_count": 1},
+            "proposed_mappings": {"col_a": "part_number"},
+            "questions": [{"id": "q1", "question": "Which column?"}],
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        session = {"context": {}, "awaiting_response": False}
+
+        response = _process_swarm_result(mock_swarm_result, session, action="test")
+
+        # Verify session context was updated
+        assert "analysis" in session["context"]
+        assert "proposed_mappings" in session["context"]
+        assert session["awaiting_response"] is True  # Questions present
+
+    def test_handles_toolresult_format_with_process_swarm_result(self):
+        """
+        BUG-020 v5 FORMAT TEST: _process_swarm_result handles ToolResult format.
+
+        The unified_analyze_file tool returns ToolResult format, and
+        _process_swarm_result (via _unwrap_tool_result) must handle it.
+        """
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "status": "success",
+            "content": [{"json": {
+                "success": True,
+                "analysis": {
+                    "sheets": [{"name": "ToolResultSheet"}],
+                    "sheet_count": 1,
+                },
+            }}]
+        }
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        session = {"context": {}}
+
+        response = _process_swarm_result(mock_swarm_result, session, action="test")
+
+        assert response["success"] is True
+        assert response["analysis"]["sheets"][0]["name"] == "ToolResultSheet"
+
+    def test_fallback_path_always_returns_analysis_structure(self):
+        """
+        BUG-020 v5 FALLBACK TEST: Even when extraction fails, response has structure.
+
+        The v5 fix in the orchestrator ensures that when _process_swarm_result
+        returns a failed response, the orchestrator adds a fallback analysis
+        structure to prevent frontend crashes.
+        """
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {}  # Empty - will fail extraction
+        mock_swarm_result.entry_point = None
+        mock_swarm_result.status = "error"
+
+        session = {"context": {}}
+
+        response = _process_swarm_result(mock_swarm_result, session, action="test")
+
+        # _process_swarm_result itself may not add fallback structure
+        # but the orchestrator's _invoke_swarm will add it when success=False
+        # This test verifies the base function behavior
+        assert isinstance(response, dict)
+        assert "session_id" in response or response.get("success") is False

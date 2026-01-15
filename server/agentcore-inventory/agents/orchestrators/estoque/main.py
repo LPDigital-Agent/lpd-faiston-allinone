@@ -49,7 +49,11 @@ from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.guardrails_hook import GuardrailsHook
 
 # Swarm response extraction (BUG-020)
-from swarm.response_utils import _extract_tool_output_from_swarm_result
+# BUG-020 v5: Use _process_swarm_result() for 100% Strands-compliant extraction
+from swarm.response_utils import (
+    _extract_tool_output_from_swarm_result,
+    _process_swarm_result,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -684,39 +688,58 @@ async def _invoke_swarm(
             bool(getattr(result, "message", None)),
         )
 
-        # Extract response from Swarm result using official Strands pattern
-        # BUG-020: result.results["agent"].result is the correct path, NOT result.message
-        response = {}
-
-        extracted = _extract_tool_output_from_swarm_result(
+        # =====================================================================
+        # BUG-020 v5 FIX: 100% Strands-Compliant Response Extraction
+        # =====================================================================
+        # Uses _process_swarm_result() which contains ALL v4 fixes and uses
+        # ONLY official Strands patterns:
+        # - result.results["agent_name"].result (official)
+        # - result.status (official)
+        # - result.entry_point.messages (fallback for tool_result blocks)
+        #
+        # REMOVED: result.message fallback (NOT a valid Strands attribute!)
+        # =====================================================================
+        response = _process_swarm_result(
             swarm_result=result,
-            agent_name="file_analyst",  # Primary analysis agent in Swarm
-            tool_name="unified_analyze_file",
+            session=session,
+            action="nexo_analyze_file"
         )
 
-        if extracted:
-            response = extracted
-            logger.debug("[Swarm] Extracted structured response from agent result")
-        elif hasattr(result, "message") and result.message:
-            # Fallback to message extraction (for natural language responses)
-            try:
-                # Handle both dict (already parsed) and string (needs parsing)
-                if isinstance(result.message, dict):
-                    response = result.message
-                    logger.debug("[Swarm] result.message already dict, using directly")
-                else:
-                    # Strip markdown code blocks before parsing (LLM may wrap JSON)
-                    clean_message = extract_json(result.message)
-                    response = json.loads(clean_message)
-                    logger.debug("[Swarm] Parsed JSON from result.message (markdown stripped)")
-            except (json.JSONDecodeError, TypeError):
-                response["message"] = result.message
-                logger.debug("[Swarm] Stored raw message as fallback")
+        logger.debug(
+            "[Swarm] Processed response: success=%s, has_analysis=%s",
+            response.get("success"),
+            "analysis" in response,
+        )
 
-        # Check for HIL pause
-        if response.get("stop_action"):
+        # Strands-compliant error handling using result.status (official attribute)
+        if not response.get("success") or getattr(result, "status", None) == "error":
+            logger.warning(
+                "[Swarm] Extraction failed or error status, status=%s",
+                getattr(result, "status", "unknown"),
+            )
+            # Return structured error with HIL question (agentic behavior, not try/catch)
+            return {
+                "success": False,
+                "session_id": session_id,
+                "round": session["round_count"],
+                "error": "Swarm extraction failed",
+                "questions": [{
+                    "id": "swarm_extraction_error",
+                    "question": "Não foi possível processar o arquivo. Por favor, tente novamente.",
+                    "type": "error"
+                }],
+                "analysis": {
+                    "sheets": [],
+                    "sheet_count": 0,
+                    "total_rows": 0,
+                    "recommended_strategy": "manual_review"
+                }
+            }
+
+        # Check for HIL pause (from _process_swarm_result context update)
+        if response.get("stop_action") or session.get("awaiting_response"):
             session["awaiting_response"] = True
-            session["questions"] = response.get("hil_questions", [])
+            session["questions"] = response.get("questions", [])
 
         # Check approval status
         if response.get("approval_status") is not None:
@@ -726,12 +749,11 @@ async def _invoke_swarm(
         if response.get("import_id"):
             session["import_id"] = response["import_id"]
 
-        return {
-            "success": True,
-            "session_id": session_id,
-            "round": session["round_count"],
-            **response,
-        }
+        # Add session metadata to the processed response
+        response["session_id"] = session_id
+        response["round"] = session["round_count"]
+
+        return response
 
     except Exception as e:
         logger.exception(f"[Swarm] Error: {e}")

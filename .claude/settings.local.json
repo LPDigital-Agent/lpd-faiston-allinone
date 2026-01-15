@@ -371,7 +371,10 @@
       "Bash(python scripts/validate_agents.py:*)",
       "Bash(python:*)",
       "Bash(pytest:*)",
-      "Bash(pnpm run typecheck:*)"
+      "Bash(pnpm run typecheck:*)",
+      "mcp__plugin_serena_serena__read_file",
+      "mcp__plugin_serena_serena__activate_project",
+      "Bash(git rebase:*)"
     ],
     "deny": [],
     "ask": []
