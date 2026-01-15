@@ -21,6 +21,7 @@ from unittest.mock import Mock, MagicMock, patch, AsyncMock
 
 from swarm.response_utils import (
     _extract_tool_output_from_swarm_result,
+    _extract_from_agent_message,  # BUG-020 v8
     _process_swarm_result,
     _unwrap_tool_result,
     _extract_from_messages,
@@ -925,3 +926,275 @@ class TestBug020v5StrandsCompliant:
         # This test verifies the base function behavior
         assert isinstance(response, dict)
         assert "session_id" in response or response.get("success") is False
+
+
+class TestBug020v8AgentResultMessage:
+    """
+    BUG-020 v8 FIX TESTS: Extract from AgentResult.message attribute.
+
+    The v8 fix addresses a critical issue where v7 failed because:
+    - v7 checked for `.result` attribute on AgentResult
+    - AgentResult does NOT have nested `.result` - it has `.message`!
+
+    Official Strands AgentResult structure (SDK v1.20.0):
+    @dataclass
+    class AgentResult:
+        stop_reason: StopReason
+        message: Message          # ← Tool output is HERE
+        metrics: EventLoopMetrics
+        state: Any
+        interrupts: Sequence[Interrupt] | None = None
+        structured_output: BaseModel | None = None
+
+    CloudWatch evidence (2026-01-15 22:08):
+    "[_extract_agent] agent=file_analyst result_data is NOT a dict! type=AgentResult,
+     attrs=['from_dict', 'interrupts', 'message', 'metrics', 'state', 'stop_reason', ...]"
+
+    Reference: https://github.com/strands-agents/sdk-python/blob/v1.20.0/src/strands/agent/agent_result.py
+    """
+
+    def test_v8_extracts_from_agent_result_message_json_string(self):
+        """
+        BUG-020 v8 CORE TEST: Extract from AgentResult.message as JSON string.
+
+        CloudWatch showed the tool output is stored in message as JSON string
+        with format: {"tool_name_response": {"output": [{"json": {...}}]}}
+        """
+        # Create inner AgentResult with .message containing tool output
+        mock_inner_agent_result = Mock()
+        mock_inner_agent_result.message = json.dumps({
+            "unified_analyze_file_response": {
+                "output": [{
+                    "json": {
+                        "success": True,
+                        "analysis": {
+                            "sheets": [{"name": "FromMessage", "row_count": 100}],
+                            "sheet_count": 1,
+                        },
+                        "column_mappings": [],
+                        "overall_confidence": 0.92,
+                    }
+                }]
+            }
+        })
+        # No nested .result attribute
+        mock_inner_agent_result.result = None
+        mock_inner_agent_result.stop_reason = "end_turn"
+        mock_inner_agent_result.metrics = {}
+        mock_inner_agent_result.state = None
+
+        # Create outer agent result that contains inner AgentResult
+        mock_outer_agent_result = Mock()
+        mock_outer_agent_result.result = mock_inner_agent_result
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_outer_agent_result}
+
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=mock_swarm_result,
+            agent_name="file_analyst",
+            tool_name="unified_analyze_file",
+        )
+
+        assert extracted is not None, "v8 must extract from AgentResult.message"
+        assert "analysis" in extracted, "Must have 'analysis' key"
+        assert "sheets" in extracted["analysis"], "analysis must have 'sheets'"
+        assert extracted["analysis"]["sheets"][0]["name"] == "FromMessage"
+
+    def test_v8_extracts_from_direct_agent_result_message(self):
+        """
+        BUG-020 v8 TEST: Extract when agent_result itself has .message.
+
+        Some cases the agent_result returned by swarm.results["agent"]
+        directly has the .message attribute (not nested).
+        """
+        mock_agent_result = Mock()
+        mock_agent_result.result = None  # No nested result
+        mock_agent_result.message = json.dumps({
+            "success": True,
+            "analysis": {
+                "sheets": [{"name": "DirectMessage", "row_count": 50}],
+                "sheet_count": 1,
+            },
+        })
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=mock_swarm_result,
+            agent_name="file_analyst",
+            tool_name="unified_analyze_file",
+        )
+
+        assert extracted is not None, "v8 must extract from direct .message"
+        assert extracted["analysis"]["sheets"][0]["name"] == "DirectMessage"
+
+    def test_v8_extracts_from_message_with_content_array(self):
+        """
+        BUG-020 v8 TEST: Extract from Message object with .content array.
+
+        Strands Message type can have content as an array of content blocks.
+        """
+        mock_message = Mock()
+        mock_message.content = [
+            {
+                "type": "tool_result",
+                "content": json.dumps({
+                    "success": True,
+                    "analysis": {
+                        "sheets": [{"name": "ContentArraySheet"}],
+                        "sheet_count": 1,
+                    },
+                })
+            }
+        ]
+
+        mock_inner_agent_result = Mock()
+        mock_inner_agent_result.message = mock_message
+        mock_inner_agent_result.result = None
+
+        mock_outer_agent_result = Mock()
+        mock_outer_agent_result.result = mock_inner_agent_result
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_outer_agent_result}
+
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=mock_swarm_result,
+            agent_name="file_analyst",
+            tool_name="unified_analyze_file",
+        )
+
+        assert extracted is not None, "v8 must extract from Message.content array"
+        assert extracted["analysis"]["sheets"][0]["name"] == "ContentArraySheet"
+
+    def test_v8_prefers_message_over_dict_result(self):
+        """
+        BUG-020 v8 PRIORITY TEST: .message takes priority over .result as dict.
+
+        When both paths are available, v8 should check .message first
+        (as this is where AgentCore puts tool output).
+        """
+        mock_inner_agent_result = Mock()
+        mock_inner_agent_result.message = json.dumps({
+            "success": True,
+            "analysis": {
+                "sheets": [{"name": "FromMessagePriority"}],
+                "sheet_count": 1,
+            },
+        })
+        # Also has result as dict (fallback path)
+        mock_inner_agent_result.result = {
+            "success": True,
+            "analysis": {
+                "sheets": [{"name": "FromResultFallback"}],
+                "sheet_count": 1,
+            },
+        }
+
+        mock_outer_agent_result = Mock()
+        mock_outer_agent_result.result = mock_inner_agent_result
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_outer_agent_result}
+
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=mock_swarm_result,
+            agent_name="file_analyst",
+            tool_name="unified_analyze_file",
+        )
+
+        assert extracted is not None
+        # v8 should prefer .message path
+        assert extracted["analysis"]["sheets"][0]["name"] == "FromMessagePriority"
+
+    def test_v8_falls_back_to_result_dict_when_no_message(self):
+        """
+        BUG-020 v8 FALLBACK TEST: Falls back to .result dict when no .message.
+
+        After reverting BUG-015, tools return raw dicts. The v8 fix
+        should still handle this fallback path.
+        """
+        mock_agent_result = Mock()
+        mock_agent_result.result = {
+            "success": True,
+            "analysis": {
+                "sheets": [{"name": "RawDictResult"}],
+                "sheet_count": 1,
+            },
+        }
+        mock_agent_result.message = None  # No message
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=mock_swarm_result,
+            agent_name="file_analyst",
+            tool_name="unified_analyze_file",
+        )
+
+        assert extracted is not None, "v8 must fall back to .result dict"
+        assert extracted["analysis"]["sheets"][0]["name"] == "RawDictResult"
+
+    def test_v8_handles_tool_response_wrapper_format(self):
+        """
+        BUG-020 v8 FORMAT TEST: Handle tool response wrapper format.
+
+        CloudWatch showed tool output in message uses this wrapper:
+        {"<tool_name>_response": {"output": [{"json": {...actual data...}}]}}
+        """
+        tool_output = {
+            "unified_analyze_file_response": {
+                "output": [{
+                    "json": {
+                        "success": True,
+                        "import_session_id": "nexo-abc123",
+                        "filename": "inventory.csv",
+                        "analysis": {
+                            "sheet_count": 1,
+                            "total_rows": 150,
+                            "sheets": [{
+                                "name": "ToolResponseWrapper",
+                                "row_count": 150,
+                                "column_count": 5,
+                                "columns": [],
+                                "confidence": 0.92,
+                            }],
+                            "recommended_strategy": "auto_import",
+                        },
+                        "column_mappings": [{
+                            "file_column": "PART_NUMBER",
+                            "target_field": "part_number",
+                            "confidence": 0.95,
+                            "reasoning": "Direct match",
+                        }],
+                        "overall_confidence": 0.92,
+                        "questions": [],
+                    }
+                }]
+            }
+        }
+
+        mock_inner_agent_result = Mock()
+        mock_inner_agent_result.message = json.dumps(tool_output)
+        mock_inner_agent_result.result = None
+
+        mock_outer_agent_result = Mock()
+        mock_outer_agent_result.result = mock_inner_agent_result
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_outer_agent_result}
+
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=mock_swarm_result,
+            agent_name="file_analyst",
+            tool_name="unified_analyze_file",
+        )
+
+        assert extracted is not None, "v8 must handle tool response wrapper"
+        assert "analysis" in extracted
+        assert extracted["analysis"]["sheets"][0]["name"] == "ToolResponseWrapper"
+        assert len(extracted["column_mappings"]) > 0
+        assert extracted["overall_confidence"] == 0.92

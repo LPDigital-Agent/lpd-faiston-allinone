@@ -125,25 +125,23 @@ def unified_analyze_file(
     )
 
     # ==========================================================================
-    # BUG-015 FIX: Return in official Strands ToolResult format
+    # BUG-020 v8: Return raw dict (REVERTS BUG-015)
     # ==========================================================================
-    # Official Strands SDK tools return: {"status": "...", "content": [{"json": ...}]}
-    # Reference: https://strandsagents.com SDK examples
-    # This ensures proper extraction via result.results["file_analyst"].result
+    # BUG-015 was WRONG: Adding ToolResult wrapper complicated extraction.
+    # ALL other tools return raw dicts - consistency is key.
+    # Strands SDK handles ToolResult wrapping internally.
+    #
+    # Official pattern for @tool functions: return raw dict with data.
+    # Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/tools/
     # ==========================================================================
 
-    # BUG-020 v6: Diagnostic logging for tool output
     logger.info(
-        "[unified_analyze_file] Returning ToolResult: success=%s, has_analysis=%s, content_length=%d",
+        "[unified_analyze_file] Returning raw dict: success=%s, has_analysis=%s",
         result.get("success") if result else None,
         "analysis" in result if result else False,
-        len(str(result)) if result else 0,
     )
 
-    return {
-        "status": "success" if result.get("success") else "error",
-        "content": [{"json": result}]
-    }
+    return result
 
 # =============================================================================
 # System Prompt

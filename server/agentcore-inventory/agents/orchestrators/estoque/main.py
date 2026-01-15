@@ -689,15 +689,15 @@ async def _invoke_swarm(
         )
 
         # =====================================================================
-        # BUG-020 v5 FIX: 100% Strands-Compliant Response Extraction
+        # BUG-020 v8 FIX: 100% Strands-Compliant Response Extraction
         # =====================================================================
-        # Uses _process_swarm_result() which contains ALL v4 fixes and uses
-        # ONLY official Strands patterns:
-        # - result.results["agent_name"].result (official)
-        # - result.status (official)
+        # Uses _process_swarm_result() which extracts from:
+        # - result.results["agent_name"].result.message (v8 - CORRECT!)
+        # - result.results["agent_name"].result as dict (fallback)
         # - result.entry_point.messages (fallback for tool_result blocks)
         #
-        # REMOVED: result.message fallback (NOT a valid Strands attribute!)
+        # NOTE: AgentResult.message IS a valid Strands attribute per official SDK!
+        # Reference: https://github.com/strands-agents/sdk-python AgentResult dataclass
         # =====================================================================
         response = _process_swarm_result(
             swarm_result=result,

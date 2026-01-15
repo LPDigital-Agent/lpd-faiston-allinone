@@ -1,11 +1,22 @@
 # =============================================================================
-# Swarm Response Extraction Utilities (BUG-019)
+# Swarm Response Extraction Utilities (BUG-019 + BUG-020 v8)
 # =============================================================================
 # Infrastructure code for extracting structured data from Strands Swarm results.
 #
-# These utilities follow the OFFICIAL Strands pattern for accessing agent results:
-# - Primary: result.results["agent_name"].result
-# - Fallback: result.entry_point.messages (for tool_result blocks)
+# Official Strands AgentResult structure (SDK v1.20.0):
+# @dataclass
+# class AgentResult:
+#     stop_reason: StopReason
+#     message: Message          # ← Tool output is HERE
+#     metrics: EventLoopMetrics
+#     state: Any
+#     interrupts: Sequence[Interrupt] | None = None
+#     structured_output: BaseModel | None = None
+#
+# Extraction paths (priority order):
+# 1. result.results["agent_name"].result.message (BUG-020 v8 - CORRECT)
+# 2. result.results["agent_name"].result as dict (fallback for raw dict returns)
+# 3. result.entry_point.messages[] (fallback for tool_result blocks)
 #
 # ToolResult format (official Strands SDK):
 # {
@@ -23,10 +34,16 @@
 # - Is INFRASTRUCTURE code (SDK parsing), NOT business logic
 # - Business logic runs 100% inside Strands agents with Gemini
 #
+# BUG-020 v8 FIX (2026-01-15):
+# - v7 checked `.result` but AgentResult has NO `.result` attribute!
+# - AgentResult has `.message` which contains tool output as JSON string
+# - v8 correctly extracts from `.message` attribute
+#
 # Sources:
 # - https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/
 # - https://strandsagents.com/latest/documentation/docs/api-reference/multiagent/
 # - https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/tools/custom-tools.md
+# - https://github.com/strands-agents/sdk-python/blob/v1.20.0/src/strands/agent/agent_result.py
 # =============================================================================
 
 import json
@@ -35,6 +52,136 @@ import logging
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# BUG-020 v8 FIX: Extract from AgentResult.message
+# =============================================================================
+# CloudWatch logs revealed: AgentResult has .message, NOT nested .result!
+# The .message attribute contains tool output as JSON string or Message object.
+# =============================================================================
+
+
+def _extract_from_agent_message(message: Any) -> Optional[Dict]:
+    """
+    Extract structured data from AgentResult.message attribute.
+
+    BUG-020 v8 FIX: This is the CORRECT extraction path!
+    AgentResult.message contains the tool output, NOT AgentResult.result.
+
+    Handles multiple message formats:
+    1. JSON string with tool response wrapper: {"<tool>_response": {"output": [{"json": {...}}]}}
+    2. Message object with .content array containing tool_result blocks
+    3. Direct JSON string without wrapper
+
+    Args:
+        message: The AgentResult.message value (str or Message object)
+
+    Returns:
+        Extracted dict with "analysis" or "success" key, or None if invalid
+    """
+    if message is None:
+        return None
+
+    logger.debug(
+        "[v8] _extract_from_agent_message: type=%s",
+        type(message).__name__,
+    )
+
+    # Handle Message object with content array (Strands Message type)
+    if hasattr(message, "content") and message.content:
+        content = message.content
+
+        # Content can be a list of content blocks
+        if isinstance(content, list):
+            for content_block in content:
+                if isinstance(content_block, dict):
+                    # Check for tool_result type
+                    if content_block.get("type") == "tool_result":
+                        tool_content = content_block.get("content", "")
+                        if isinstance(tool_content, str):
+                            try:
+                                parsed = json.loads(tool_content)
+                                unwrapped = _unwrap_tool_result(parsed)
+                                if unwrapped:
+                                    logger.info("[v8] Extracted from Message.content tool_result")
+                                    return unwrapped
+                            except json.JSONDecodeError:
+                                pass
+                        elif isinstance(tool_content, dict):
+                            unwrapped = _unwrap_tool_result(tool_content)
+                            if unwrapped:
+                                logger.info("[v8] Extracted from Message.content dict")
+                                return unwrapped
+
+                    # Check for direct json key
+                    if "json" in content_block:
+                        inner = content_block["json"]
+                        if isinstance(inner, dict):
+                            unwrapped = _unwrap_tool_result(inner)
+                            if unwrapped:
+                                logger.info("[v8] Extracted from Message.content json key")
+                                return unwrapped
+
+        # Content can be a string
+        elif isinstance(content, str):
+            try:
+                parsed = json.loads(content)
+                unwrapped = _unwrap_tool_result(parsed)
+                if unwrapped:
+                    logger.info("[v8] Extracted from Message.content string")
+                    return unwrapped
+            except json.JSONDecodeError:
+                pass
+
+    # Handle JSON string message (most common case from CloudWatch logs)
+    if isinstance(message, str):
+        try:
+            parsed = json.loads(message)
+            if isinstance(parsed, dict):
+                # Check for tool response wrapper format
+                # Format: {"<tool_name>_response": {"output": [{"json": {...}}]}}
+                for key, value in parsed.items():
+                    if key.endswith("_response") and isinstance(value, dict):
+                        output = value.get("output", [])
+                        if isinstance(output, list):
+                            for item in output:
+                                if isinstance(item, dict) and "json" in item:
+                                    inner = item["json"]
+                                    if isinstance(inner, dict):
+                                        # Use unwrap helper or return directly
+                                        unwrapped = _unwrap_tool_result(inner)
+                                        if unwrapped:
+                                            logger.info("[v8] Extracted from tool_response wrapper")
+                                            return unwrapped
+                                        # Direct return if has analysis/success
+                                        if "analysis" in inner or "success" in inner:
+                                            logger.info("[v8] Direct return from tool_response inner")
+                                            return inner
+
+                # Try direct unwrap (ToolResult format or direct response)
+                unwrapped = _unwrap_tool_result(parsed)
+                if unwrapped:
+                    logger.info("[v8] Extracted from direct JSON string")
+                    return unwrapped
+
+                # Fallback: direct dict with analysis/success
+                if "analysis" in parsed or "success" in parsed:
+                    logger.info("[v8] Direct dict from JSON string")
+                    return parsed
+
+        except json.JSONDecodeError:
+            logger.debug("[v8] Message is non-JSON string, skipping")
+            pass
+
+    # Handle dict message directly
+    if isinstance(message, dict):
+        unwrapped = _unwrap_tool_result(message)
+        if unwrapped:
+            logger.info("[v8] Extracted from dict message")
+            return unwrapped
+
+    return None
 
 
 # =============================================================================
@@ -202,58 +349,74 @@ def _extract_from_agent_result(
     tool_name: str,
 ) -> Optional[Dict]:
     """
-    Extract structured data from a single agent's result.
+    Extract structured data from a single agent's result (AgentResult object).
 
-    Handles:
-    - Direct dict result
-    - JSON string result
-    - ToolResult format: {"status": "...", "content": [{"json": {...}}]}
+    BUG-020 v8 FIX: Priority order for extraction:
+    1. AgentResult.result.message (v8 - CORRECT path for AgentResult containing AgentResult)
+    2. AgentResult.message (v8 - CORRECT path for direct AgentResult)
+    3. AgentResult.result as dict (fallback for tools returning raw dicts)
+    4. ToolResult format unwrapping (handles BUG-015 format)
 
-    Uses _unwrap_tool_result() helper for consistent handling (BUG-020 v4).
+    Official Strands AgentResult structure:
+    - .message → Contains tool output (JSON string or Message object)
+    - .stop_reason, .metrics, .state → Metadata (not useful for extraction)
+    - .structured_output → May contain Pydantic model (rarely used)
     """
-    # BUG-020 v6: Diagnostic logging for agent result details
+    # BUG-020 v8: Enhanced diagnostic logging
     logger.info(
-        "[_extract_agent] agent=%s, has_result_attr=%s, result_type=%s",
+        "[_extract_agent] agent=%s, has_result=%s, has_message=%s, result_type=%s",
         agent_name,
         hasattr(agent_result, "result"),
+        hasattr(agent_result, "message"),
         type(agent_result.result).__name__ if hasattr(agent_result, "result") and agent_result.result else "None",
     )
+
+    # =========================================================================
+    # BUG-020 v8 FIX: Priority 1 — Extract from .message attribute
+    # =========================================================================
+    # CloudWatch logs revealed: AgentResult has .message, NOT nested .result!
+    # The .message attribute contains tool output as JSON string.
+    # =========================================================================
+
+    # Priority 1a: Check if agent_result.result is an AgentResult with .message
+    if hasattr(agent_result, "result") and agent_result.result:
+        inner_result = agent_result.result
+
+        # If inner_result is an AgentResult (has .message), extract from it
+        if hasattr(inner_result, "message") and inner_result.message:
+            logger.info(
+                "[_extract_agent] v8: inner_result has .message, attempting extraction"
+            )
+            extracted = _extract_from_agent_message(inner_result.message)
+            if extracted:
+                logger.info(
+                    "[_extract_agent] v8: SUCCESS from inner_result.message for agent=%s",
+                    agent_name,
+                )
+                return extracted
+
+    # Priority 1b: Check if agent_result itself has .message
+    if hasattr(agent_result, "message") and agent_result.message:
+        logger.info(
+            "[_extract_agent] v8: agent_result has .message, attempting extraction"
+        )
+        extracted = _extract_from_agent_message(agent_result.message)
+        if extracted:
+            logger.info(
+                "[_extract_agent] v8: SUCCESS from agent_result.message for agent=%s",
+                agent_name,
+            )
+            return extracted
+
+    # =========================================================================
+    # Priority 2: Fallback to .result as dict (for tools returning raw dicts)
+    # =========================================================================
 
     if not hasattr(agent_result, "result") or not agent_result.result:
         logger.warning("[_extract_agent] agent=%s has NO result attribute!", agent_name)
         return None
 
     result_data = agent_result.result
-
-    # =========================================================================
-    # BUG-020 v7 FIX: Handle nested AgentResult objects
-    # =========================================================================
-    # CloudWatch logs revealed: result_type=AgentResult instead of dict
-    # Strands SDK may return AgentResult.result as another AgentResult object.
-    # This while loop unwraps until we get actual data (dict or str).
-    # =========================================================================
-    unwrap_depth = 0
-    max_unwrap_depth = 5  # Safety limit to prevent infinite loops
-    while (
-        hasattr(result_data, "result")
-        and not isinstance(result_data, (dict, str))
-        and unwrap_depth < max_unwrap_depth
-    ):
-        logger.debug(
-            "[_extract_agent] Unwrapping nested AgentResult for agent=%s (depth=%d)",
-            agent_name,
-            unwrap_depth,
-        )
-        result_data = result_data.result
-        unwrap_depth += 1
-
-    if unwrap_depth > 0:
-        logger.info(
-            "[_extract_agent] agent=%s unwrapped %d levels, final_type=%s",
-            agent_name,
-            unwrap_depth,
-            type(result_data).__name__,
-        )
 
     # Handle string JSON (LLM may return JSON as string)
     if isinstance(result_data, str):
@@ -266,8 +429,9 @@ def _extract_from_agent_result(
             )
             return None
 
+    # If result_data is not a dict at this point, we can't extract
     if not isinstance(result_data, dict):
-        # BUG-020 v7: Enhanced logging for debugging unexpected types
+        # Log available attributes for debugging
         logger.warning(
             "[_extract_agent] agent=%s result_data is NOT a dict! type=%s, attrs=%s",
             agent_name,
@@ -276,17 +440,22 @@ def _extract_from_agent_result(
         )
         return None
 
-    # BUG-020 v4: Use helper for consistent ToolResult and direct format handling
+    # =========================================================================
+    # Priority 3: Unwrap ToolResult format (handles BUG-015 format)
+    # =========================================================================
+
     unwrapped = _unwrap_tool_result(result_data)
     if unwrapped:
         logger.debug(
-            "[_extract] Found valid result from agent %s",
+            "[_extract] Found valid result from agent %s via unwrap",
             agent_name,
         )
         return unwrapped
 
-    # Additional fallback: Text content in ToolResult format
-    # (edge case not handled by _unwrap_tool_result)
+    # =========================================================================
+    # Priority 4: Text content in ToolResult format
+    # =========================================================================
+
     if "content" in result_data and isinstance(result_data["content"], list):
         for content_item in result_data["content"]:
             if isinstance(content_item, dict) and "text" in content_item:
