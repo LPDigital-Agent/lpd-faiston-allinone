@@ -4,6 +4,51 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-15 (Session 6) - BUG-020 v8 FIX + /sync-project
+
+**Bug:** BUG-020 - "Swarm extraction failed" in NEXO Smart Import analysis
+
+**Root Cause:** v7 fix checked for `.result` attribute but `AgentResult` has `.message` instead.
+CloudWatch logs confirmed: `AgentResult attrs=['message', 'metrics', 'state', 'stop_reason', 'structured_output']`
+
+**Solution Implemented (v8):**
+1. **Primary Fix:** Added `_extract_from_agent_message()` to `response_utils.py`
+   - Extracts from `AgentResult.message` (JSON string with tool output)
+   - Handles tool response wrapper format: `{"<tool>_response": {"output": [{"json": {...}}]}}`
+2. **Secondary Fix:** Reverted BUG-015 in `file_analyst.py`
+   - BUG-015 was WRONG: ToolResult wrapper complicated extraction
+   - ALL @tool functions should return raw dicts - Strands handles wrapping internally
+
+**Files Modified:**
+- `server/agentcore-inventory/swarm/response_utils.py` - v8 extraction from .message
+- `server/agentcore-inventory/swarm/agents/file_analyst.py` - Reverted to raw dict return
+- `server/agentcore-inventory/tests/test_bug020_orchestrator_extraction.py` - 6 new v8 tests
+
+**Tests:** 33 total tests passing (including 6 new v8 tests)
+
+**Commits:**
+- `dd1978e` - 🐛 fix(swarm): BUG-020 v8 extract from AgentResult.message + revert BUG-015
+- `e97080c` - 📝 docs: sync-project after BUG-020 v8 fix
+
+**MCP Memory Updates:**
+- Created entity: `BUG-020-Swarm-Extraction-Failure` (type: Bug)
+- Added relations: BUG-020 → affects → Smart-Import-Architecture
+- Added observations to `Faiston NEXO` entity
+
+**Key Learning:** Strands SDK `AgentResult` structure:
+```python
+@dataclass
+class AgentResult:
+    stop_reason: StopReason
+    message: Message          # ← Tool output is HERE
+    metrics: EventLoopMetrics
+    state: Any
+```
+
+**Status:** ✅ Fixed, deployed, awaiting E2E validation
+
+---
+
 ## 2026-01-15 (Session 5) - /sync-project COMPLETED
 
 **Command:** `/sync-project`
@@ -2472,6 +2517,30 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-15 22:31:40 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-15 22:32:49 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-15 22:43:44 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-15 23:00:19 UTC
 
 **User:** (no user message captured)
 

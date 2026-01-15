@@ -378,7 +378,12 @@
       "Bash(gh api:*)",
       "Bash(git show c36a44d --no-stat)",
       "Bash(cd /Users/fabio.santos/LPD\\\\ Repos/lpd-faiston-allinone && AWS_PROFILE=faiston-aio python3:*)",
-      "mcp__DeepGraph_React_MCP__docs-semantic-search"
+      "mcp__DeepGraph_React_MCP__docs-semantic-search",
+      "Bash(LOG_GROUP=/aws/bedrock-agentcore/runtimes/faiston_asset_management-uSuLPsFQNH-DEFAULT STREAM=2026/01/15/[runtime-logs-sga-session-fbb96e25473e47ee9a2c932663ac27cc]ed517ea2-7a24-4485-b5a2-07dfca85b578 __NEW_LINE_f7d41f5795b295f5__ aws logs get-log-events --profile faiston-aio --log-group-name $LOG_GROUP --log-stream-name $STREAM --limit 200 --query events[*].message --output text)",
+      "Bash(LOG_GROUP=/aws/bedrock-agentcore/runtimes/faiston_asset_management-uSuLPsFQNH-DEFAULT STREAM=2026/01/15/[runtime-logs-sga-session-fbb96e25473e47ee9a2c932663ac27cc]ed517ea2-7a24-4485-b5a2-07dfca85b578 __NEW_LINE_de8d4f64e747b49d__ aws logs get-log-events --profile faiston-aio --log-group-name $LOG_GROUP --log-stream-name $STREAM --start-from-head --limit 200)",
+      "Bash(git show dd1978e --no-stat -- server/agentcore-inventory/agents/orchestrators/estoque/main.py)",
+      "Bash(AWS_PROFILE=faiston-aio AWS_REGION=us-east-2 agentcore status:*)",
+      "Bash(git rev-parse:*)"
     ],
     "deny": [],
     "ask": []

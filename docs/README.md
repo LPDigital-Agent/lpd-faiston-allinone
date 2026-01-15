@@ -97,6 +97,7 @@
 |----------|---------|
 | [SMART_IMPORT_ARCHITECTURE.md](SMART_IMPORT_ARCHITECTURE.md) | NEXO Smart Import flow, runtime IDs, troubleshooting |
 | [ORCHESTRATOR_ARCHITECTURE.md](ORCHESTRATOR_ARCHITECTURE.md) | Strands Orchestrator pattern with LLM-based routing |
+| [bugs/E2E_SMART_IMPORT_BUGS.md](bugs/E2E_SMART_IMPORT_BUGS.md) | Bug tracker for Smart Import (BUG-010 through BUG-020) |
 
 ### Architecture Decision Records (ADRs)
 
