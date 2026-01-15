@@ -130,8 +130,16 @@ export type { AgentCoreRequest, AgentCoreResponse, InvokeOptions };
 export type { SGAGetUploadUrlResponse };
 
 // =============================================================================
-// Orchestrator Envelope Handling
+// AgentCore Response Parsing
 // =============================================================================
+
+/**
+ * AgentCore HTTP response format - wraps agent output in content array.
+ */
+interface AgentCoreHttpResponse {
+  role?: string;
+  content?: Array<{ text?: string; type?: string }>;
+}
 
 /**
  * Orchestrator envelope structure - wraps specialist agent responses.
@@ -146,28 +154,55 @@ interface OrchestratorEnvelope<T> {
 }
 
 /**
- * Unwraps orchestrator envelope to extract the actual specialist response.
- * If the response has the envelope structure (specialist_agent + response),
- * returns the inner response. Otherwise returns the data as-is.
+ * Extracts and parses the actual response from AgentCore HTTP format.
+ *
+ * AgentCore returns responses in this nested structure:
+ * 1. HTTP response: { role: "assistant", content: [{ text: "..." }] }
+ * 2. Inner JSON string in text: { success, specialist_agent, response: {...} }
+ * 3. Orchestrator envelope wraps the actual specialist response
+ *
+ * This function handles all three layers to return the clean response.
  */
-function unwrapOrchestratorResponse<T>(data: unknown): T {
-  // Check if data has orchestrator envelope structure
+function extractAgentCoreResponse<T>(data: unknown): T {
+  let parsed: unknown = data;
+
+  // Step 1: Extract content[0].text from AgentCore HTTP response format
   if (
-    data &&
-    typeof data === 'object' &&
-    'specialist_agent' in data &&
-    'response' in data
+    parsed &&
+    typeof parsed === 'object' &&
+    'content' in parsed &&
+    Array.isArray((parsed as AgentCoreHttpResponse).content)
   ) {
-    const envelope = data as OrchestratorEnvelope<T>;
-    // Return the inner response, preserving error if present
+    const httpResponse = parsed as AgentCoreHttpResponse;
+    const textContent = httpResponse.content?.[0]?.text;
+
+    if (textContent && typeof textContent === 'string') {
+      try {
+        // Parse the JSON string inside content[0].text
+        parsed = JSON.parse(textContent);
+      } catch {
+        // If parsing fails, return the raw text
+        return textContent as unknown as T;
+      }
+    }
+  }
+
+  // Step 2: Unwrap orchestrator envelope (specialist_agent + response)
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    'specialist_agent' in parsed &&
+    'response' in parsed
+  ) {
+    const envelope = parsed as OrchestratorEnvelope<T>;
     if (envelope.response) {
       return envelope.response;
     }
-    // If no response but has error, return the envelope itself
-    // (this handles error cases from orchestrator)
+    // If error case, return the envelope for error handling
   }
-  // Not an envelope or no inner response - return as-is
-  return data as T;
+
+  // Return as-is if no wrapping detected
+  return parsed as T;
 }
 
 // =============================================================================
@@ -175,9 +210,12 @@ function unwrapOrchestratorResponse<T>(data: unknown): T {
 // =============================================================================
 
 /**
- * Invoke SGA AgentCore with automatic orchestrator envelope unwrapping.
- * The orchestrator wraps specialist responses with metadata. This function
- * transparently unwraps that envelope so callers get the actual response.
+ * Invoke SGA AgentCore with automatic response extraction.
+ *
+ * Handles the full AgentCore response chain:
+ * 1. AgentCore HTTP format: { role, content: [{ text }] }
+ * 2. Orchestrator envelope: { specialist_agent, response }
+ * 3. Returns the clean specialist response
  */
 export async function invokeSGAAgentCore<T = unknown>(
   request: AgentCoreRequest,
@@ -185,7 +223,7 @@ export async function invokeSGAAgentCore<T = unknown>(
 ): Promise<AgentCoreResponse<T>> {
   const result = await sgaService.invoke<unknown>(request, options);
   return {
-    data: unwrapOrchestratorResponse<T>(result.data),
+    data: extractAgentCoreResponse<T>(result.data),
     sessionId: result.sessionId,
   };
 }
