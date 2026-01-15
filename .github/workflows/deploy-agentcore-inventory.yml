@@ -157,7 +157,7 @@ jobs:
             ENV_ARGS+=(--env CARRIER_MODE=real)
             ENV_ARGS+=(--env POSTAL_USUARIO=${{ secrets.POSTAL_USUARIO }})
             ENV_ARGS+=(--env POSTAL_TOKEN=${{ secrets.POSTAL_TOKEN }})
-            ENV_ARGS+=(--env POSTAL_ID_PERFIL=${{ secrets.POSTAL_ID_PERFIL }})
+            ENV_ARGS+=(--env POSTAL_IDPERFIL=${{ secrets.POSTAL_ID_PERFIL }})
           fi
 
           # Deploy using .bedrock_agentcore.yaml configuration
