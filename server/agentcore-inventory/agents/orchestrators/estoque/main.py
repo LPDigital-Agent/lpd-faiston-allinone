@@ -35,7 +35,7 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool, ToolContext
 
 # Agent utilities
-from agents.utils import create_gemini_model, AGENT_VERSION
+from agents.utils import create_gemini_model, AGENT_VERSION, extract_json
 
 # Configuration
 from config.agent_urls import RUNTIME_IDS, get_agent_url
@@ -357,8 +357,10 @@ async def _invoke_agent_via_a2a(
                         parsed = response_text
                         logger.debug("[A2A] response_text already dict, using directly")
                     else:
-                        parsed = json.loads(response_text)
-                        logger.debug("[A2A] Parsed JSON from response_text")
+                        # Strip markdown code blocks before parsing (LLM may wrap JSON)
+                        clean_text = extract_json(response_text)
+                        parsed = json.loads(clean_text)
+                        logger.debug("[A2A] Parsed JSON from response_text (markdown stripped)")
                     return {
                         "success": parsed.get("success", True),
                         "specialist_agent": agent_id,
@@ -703,8 +705,10 @@ async def _invoke_swarm(
                     response = result.message
                     logger.debug("[Swarm] result.message already dict, using directly")
                 else:
-                    response = json.loads(result.message)
-                    logger.debug("[Swarm] Parsed JSON from result.message")
+                    # Strip markdown code blocks before parsing (LLM may wrap JSON)
+                    clean_message = extract_json(result.message)
+                    response = json.loads(clean_message)
+                    logger.debug("[Swarm] Parsed JSON from result.message (markdown stripped)")
             except (json.JSONDecodeError, TypeError):
                 response["message"] = result.message
                 logger.debug("[Swarm] Stored raw message as fallback")
@@ -901,7 +905,9 @@ def invoke(payload: dict, context) -> dict:
                 # Handle both dict (already parsed) and string (needs parsing)
                 if isinstance(result.message, dict):
                     return result.message
-                return json.loads(result.message)
+                # Strip markdown code blocks before parsing (LLM may wrap JSON)
+                clean_message = extract_json(result.message)
+                return json.loads(clean_message)
             except (json.JSONDecodeError, TypeError):
                 return {
                     "success": True,

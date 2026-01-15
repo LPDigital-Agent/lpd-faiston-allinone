@@ -22,11 +22,54 @@ from typing import Dict, Any, Optional, List
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from pydantic import BaseModel, Field
 from strands import Agent, tool
 from strands.multiagent.a2a import A2AServer
 from a2a.types import AgentSkill
 from fastapi import FastAPI
 import uvicorn
+
+
+# =============================================================================
+# Pydantic Models for Structured Output (Strands structured_output_model)
+# =============================================================================
+# These models ensure the agent returns valid JSON matching the frontend's
+# expected types (SGAShippingQuote, SGACarrierRecommendation, SGAGetQuotesResponse).
+# Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/agents/structured-output/
+# =============================================================================
+
+
+class ShippingQuoteModel(BaseModel):
+    """Single shipping quote from a carrier."""
+    carrier: str = Field(description="Carrier name (e.g., Correios)")
+    carrier_type: str = Field(description="Carrier type: CORREIOS, LOGGI, GOLLOG, etc.")
+    modal: str = Field(description="Shipping modal: SEDEX, PAC, EXPRESS, etc.")
+    price: float = Field(description="Price in BRL")
+    delivery_days: int = Field(description="Estimated delivery days")
+    delivery_date: str = Field(description="Estimated delivery date (YYYY-MM-DD)")
+    weight_limit: float = Field(description="Maximum weight in kg")
+    dimensions_limit: str = Field(description="Maximum dimensions (e.g., 100x60x60 cm)")
+    available: bool = Field(description="Whether this option is available")
+    reason: str = Field(default="", description="Reason if unavailable")
+
+
+class CarrierRecommendationModel(BaseModel):
+    """AI recommendation for best carrier option."""
+    carrier: str = Field(description="Recommended carrier name")
+    modal: str = Field(description="Recommended shipping modal")
+    price: float = Field(description="Price of recommended option")
+    delivery_days: int = Field(description="Delivery days of recommended option")
+    reason: str = Field(description="Reason for recommendation")
+    confidence: float = Field(default=0.9, description="Confidence score 0-1")
+
+
+class QuotesResponseModel(BaseModel):
+    """Complete response for get_quotes operation - matches frontend SGAGetQuotesResponse."""
+    success: bool = Field(description="Whether the operation succeeded")
+    quotes: List[ShippingQuoteModel] = Field(description="List of shipping quotes")
+    recommendation: CarrierRecommendationModel = Field(description="AI recommendation")
+    note: str = Field(default="", description="Optional note about the quotes")
+
 
 # Centralized model configuration (MANDATORY - Gemini 3.0 Flash for speed)
 from agents.utils import get_model, AGENT_VERSION, create_gemini_model
