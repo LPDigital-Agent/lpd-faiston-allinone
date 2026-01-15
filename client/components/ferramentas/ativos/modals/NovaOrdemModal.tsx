@@ -514,32 +514,6 @@ export function NovaOrdemModal({
 
   const renderQuotesStep = () => (
     <div className="space-y-4">
-      {/* AI Recommendation Banner */}
-      {recommendation && (
-        <div className="p-4 rounded-xl bg-gradient-to-r from-[#960A9C]/10 to-[#2226C0]/10 border border-white/[0.06]">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-[#A855F7]/20">
-              <Bot className="w-5 h-5 text-[#A855F7]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-sm font-medium text-white">Recomendacao NEXO</span>
-                <Badge className="bg-[#A855F7]/20 text-[#A855F7] border-[#A855F7]/30 text-xs">
-                  IA
-                </Badge>
-              </div>
-              <p className="text-sm text-gray-400">{recommendation.reason}</p>
-              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                <span>Confianca: {Math.round(recommendation.confidence * 100)}%</span>
-                {recommendation.delivery_days && (
-                  <span>Entrega: {recommendation.delivery_days} dia(s)</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Quotes Grid */}
       <div className="space-y-2">
         <h3 className="text-sm font-medium text-gray-400 flex items-center gap-2">
@@ -549,9 +523,6 @@ export function NovaOrdemModal({
 
         <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
           {quotes.map((quote, index) => {
-            const isRecommended =
-              recommendation?.carrier === quote.carrier &&
-              recommendation?.modal === quote.modal;
             const isSelected =
               selectedQuote?.carrier === quote.carrier &&
               selectedQuote?.modal === quote.modal;
@@ -571,15 +542,6 @@ export function NovaOrdemModal({
                     : 'bg-white/[0.01] border-white/[0.03] opacity-50 cursor-not-allowed'
                 )}
               >
-                {/* Recommended Badge */}
-                {isRecommended && quote.available && (
-                  <div className="absolute -top-2 right-3">
-                    <Badge className="bg-[#A855F7] text-white text-xs gap-1">
-                      <Star className="w-3 h-3" />
-                      Recomendado
-                    </Badge>
-                  </div>
-                )}
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
