@@ -161,9 +161,11 @@ class PostalServiceAdapter(ShippingAdapter):
     SOAP_API_URL = "http://vpsrv.visualset.com.br/PostagemVipp.asmx"
 
     # Service codes
-    SERVICE_SEDEX = "04162"
-    SERVICE_PAC = "04669"
-    SERVICE_SEDEX_10 = "40215"
+    # Service codes for Correios public API (@@precosEPrazosView)
+    # These are the codProdutoAgencia values returned by the API
+    SERVICE_SEDEX = "04014"
+    SERVICE_PAC = "04510"
+    SERVICE_SEDEX_10 = "40215"  # May not be available on all routes
 
     def __init__(
         self,
