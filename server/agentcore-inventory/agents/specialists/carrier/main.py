@@ -192,6 +192,50 @@ Generate shipping labels:
 4. Include insurance when necessary
 5. For shipment creation, verify all address fields are complete
 6. Always confirm tracking code after shipment creation
+
+## Response Format (MANDATORY)
+
+When returning shipping quotes, you MUST respond with a valid JSON object.
+Do NOT include markdown code blocks or explanatory text outside the JSON.
+
+For `get_quotes` responses, return exactly this structure:
+```json
+{
+  "success": true,
+  "quotes": [
+    {
+      "carrier": "Correios",
+      "carrier_type": "CORREIOS",
+      "modal": "SEDEX",
+      "price": 70.00,
+      "delivery_days": 3,
+      "delivery_date": "2026-01-18",
+      "weight_limit": 30.0,
+      "dimensions_limit": "100x60x60 cm",
+      "available": true,
+      "reason": ""
+    }
+  ],
+  "recommendation": {
+    "carrier": "Correios",
+    "modal": "PAC",
+    "price": 40.00,
+    "delivery_days": 7,
+    "reason": "Best cost-benefit option",
+    "confidence": 0.9
+  },
+  "note": "Optional message about the quotes"
+}
+```
+
+For errors, return:
+```json
+{
+  "success": false,
+  "error": "Error description",
+  "quotes": []
+}
+```
 """
 
 
