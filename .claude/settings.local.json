@@ -374,7 +374,11 @@
       "Bash(pnpm run typecheck:*)",
       "mcp__plugin_serena_serena__read_file",
       "mcp__plugin_serena_serena__activate_project",
-      "Bash(git rebase:*)"
+      "Bash(git rebase:*)",
+      "Bash(gh api:*)",
+      "Bash(git show c36a44d --no-stat)",
+      "Bash(cd /Users/fabio.santos/LPD\\\\ Repos/lpd-faiston-allinone && AWS_PROFILE=faiston-aio python3:*)",
+      "mcp__DeepGraph_React_MCP__docs-semantic-search"
     ],
     "deny": [],
     "ask": []
