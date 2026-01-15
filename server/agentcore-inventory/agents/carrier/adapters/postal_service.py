@@ -274,9 +274,28 @@ class PostalServiceAdapter(ShippingAdapter):
                     data = response.json()
 
                     # Handle list response from Correios API
-                    # The API returns a list of quotes, extract the first item
+                    # The API returns ALL available services in a list, regardless of servico param
+                    # We need to find the matching service by codProdutoAgencia
+                    item = None
                     if isinstance(data, list):
-                        item = data[0] if data else {}
+                        for candidate in data:
+                            if candidate.get("codProdutoAgencia") == service_code:
+                                item = candidate
+                                break
+                        # If not found, service is not available for this route
+                        if item is None:
+                            quotes.append(QuoteResult(
+                                carrier="Correios",
+                                service=service_name,
+                                service_code=service_code,
+                                price=0,
+                                delivery_days=0,
+                                is_simulated=False,
+                                available=False,
+                                reason="Servico nao disponivel para esta rota",
+                                raw_response=data,
+                            ))
+                            continue
                     else:
                         item = data
 
