@@ -148,10 +148,16 @@ jobs:
             --env AGENT_ID=${{ matrix.agent }}
           )
 
-          # Add CARRIER_MODE=real for carrier agent (VIPP real API integration)
+          # Add CARRIER_MODE=real and VIPP credentials for carrier agent
+          # Note: IAM role is missing secretsmanager:GetSecretValue permission for postal credentials
+          # TODO: Add Secrets Manager permission to faiston-one-sga-agentcore-role in Terraform
+          # For now, pass credentials via environment variables
           if [ "${{ matrix.agent }}" = "faiston_sga_carrier" ]; then
-            echo "Adding CARRIER_MODE=real for carrier agent"
+            echo "Adding CARRIER_MODE=real and VIPP credentials for carrier agent"
             ENV_ARGS+=(--env CARRIER_MODE=real)
+            ENV_ARGS+=(--env POSTAL_USUARIO=${{ secrets.POSTAL_USUARIO }})
+            ENV_ARGS+=(--env POSTAL_TOKEN=${{ secrets.POSTAL_TOKEN }})
+            ENV_ARGS+=(--env POSTAL_ID_PERFIL=${{ secrets.POSTAL_ID_PERFIL }})
           fi
 
           # Deploy using .bedrock_agentcore.yaml configuration
