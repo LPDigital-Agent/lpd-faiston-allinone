@@ -511,8 +511,12 @@ async def complete_expedition(
 
                     if carrier_response.success and carrier_response.response:
                         # Parse CarrierAgent response to extract tracking_code
+                        # Handle both dict (already parsed) and string (needs parsing)
                         try:
-                            carrier_response_data = json.loads(carrier_response.response)
+                            if isinstance(carrier_response.response, dict):
+                                carrier_response_data = carrier_response.response
+                            else:
+                                carrier_response_data = json.loads(carrier_response.response)
                             final_tracking_code = carrier_response_data.get("tracking_code")
 
                             if final_tracking_code:

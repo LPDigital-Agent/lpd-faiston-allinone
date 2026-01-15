@@ -508,8 +508,12 @@ async def request_return_shipment(
             }
 
         # Parse CarrierAgent response
+        # Handle both dict (already parsed) and string (needs parsing)
         try:
-            shipment_result = json.loads(carrier_response.response)
+            if isinstance(carrier_response.response, dict):
+                shipment_result = carrier_response.response
+            else:
+                shipment_result = json.loads(carrier_response.response)
         except json.JSONDecodeError:
             shipment_result = {"raw_response": carrier_response.response}
 
