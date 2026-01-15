@@ -406,7 +406,10 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         throw new Error(errorMsg);
       }
 
-      const data = analysisResult.data as NexoAnalyzeFileResponse;
+      // BUG-020 v2 FIX: Extract inner response from A2A wrapper
+      // Backend returns: { success, specialist_agent, response: { analysis, ... }, request_id }
+      // We need the inner response where analysis.sheets actually lives
+      const data = extractAgentResponse<NexoAnalyzeFileResponse>(analysisResult.data);
 
       // Build analysis result
       const analysis: NexoAnalysisResult = {
