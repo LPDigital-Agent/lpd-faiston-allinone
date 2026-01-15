@@ -22,6 +22,8 @@ from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from swarm.response_utils import (
     _extract_tool_output_from_swarm_result,
     _process_swarm_result,
+    _unwrap_tool_result,
+    _extract_from_messages,
 )
 
 
@@ -518,3 +520,226 @@ class TestBug020FrontendContract:
             assert sheet_names == ["Sheet1", "Sheet2"]
         except (TypeError, KeyError) as e:
             pytest.fail(f"Frontend access pattern failed: {e}")
+
+
+class TestBug020v4UnwrapToolResult:
+    """
+    BUG-020 v4 FIX TESTS: Test the _unwrap_tool_result() helper function.
+
+    The v4 fix adds a helper function that handles both:
+    - ToolResult format: {"status": "...", "content": [{"json": {...}}]}
+    - Direct response: {"success": ..., "analysis": {...}}
+
+    This ensures consistent handling across all extraction paths.
+    """
+
+    def test_unwrap_tool_result_extracts_from_toolresult_format(self):
+        """
+        BUG-020 v4 CORE TEST: Helper must extract data from ToolResult format.
+
+        The unified_analyze_file tool returns this format, and prior to v4 fix,
+        _extract_from_messages() would fail to recognize it because it checked
+        for "analysis" and "success" at root level instead of nested in content.
+        """
+        tool_result_data = {
+            "status": "success",
+            "content": [{"json": {
+                "success": True,
+                "analysis": {"sheets": [{"name": "UnwrappedSheet"}], "sheet_count": 1},
+                "overall_confidence": 0.92,
+            }}]
+        }
+
+        unwrapped = _unwrap_tool_result(tool_result_data)
+
+        assert unwrapped is not None, "Must unwrap ToolResult format"
+        assert "analysis" in unwrapped, "Unwrapped must have 'analysis' key"
+        assert "sheets" in unwrapped["analysis"], "analysis must have 'sheets'"
+        assert unwrapped["analysis"]["sheets"][0]["name"] == "UnwrappedSheet"
+        assert "status" not in unwrapped, "Wrapper 'status' must be removed"
+        assert "content" not in unwrapped, "Wrapper 'content' must be removed"
+
+    def test_unwrap_tool_result_returns_direct_response(self):
+        """Helper should pass through direct responses with analysis/success keys."""
+        direct_data = {
+            "success": True,
+            "analysis": {"sheets": [{"name": "DirectSheet"}]},
+        }
+
+        unwrapped = _unwrap_tool_result(direct_data)
+
+        assert unwrapped is not None
+        assert unwrapped["analysis"]["sheets"][0]["name"] == "DirectSheet"
+
+    def test_unwrap_tool_result_returns_none_for_invalid_data(self):
+        """Helper should return None for invalid/unrecognized formats."""
+        # No analysis or success key
+        invalid_data = {"message": "Some text", "count": 5}
+        assert _unwrap_tool_result(invalid_data) is None
+
+        # Not a dict
+        assert _unwrap_tool_result("string") is None
+        assert _unwrap_tool_result(None) is None
+        assert _unwrap_tool_result([1, 2, 3]) is None
+
+    def test_unwrap_tool_result_handles_empty_content_list(self):
+        """Helper should handle empty content list gracefully."""
+        data = {"status": "success", "content": []}
+        assert _unwrap_tool_result(data) is None
+
+    def test_unwrap_tool_result_handles_content_without_json(self):
+        """Helper should handle content items without 'json' key."""
+        data = {"status": "success", "content": [{"text": "Some text"}]}
+        assert _unwrap_tool_result(data) is None
+
+
+class TestBug020v4ExtractFromMessages:
+    """
+    BUG-020 v4 FIX TESTS: Test _extract_from_messages() handles ToolResult format.
+
+    Before v4 fix, _extract_from_messages() had this buggy condition at line 217:
+        if isinstance(data, dict) and ("analysis" in data or "success" in data):
+
+    This fails for ToolResult format because:
+    - "analysis" is nested in content[0]["json"], not at root
+    - "success" key doesn't exist (it's "status" at root)
+
+    The v4 fix uses _unwrap_tool_result() to handle both formats.
+    """
+
+    def test_extract_from_messages_handles_tool_result_format(self):
+        """
+        BUG-020 v4 CORE TEST: _extract_from_messages must unwrap ToolResult format.
+
+        This test reproduces the exact failure scenario where a tool_result block
+        in messages contains ToolResult format data, and the old code would
+        return None because it checked for wrong keys.
+        """
+        messages = [
+            {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "content": json.dumps({
+                            "status": "success",
+                            "content": [{"json": {
+                                "success": True,
+                                "analysis": {"sheets": [{"name": "FromMessages"}], "sheet_count": 1},
+                            }}]
+                        })
+                    }
+                ]
+            }
+        ]
+
+        extracted = _extract_from_messages(messages, tool_name="unified_analyze_file")
+
+        assert extracted is not None, "Must extract from ToolResult format in messages"
+        assert "analysis" in extracted, "Must have 'analysis' key"
+        assert "sheets" in extracted["analysis"], "analysis must have 'sheets'"
+        assert extracted["analysis"]["sheets"][0]["name"] == "FromMessages"
+
+    def test_extract_from_messages_handles_direct_format(self):
+        """_extract_from_messages should still handle direct JSON format."""
+        messages = [
+            {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "content": json.dumps({
+                            "success": True,
+                            "analysis": {"sheets": [{"name": "DirectFromMessages"}]},
+                        })
+                    }
+                ]
+            }
+        ]
+
+        extracted = _extract_from_messages(messages, tool_name="test")
+
+        assert extracted is not None
+        assert extracted["analysis"]["sheets"][0]["name"] == "DirectFromMessages"
+
+    def test_extract_from_messages_returns_none_for_invalid_content(self):
+        """_extract_from_messages should return None for invalid content."""
+        # No tool_result blocks
+        messages = [{"content": [{"type": "text", "content": "Hello"}]}]
+        assert _extract_from_messages(messages, tool_name="test") is None
+
+        # Empty messages
+        assert _extract_from_messages([], tool_name="test") is None
+
+        # None input
+        assert _extract_from_messages(None, tool_name="test") is None
+
+
+class TestBug020v4IntegrationScenario:
+    """
+    BUG-020 v4 Integration test simulating the full failure scenario.
+
+    Scenario:
+    1. Swarm calls file_analyst agent
+    2. file_analyst calls unified_analyze_file tool
+    3. Tool returns ToolResult format: {"status": "...", "content": [{"json": {...}}]}
+    4. Agent's .result is None (LLM didn't populate structured output)
+    5. Extraction falls back to entry_point.messages
+    6. Messages contain tool_result block with ToolResult format
+    7. v4 fix ensures extraction succeeds via _unwrap_tool_result()
+    """
+
+    def test_extraction_succeeds_via_messages_fallback_with_tool_result_format(self):
+        """
+        BUG-020 v4 END-TO-END TEST: Full fallback path must work.
+
+        This simulates the production scenario where:
+        - Agent.result is None (agent used natural language instead)
+        - Tool output is in entry_point.messages as tool_result block
+        - Tool output is in ToolResult format
+
+        Before v4 fix, this would return None and cause frontend error.
+        """
+        mock_agent_result = Mock()
+        mock_agent_result.result = None  # Agent didn't return structured output
+
+        mock_entry_point = Mock()
+        mock_entry_point.messages = [
+            {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "content": json.dumps({
+                            "status": "success",
+                            "content": [{"json": {
+                                "success": True,
+                                "analysis": {
+                                    "sheets": [{"name": "FallbackSheet", "row_count": 100}],
+                                    "sheet_count": 1,
+                                },
+                                "column_mappings": [],
+                                "overall_confidence": 0.85,
+                            }}]
+                        })
+                    }
+                ]
+            }
+        ]
+
+        mock_swarm_result = Mock()
+        mock_swarm_result.results = {"file_analyst": mock_agent_result}
+        mock_swarm_result.entry_point = mock_entry_point
+        mock_swarm_result.message = "I analyzed the file."  # Natural language
+
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=mock_swarm_result,
+            agent_name="file_analyst",
+            tool_name="unified_analyze_file",
+        )
+
+        # BUG-020 v4 FIX: Extraction must succeed via messages fallback
+        assert extracted is not None, "Must extract via messages fallback"
+        assert "analysis" in extracted, "Must have 'analysis' key"
+        assert "sheets" in extracted["analysis"], "analysis must have 'sheets'"
+        assert extracted["analysis"]["sheets"][0]["name"] == "FallbackSheet"
+
+        # Verify we got structured data, NOT the natural language message
+        assert "I analyzed" not in str(extracted), "Must NOT include natural language"
