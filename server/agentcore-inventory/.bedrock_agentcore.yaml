@@ -78,17 +78,24 @@ agents:
       issuer_url: null
       duration_seconds: 300
     # JWT Authorizer Configuration for Frontend Access
-    # IMPORTANT: This MUST be set for the orchestrator to accept frontend JWT tokens
-    # Setting to null will REMOVE the authorizer during deployment (breaks auth!)
+    # =========================================================================
+    # IMPORTANT: Set to NULL here - authorizer is added by configure-orchestrator job
     #
-    # NOTE: If deployment fails with "Authorizer already exists" error, the
-    # workflow's configure-orchestrator job will update it post-deployment.
-    # The authorizer_configuration here ensures it survives ASYNC deployment completion.
-    authorizer_configuration:
-      customJWTAuthorizer:
-        discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
-        allowedClients:
-          - 7ovjm09dr94e52mpejvbu9v1cg
+    # WHY NOT IN YAML:
+    # - AgentCore CLI passes authorizerConfiguration to UpdateAgentRuntime API
+    # - AWS throws "Authorizer already exists" error when one exists (BUG-020 incident)
+    # - Even passing the SAME config back triggers this error (AWS limitation)
+    # - Setting to null allows code deployment to succeed
+    #
+    # SOLUTION:
+    # - authorizer_configuration: null here (code deploys without error)
+    # - configure-orchestrator job adds JWT authorizer AFTER deployment
+    # - This two-step approach avoids the AWS API conflict
+    #
+    # Cognito Pool: us-east-2_lkBXr4kjy
+    # Cognito Client: 7ovjm09dr94e52mpejvbu9v1cg
+    # =========================================================================
+    authorizer_configuration: null
     request_header_configuration: null
     oauth_configuration: null
     api_key_env_var_name: null
