@@ -61,29 +61,36 @@ ls -la
 | Directory      | Purpose                                  |
 | -------------- | ---------------------------------------- |
 | `client/`      | Next.js 16 + React 19 frontend (App Router) |
-| `server/`      | Google ADK + Bedrock AgentCore agents    |
+| `server/`      | Strands Agents + Bedrock AgentCore (ADR-002) |
 | `terraform/`   | ALL AWS infrastructure (Terraform only)  |
 | `docs/`        | Documentation                            |
 | `.claude/`     | Claude Code commands and skills          |
 
-### AgentCore Runtimes (100% A2A Architecture)
+### AgentCore Architecture (ADR-002: "Everything is an Agent")
 
-**SGA Module**: 14 dedicated AgentCore Runtimes (one per agent, A2A Protocol)
+**Structure**: Orchestrators + Specialists (all are Strands Agents)
 
-| Agent | Runtime ID | Purpose |
-| ----- | ---------- | ------- |
-| `nexo_import` | `faiston_sga_nexo_import` | Main orchestrator (ReAct pattern) |
-| `learning` | `faiston_sga_learning` | Episodic memory & pattern learning |
-| `validation` | `faiston_sga_validation` | Schema validation |
-| `intake` | `faiston_sga_intake` | NF XML/PDF parsing |
-| `estoque_control` | `faiston_sga_estoque_control` | Inventory operations |
-| *+ 9 more* | `faiston_sga_{agent}` | See `docs/AGENT_CATALOG.md` |
+```
+server/agentcore-inventory/agents/
+├── orchestrators/estoque/     # HTTP entry point (Strands Agent + Gemini)
+└── specialists/               # 15 A2A specialists (intake, learning, etc.)
+```
 
-**Communication**: JSON-RPC 2.0 over HTTP (A2A Protocol, port 9000)
-**Memory**: AgentCore Memory (global namespace `/strategy/import/company`)
-**Warm-Up**: EventBridge pings critical agents every 10 minutes
+| Type | Runtime ID | Purpose |
+| ---- | ---------- | ------- |
+| Orchestrator | `faiston_asset_management` | HTTP entry, LLM-based routing |
+| intake | `faiston_sga_intake` | NF parsing + S3 uploads |
+| estoque_control | `faiston_sga_estoque_control` | Inventory operations |
+| learning | `faiston_sga_learning` | Memory & patterns |
+| *+ 12 more* | `faiston_sga_{agent}` | See `docs/AGENT_CATALOG.md` |
 
-> **Key Docs:** `docs/AGENT_CATALOG.md` for full inventory, `docs/TROUBLESHOOTING.md` for HTTP 424.
+**Routing Modes** (orchestrator):
+1. Health Check → Direct
+2. Swarm → NEXO imports (5-agent autonomous)
+3. **Mode 2.5** → Infrastructure (direct S3 tool call, no A2A)
+4. LLM → Business data (100% Agentic)
+
+> **Key Docs:** `docs/ORCHESTRATOR_ARCHITECTURE.md`, `docs/AGENT_CATALOG.md`
 
 ### Minimal Tree (2 levels max)
 
@@ -114,8 +121,8 @@ echo "=== AGENTCORE RUNTIME STATUS ==="
 echo "(CLI Reference: https://aws.github.io/bedrock-agentcore-starter-toolkit/api-reference/cli.html)"
 echo ""
 
-# Check main orchestrator (nexo_import) status
-cd server/agentcore-inventory/agents/nexo_import 2>/dev/null && agentcore status 2>&1 | head -15 || echo "AgentCore CLI not available or agent not configured"
+# Check main orchestrator status (ADR-002 structure)
+cd server/agentcore-inventory/agents/orchestrators/estoque 2>/dev/null && agentcore status 2>&1 | head -15 || echo "AgentCore CLI not available or agent not configured"
 cd - > /dev/null 2>&1 || true
 ```
 

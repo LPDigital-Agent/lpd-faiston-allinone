@@ -4,6 +4,41 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-15 (Session 5) - /sync-project COMPLETED
+
+**Command:** `/sync-project`
+
+**Purpose:** Synchronize all project documentation, commands, and memory after BUG-017 v2 fix.
+
+**Phases Completed:**
+
+| Phase | Task | Status |
+|-------|------|--------|
+| 1-3 | Analyze project state (git, structure, docs) | ✅ |
+| 4 | Audit CLAUDE.md | ✅ No changes needed (REQUEST FLOW section exists) |
+| 5 | Update prime.md | ✅ Added ADR-002 structure |
+| 6 | Update README.md | ✅ Added ADR-002 architecture + ADR docs section |
+| 7 | Synchronize MCP Memory | ✅ Created entities + relations |
+| 8 | Generate Sync Report | ✅ This entry |
+
+**MCP Memory Updates:**
+- Created entity: `BUG-017-NEXO-Upload-URL-Failure` (type: Bug)
+- Created entity: `ADR-002-Faiston-Agent-Ecosystem` (type: Architecture)
+- Created relations: Bug → Fixed By → Orchestrator, ADR → Defines → Orchestrator
+- Added observations to `Faiston NEXO` entity
+
+**Files Modified:**
+- `.claude/commands/prime.md` - ADR-002 structure, routing modes
+- `docs/README.md` - ADR-002 architecture, ADR documentation links
+- `docs/CONTEXT_SNAPSHOT.md` - Current state snapshot
+- `docs/WORKLOG.md` - This sync report
+
+**GitHub Actions Status:**
+- "Deploy AgentCore Inventory" - Queued (BUG-017 v2 fix)
+- "Deploy SGA Agents (14 Runtimes)" - Queued
+
+---
+
 ## 2026-01-14 (Session 4) - BUG-017 v2 FIX (Direct Tool Call)
 
 **Bug:** BUG-017 v1 fix still failed - upload URL returned wrapped in LLM conversational text
@@ -2221,6 +2256,14 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-14 23:04:51 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-14 23:10:34 UTC
 
 **User:** (no user message captured)
 

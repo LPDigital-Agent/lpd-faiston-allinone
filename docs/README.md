@@ -13,7 +13,7 @@
 | **Platform** | Faiston One (intranet portal) |
 | **AI Assistant** | NEXO (central orchestrator) |
 | **Frontend** | Next.js 16 + React 19 + TypeScript + Tailwind CSS 4.0 + shadcn/ui |
-| **Backend** | Python 3.13 + Google ADK v1.0 + AWS Lambda (arm64) |
+| **Backend** | Python 3.13 + AWS Strands Agents + AWS Lambda (arm64) |
 | **AI Runtime** | AWS Bedrock AgentCore (Runtime + Memory + Gateway) |
 | **Infrastructure** | Terraform + GitHub Actions CI/CD |
 | **Auth** | Amazon Cognito (NO Amplify) |
@@ -97,6 +97,13 @@
 |----------|---------|
 | [SMART_IMPORT_ARCHITECTURE.md](SMART_IMPORT_ARCHITECTURE.md) | NEXO Smart Import flow, runtime IDs, troubleshooting |
 | [ORCHESTRATOR_ARCHITECTURE.md](ORCHESTRATOR_ARCHITECTURE.md) | Strands Orchestrator pattern with LLM-based routing |
+
+### Architecture Decision Records (ADRs)
+
+| Document | Purpose |
+|----------|---------|
+| [ADR-001-remove-orphan-dockerfiles.md](adr/ADR-001-remove-orphan-dockerfiles.md) | Remove orphan Dockerfiles (ZIP deploy only) |
+| [ADR-002-faiston-agent-ecosystem.md](adr/ADR-002-faiston-agent-ecosystem.md) | "Everything is an Agent" architecture (Strands) |
 
 ### Product Development
 
@@ -196,12 +203,13 @@ Asset/inventory management system with **100% A2A Agentic Architecture**:
 - Analytics dashboard
 - **Agent Room**: Transparency window for AI visibility (see below)
 
-**Architecture (A2A Protocol)**:
-- **14 AgentCore Runtimes** (one per agent, JSON-RPC 2.0 over HTTP)
-- **Communication**: A2A Protocol (port 9000) - no Python imports between agents
+**Architecture (ADR-002: "Everything is an Agent")**:
+- **1 Orchestrator** (`faiston_asset_management` - HTTP entry point, Strands Agent + Gemini)
+- **15 Specialists** (A2A Protocol, port 9000) - no Python imports between agents
+- **Routing Modes**: Health, Swarm (NEXO), Mode 2.5 (Infrastructure), LLM (Business)
 - **Memory**: AgentCore Memory (global namespace `/strategy/import/company`)
 - **Warm-Up**: EventBridge pings critical agents every 10 minutes to prevent cold starts
-- **Key Agents**: nexo_import (orchestrator), learning, validation, intake, estoque_control
+- **Key Agents**: intake, estoque_control, learning, validation, nexo_import
 
 **Backend**: 14 dedicated runtimes, 20 tools (PostgreSQL, schema validation, S3, HIL)
 **Frontend**: 6 contexts, 29 hooks, 25+ pages
