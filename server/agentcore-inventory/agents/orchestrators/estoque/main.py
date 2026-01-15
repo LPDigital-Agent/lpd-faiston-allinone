@@ -692,9 +692,14 @@ async def _invoke_swarm(
         elif hasattr(result, "message") and result.message:
             # Fallback to message extraction (for natural language responses)
             try:
-                response = json.loads(result.message)
-                logger.debug("[Swarm] Parsed JSON from result.message")
-            except json.JSONDecodeError:
+                # Handle both dict (already parsed) and string (needs parsing)
+                if isinstance(result.message, dict):
+                    response = result.message
+                    logger.debug("[Swarm] result.message already dict, using directly")
+                else:
+                    response = json.loads(result.message)
+                    logger.debug("[Swarm] Parsed JSON from result.message")
+            except (json.JSONDecodeError, TypeError):
                 response["message"] = result.message
                 logger.debug("[Swarm] Stored raw message as fallback")
 
@@ -887,8 +892,11 @@ def invoke(payload: dict, context) -> dict:
         # Extract response
         if hasattr(result, "message"):
             try:
+                # Handle both dict (already parsed) and string (needs parsing)
+                if isinstance(result.message, dict):
+                    return result.message
                 return json.loads(result.message)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, TypeError):
                 return {
                     "success": True,
                     "response": result.message,
