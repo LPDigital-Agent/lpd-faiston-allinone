@@ -48,6 +48,9 @@ from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.guardrails_hook import GuardrailsHook
 
+# Swarm response extraction (BUG-020)
+from swarm.response_utils import _extract_tool_output_from_swarm_result
+
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -665,14 +668,27 @@ async def _invoke_swarm(
     try:
         result = swarm(prompt, **swarm_context)
 
-        # Extract response from Swarm result
+        # Extract response from Swarm result using official Strands pattern
+        # BUG-020: result.results["agent"].result is the correct path, NOT result.message
         response = {}
 
-        if hasattr(result, "message") and result.message:
+        extracted = _extract_tool_output_from_swarm_result(
+            swarm_result=result,
+            agent_name="file_analyst",  # Primary analysis agent in Swarm
+            tool_name="unified_analyze_file",
+        )
+
+        if extracted:
+            response = extracted
+            logger.debug("[Swarm] Extracted structured response from agent result")
+        elif hasattr(result, "message") and result.message:
+            # Fallback to message extraction (for natural language responses)
             try:
                 response = json.loads(result.message)
+                logger.debug("[Swarm] Parsed JSON from result.message")
             except json.JSONDecodeError:
                 response["message"] = result.message
+                logger.debug("[Swarm] Stored raw message as fallback")
 
         # Check for HIL pause
         if response.get("stop_action"):
