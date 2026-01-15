@@ -79,19 +79,24 @@ def _extract_tool_output_from_swarm_result(
     # Pattern: result.results["analyst"].result
     # -------------------------------------------------------------------------
     if hasattr(swarm_result, "results") and swarm_result.results:
-        # If agent_name specified, use it directly (official pattern)
+        # Priority 1: Try specific agent name if provided AND exists (official pattern)
         if agent_name and agent_name in swarm_result.results:
             agent_result = swarm_result.results[agent_name]
             extracted = _extract_from_agent_result(agent_result, agent_name, tool_name)
             if extracted:
                 return extracted
 
-        # Fallback: Iterate all agents if no specific agent_name
-        if not agent_name:
-            for name, agent_result in swarm_result.results.items():
-                extracted = _extract_from_agent_result(agent_result, name, tool_name)
-                if extracted:
-                    return extracted
+        # Priority 2: Iterate ALL agents as fallback
+        # BUG-020 v3 FIX: This now runs unconditionally when Priority 1 fails
+        # (when agent_name not found in results OR agent_name not provided)
+        for name, agent_result in swarm_result.results.items():
+            extracted = _extract_from_agent_result(agent_result, name, tool_name)
+            if extracted:
+                logger.debug(
+                    "[_extract] Found valid output from agent %s (fallback iteration)",
+                    name,
+                )
+                return extracted
 
     # -------------------------------------------------------------------------
     # Priority 2: Extract from entry_point messages (fallback)

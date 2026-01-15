@@ -344,6 +344,34 @@ class TestBug020EdgeCases:
         assert extracted is not None
         assert extracted["analysis"]["sheets"][0]["name"] == "Found"
 
+    def test_fallback_iterates_all_agents_when_name_not_found(self):
+        """
+        BUG-020 v3 FIX: When specified agent_name doesn't exist in results,
+        extraction should still iterate all agents to find valid data.
+
+        This is the CRITICAL test for the v3 fix. Before the fix, this test
+        would FAIL because the `if not agent_name` guard prevented iteration
+        when a specific agent_name was provided but not found in results.
+        """
+        mock_other_agent = Mock()
+        mock_other_agent.result = {
+            "success": True,
+            "analysis": {"sheets": [{"name": "FoundViaFallback"}], "sheet_count": 1},
+        }
+
+        mock_swarm_result = Mock()
+        # Note: Key is "other_agent", NOT "file_analyst"
+        mock_swarm_result.results = {"other_agent": mock_other_agent}
+
+        # Pass "file_analyst" which does NOT exist in results
+        extracted = _extract_tool_output_from_swarm_result(
+            mock_swarm_result, agent_name="file_analyst", tool_name="test"
+        )
+
+        # Should STILL find data via fallback iteration (BUG-020 v3 fix)
+        assert extracted is not None, "Fallback iteration must find data in other agents"
+        assert extracted["analysis"]["sheets"][0]["name"] == "FoundViaFallback"
+
 
 class TestBug020FrontendContract:
     """
