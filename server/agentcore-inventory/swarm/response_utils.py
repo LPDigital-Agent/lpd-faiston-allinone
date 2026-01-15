@@ -37,6 +37,53 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# BUG-020 v4 FIX: Helper function to unwrap ToolResult format
+# =============================================================================
+
+
+def _unwrap_tool_result(data: Any) -> Optional[Dict]:
+    """
+    Unwrap ToolResult format and validate response structure.
+
+    Handles two formats:
+    - ToolResult format: {"status": "...", "content": [{"json": {...}}]}
+    - Direct response: {"success": ..., "analysis": {...}}
+
+    The ToolResult format is the official Strands SDK tool return format.
+    Reference: https://strandsagents.com SDK examples
+
+    Args:
+        data: Raw data to unwrap (dict, str, or other)
+
+    Returns:
+        Unwrapped dict with "analysis" or "success" key, or None if invalid
+
+    Example:
+        >>> tool_output = {"status": "success", "content": [{"json": {"analysis": {...}}}]}
+        >>> unwrapped = _unwrap_tool_result(tool_output)
+        >>> print(unwrapped)  # {"analysis": {...}}
+    """
+    if not isinstance(data, dict):
+        return None
+
+    # Priority 1: Handle ToolResult format
+    # {"status": "success", "content": [{"json": {...actual data...}}]}
+    if "content" in data and isinstance(data["content"], list):
+        for content_item in data["content"]:
+            if isinstance(content_item, dict) and "json" in content_item:
+                inner = content_item["json"]
+                if isinstance(inner, dict) and ("analysis" in inner or "success" in inner):
+                    logger.debug("[_unwrap] Extracted from ToolResult format")
+                    return inner
+
+    # Priority 2: Direct valid response (backwards compatibility)
+    if "analysis" in data or "success" in data:
+        return data
+
+    return None
+
+
 def _extract_tool_output_from_swarm_result(
     swarm_result: Any,
     agent_name: str = "",
@@ -79,19 +126,24 @@ def _extract_tool_output_from_swarm_result(
     # Pattern: result.results["analyst"].result
     # -------------------------------------------------------------------------
     if hasattr(swarm_result, "results") and swarm_result.results:
-        # If agent_name specified, use it directly (official pattern)
+        # Priority 1: Try specific agent name if provided AND exists (official pattern)
         if agent_name and agent_name in swarm_result.results:
             agent_result = swarm_result.results[agent_name]
             extracted = _extract_from_agent_result(agent_result, agent_name, tool_name)
             if extracted:
                 return extracted
 
-        # Fallback: Iterate all agents if no specific agent_name
-        if not agent_name:
-            for name, agent_result in swarm_result.results.items():
-                extracted = _extract_from_agent_result(agent_result, name, tool_name)
-                if extracted:
-                    return extracted
+        # Priority 2: Iterate ALL agents as fallback
+        # BUG-020 v3 FIX: This now runs unconditionally when Priority 1 fails
+        # (when agent_name not found in results OR agent_name not provided)
+        for name, agent_result in swarm_result.results.items():
+            extracted = _extract_from_agent_result(agent_result, name, tool_name)
+            if extracted:
+                logger.debug(
+                    "[_extract] Found valid output from agent %s (fallback iteration)",
+                    name,
+                )
+                return extracted
 
     # -------------------------------------------------------------------------
     # Priority 2: Extract from entry_point messages (fallback)
@@ -136,6 +188,8 @@ def _extract_from_agent_result(
     - Direct dict result
     - JSON string result
     - ToolResult format: {"status": "...", "content": [{"json": {...}}]}
+
+    Uses _unwrap_tool_result() helper for consistent handling (BUG-020 v4).
     """
     if not hasattr(agent_result, "result") or not agent_result.result:
         return None
@@ -156,39 +210,30 @@ def _extract_from_agent_result(
     if not isinstance(result_data, dict):
         return None
 
-    # Handle ToolResult format: {"status": "...", "content": [{"json": {...}}]}
-    # This is the official Strands tool return format
-    if "content" in result_data and isinstance(result_data["content"], list):
-        for content_item in result_data["content"]:
-            if isinstance(content_item, dict):
-                # Priority: JSON block
-                if "json" in content_item:
-                    logger.debug(
-                        "[_extract] Found ToolResult JSON from agent %s",
-                        agent_name,
-                    )
-                    return content_item["json"]
-                # Fallback: Text content as JSON
-                if "text" in content_item:
-                    try:
-                        text_data = json.loads(content_item["text"])
-                        if isinstance(text_data, dict):
-                            logger.debug(
-                                "[_extract] Parsed JSON from text content, agent %s",
-                                agent_name,
-                            )
-                            return text_data
-                    except json.JSONDecodeError:
-                        pass
-
-    # Direct dict result (backwards compatibility / plain dict returns)
-    # Check for known keys that indicate valid analysis response
-    if "analysis" in result_data or "success" in result_data:
+    # BUG-020 v4: Use helper for consistent ToolResult and direct format handling
+    unwrapped = _unwrap_tool_result(result_data)
+    if unwrapped:
         logger.debug(
-            "[_extract] Found direct dict result from agent %s",
+            "[_extract] Found valid result from agent %s",
             agent_name,
         )
-        return result_data
+        return unwrapped
+
+    # Additional fallback: Text content in ToolResult format
+    # (edge case not handled by _unwrap_tool_result)
+    if "content" in result_data and isinstance(result_data["content"], list):
+        for content_item in result_data["content"]:
+            if isinstance(content_item, dict) and "text" in content_item:
+                try:
+                    text_data = json.loads(content_item["text"])
+                    if isinstance(text_data, dict) and ("analysis" in text_data or "success" in text_data):
+                        logger.debug(
+                            "[_extract] Parsed JSON from text content, agent %s",
+                            agent_name,
+                        )
+                        return text_data
+                except json.JSONDecodeError:
+                    pass
 
     return None
 
@@ -198,6 +243,7 @@ def _extract_from_messages(messages: list, tool_name: str) -> Optional[Dict]:
     Extract structured data from entry_point messages.
 
     Searches for tool_result blocks in message history.
+    Handles both direct JSON and ToolResult format (BUG-020 v4 fix).
     """
     for msg in reversed(messages if isinstance(messages, list) else []):
         # Handle dict-style messages
@@ -209,9 +255,11 @@ def _extract_from_messages(messages: list, tool_name: str) -> Optional[Dict]:
                         block_content = block.get("content", "")
                         try:
                             data = json.loads(block_content) if isinstance(block_content, str) else block_content
-                            if isinstance(data, dict) and ("analysis" in data or "success" in data):
+                            # BUG-020 v4 FIX: Use helper to handle ToolResult format
+                            unwrapped = _unwrap_tool_result(data)
+                            if unwrapped:
                                 logger.debug("[_extract] Found JSON in tool_result block")
-                                return data
+                                return unwrapped
                         except (json.JSONDecodeError, TypeError):
                             continue
 
@@ -219,9 +267,11 @@ def _extract_from_messages(messages: list, tool_name: str) -> Optional[Dict]:
         if hasattr(msg, "content") and msg.content:
             try:
                 data = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
-                if isinstance(data, dict) and ("analysis" in data or "success" in data):
+                # BUG-020 v4 FIX: Use helper to handle ToolResult format
+                unwrapped = _unwrap_tool_result(data)
+                if unwrapped:
                     logger.debug("[_extract] Found JSON in entry_point messages")
-                    return data
+                    return unwrapped
             except (json.JSONDecodeError, TypeError):
                 continue
 

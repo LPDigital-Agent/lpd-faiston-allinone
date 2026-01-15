@@ -668,6 +668,14 @@ async def _invoke_swarm(
     try:
         result = swarm(prompt, **swarm_context)
 
+        # BUG-020 v3: Log Swarm result structure for debugging
+        logger.info(
+            "[Swarm] Result structure: results_keys=%s, status=%s, has_message=%s",
+            list(result.results.keys()) if hasattr(result, "results") and result.results else "None",
+            getattr(result, "status", "N/A"),
+            bool(getattr(result, "message", None)),
+        )
+
         # Extract response from Swarm result using official Strands pattern
         # BUG-020: result.results["agent"].result is the correct path, NOT result.message
         response = {}
