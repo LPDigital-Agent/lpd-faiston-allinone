@@ -130,26 +130,37 @@ jobs:
 
           DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+          # Build common env vars
+          ENV_ARGS=(
+            --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+            --env INVENTORY_TABLE=faiston-one-sga-inventory-prod
+            --env HIL_TASKS_TABLE=faiston-one-sga-hil-tasks-prod
+            --env AUDIT_LOG_TABLE=faiston-one-sga-audit-log-prod
+            --env SESSIONS_TABLE=faiston-one-sga-sessions-prod
+            --env DOCUMENTS_BUCKET=faiston-one-sga-documents-prod
+            --env USE_POSTGRES_MCP=true
+            --env AGENTCORE_GATEWAY_ID=faiston-one-sga-gateway-prod-qbnlm3ao63
+            --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp
+            --env GIT_COMMIT_SHA=${{ github.sha }}
+            --env DEPLOYED_AT=$DEPLOY_TIMESTAMP
+            --env AGENTCORE_MEMORY_ID=nexo_sga_learning_memory-u3ypElEdl1
+            --env PROJECT_NAME=faiston-one
+            --env AGENT_ID=${{ matrix.agent }}
+          )
+
+          # Add CARRIER_MODE=real for carrier agent (VIPP real API integration)
+          if [ "${{ matrix.agent }}" = "faiston_sga_carrier" ]; then
+            echo "Adding CARRIER_MODE=real for carrier agent"
+            ENV_ARGS+=(--env CARRIER_MODE=real)
+          fi
+
           # Deploy using .bedrock_agentcore.yaml configuration
           # Execution role is defined in the YAML file for each agent:
           #   execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
           # DO NOT pass --execution-role as CLI argument (not supported by agentcore CLI)
           echo "y" | agentcore deploy --agent ${{ matrix.agent }} \
             --auto-update-on-conflict \
-            --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
-            --env INVENTORY_TABLE=faiston-one-sga-inventory-prod \
-            --env HIL_TASKS_TABLE=faiston-one-sga-hil-tasks-prod \
-            --env AUDIT_LOG_TABLE=faiston-one-sga-audit-log-prod \
-            --env SESSIONS_TABLE=faiston-one-sga-sessions-prod \
-            --env DOCUMENTS_BUCKET=faiston-one-sga-documents-prod \
-            --env USE_POSTGRES_MCP=true \
-            --env AGENTCORE_GATEWAY_ID=faiston-one-sga-gateway-prod-qbnlm3ao63 \
-            --env AGENTCORE_GATEWAY_URL=https://faiston-one-sga-gateway-prod-qbnlm3ao63.gateway.bedrock-agentcore.us-east-2.amazonaws.com/mcp \
-            --env GIT_COMMIT_SHA=${{ github.sha }} \
-            --env DEPLOYED_AT=$DEPLOY_TIMESTAMP \
-            --env AGENTCORE_MEMORY_ID=nexo_sga_learning_memory-u3ypElEdl1 \
-            --env PROJECT_NAME=faiston-one \
-            --env AGENT_ID=${{ matrix.agent }}
+            "${ENV_ARGS[@]}"
 
       - name: Check deployment status
         working-directory: server/agentcore-inventory
