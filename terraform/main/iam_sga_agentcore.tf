@@ -511,6 +511,46 @@ resource "aws_iam_role_policy" "sga_agentcore_xray" {
 }
 
 # =============================================================================
+# Secrets Manager Access Policy
+# =============================================================================
+# Allows agents to read secrets for external API authentication
+# Required for: CarrierAgent (POSTAL/VIPP API credentials)
+
+data "aws_iam_policy_document" "sga_agentcore_secrets" {
+  # POSTAL service credentials (for CarrierAgent)
+  statement {
+    sid    = "SecretsManagerPostalAccess"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      aws_secretsmanager_secret.postal_credentials.arn
+    ]
+  }
+
+  # Tavily API key (for research agents if needed)
+  statement {
+    sid    = "SecretsManagerTavilyAccess"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [
+      aws_secretsmanager_secret.tavily_api_key.arn
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "sga_agentcore_secrets" {
+  name   = "${var.project_name}-sga-secrets-policy"
+  role   = aws_iam_role.sga_agentcore_execution.id
+  policy = data.aws_iam_policy_document.sga_agentcore_secrets.json
+}
+
+# =============================================================================
 # Outputs
 # =============================================================================
 
