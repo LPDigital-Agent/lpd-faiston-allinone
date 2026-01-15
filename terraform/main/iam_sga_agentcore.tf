@@ -518,6 +518,7 @@ resource "aws_iam_role_policy" "sga_agentcore_xray" {
 
 data "aws_iam_policy_document" "sga_agentcore_secrets" {
   # POSTAL service credentials (for CarrierAgent)
+  # Note: Using explicit ARN pattern because secret may exist outside Terraform state
   statement {
     sid    = "SecretsManagerPostalAccess"
     effect = "Allow"
@@ -526,7 +527,7 @@ data "aws_iam_policy_document" "sga_agentcore_secrets" {
       "secretsmanager:DescribeSecret"
     ]
     resources = [
-      aws_secretsmanager_secret.postal_credentials.arn
+      "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/postal/credentials*"
     ]
   }
 
@@ -539,7 +540,7 @@ data "aws_iam_policy_document" "sga_agentcore_secrets" {
       "secretsmanager:DescribeSecret"
     ]
     resources = [
-      aws_secretsmanager_secret.tavily_api_key.arn
+      "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.current.account_id}:secret:${var.project_name}/tavily/api-key*"
     ]
   }
 }
