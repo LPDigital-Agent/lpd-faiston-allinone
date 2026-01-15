@@ -1,5 +1,5 @@
 # =============================================================================
-# Swarm Response Extraction Utilities (BUG-019 + BUG-020 v8)
+# Swarm Response Extraction Utilities (BUG-019 + BUG-020 v10)
 # =============================================================================
 # Infrastructure code for extracting structured data from Strands Swarm results.
 #
@@ -7,7 +7,7 @@
 # @dataclass
 # class AgentResult:
 #     stop_reason: StopReason
-#     message: Message          # ← Tool output is HERE
+#     message: Message          # ← Tool output is HERE (can be dict or Message)
 #     metrics: EventLoopMetrics
 #     state: Any
 #     interrupts: Sequence[Interrupt] | None = None
@@ -17,6 +17,14 @@
 # 1. result.results["agent_name"].result.message (BUG-020 v8 - CORRECT)
 # 2. result.results["agent_name"].result as dict (fallback for raw dict returns)
 # 3. result.entry_point.messages[] (fallback for tool_result blocks)
+#
+# Message dict format (Strands SDK):
+# {
+#     "role": "assistant",
+#     "content": [
+#         {"type": "tool_result", "tool_use_id": "...", "content": "JSON_STRING"}
+#     ]
+# }
 #
 # ToolResult format (official Strands SDK):
 # {
@@ -34,10 +42,11 @@
 # - Is INFRASTRUCTURE code (SDK parsing), NOT business logic
 # - Business logic runs 100% inside Strands agents with Gemini
 #
-# BUG-020 v8 FIX (2026-01-15):
-# - v7 checked `.result` but AgentResult has NO `.result` attribute!
-# - AgentResult has `.message` which contains tool output as JSON string
-# - v8 correctly extracts from `.message` attribute
+# BUG-020 v10 FIX (2026-01-16):
+# - v8 used hasattr(dict, "content") which returns FALSE for dicts!
+# - Python dicts have KEYS, not attributes - use "key in dict" instead
+# - v10 properly iterates message["content"] array for tool_result blocks
+# - Extracts JSON from content_block["content"] (string or dict)
 #
 # Sources:
 # - https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/
@@ -174,11 +183,68 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
             logger.debug("[v8] Message is non-JSON string, skipping")
             pass
 
-    # Handle dict message directly
+    # Handle dict message directly (v10 FIX for Message-like dicts)
     if isinstance(message, dict):
+        # v10 FIX: Check if dict has Message structure (role + content array)
+        # NOTE: hasattr(dict, "content") returns FALSE for dicts - use "key in dict"
+        if "content" in message and isinstance(message.get("content"), list):
+            logger.info("[v10] Dict has Message structure, iterating content array")
+            for content_block in message["content"]:
+                if isinstance(content_block, dict):
+                    # Look for tool_result blocks (Strands SDK format)
+                    if content_block.get("type") == "tool_result":
+                        tool_content = content_block.get("content", "")
+                        logger.info(
+                            "[v10] Found tool_result block, content type=%s",
+                            type(tool_content).__name__,
+                        )
+                        # Parse JSON string from tool_result content
+                        if isinstance(tool_content, str):
+                            try:
+                                parsed = json.loads(tool_content)
+                                if isinstance(parsed, dict):
+                                    if "analysis" in parsed or "success" in parsed:
+                                        logger.info(
+                                            "[v10] SUCCESS: Extracted from dict.content[].tool_result"
+                                        )
+                                        return parsed
+                                    # Try unwrap if wrapped in ToolResult format
+                                    unwrapped = _unwrap_tool_result(parsed)
+                                    if unwrapped:
+                                        logger.info(
+                                            "[v10] SUCCESS: Unwrapped from dict.content[].tool_result"
+                                        )
+                                        return unwrapped
+                            except json.JSONDecodeError:
+                                logger.debug("[v10] tool_result content is not JSON")
+                        elif isinstance(tool_content, dict):
+                            if "analysis" in tool_content or "success" in tool_content:
+                                logger.info(
+                                    "[v10] SUCCESS: Direct dict from tool_result content"
+                                )
+                                return tool_content
+                            unwrapped = _unwrap_tool_result(tool_content)
+                            if unwrapped:
+                                logger.info(
+                                    "[v10] SUCCESS: Unwrapped dict from tool_result"
+                                )
+                                return unwrapped
+
+                    # Look for direct json key in content block
+                    if "json" in content_block:
+                        inner = content_block["json"]
+                        if isinstance(inner, dict) and (
+                            "analysis" in inner or "success" in inner
+                        ):
+                            logger.info(
+                                "[v10] SUCCESS: Extracted from dict.content[].json"
+                            )
+                            return inner
+
+        # Fallback: Try standard unwrap (for non-Message dicts)
         unwrapped = _unwrap_tool_result(message)
         if unwrapped:
-            logger.info("[v8] Extracted from dict message")
+            logger.info("[v10] Extracted from direct dict message")
             return unwrapped
 
     return None
