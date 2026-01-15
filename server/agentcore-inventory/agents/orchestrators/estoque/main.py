@@ -352,13 +352,19 @@ async def _invoke_agent_via_a2a(
             # Parse the response
             if response_text:
                 try:
-                    parsed = json.loads(response_text)
+                    # Handle both dict (already parsed) and string (needs parsing)
+                    if isinstance(response_text, dict):
+                        parsed = response_text
+                        logger.debug("[A2A] response_text already dict, using directly")
+                    else:
+                        parsed = json.loads(response_text)
+                        logger.debug("[A2A] Parsed JSON from response_text")
                     return {
                         "success": parsed.get("success", True),
                         "specialist_agent": agent_id,
                         "response": parsed,
                     }
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, TypeError):
                     return {
                         "success": True,
                         "specialist_agent": agent_id,
