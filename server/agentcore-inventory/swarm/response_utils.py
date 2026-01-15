@@ -64,6 +64,15 @@ def _unwrap_tool_result(data: Any) -> Optional[Dict]:
         >>> unwrapped = _unwrap_tool_result(tool_output)
         >>> print(unwrapped)  # {"analysis": {...}}
     """
+    # BUG-020 v6: Diagnostic logging for extraction debugging
+    logger.info(
+        "[_unwrap] input type=%s, has_content=%s, has_analysis=%s, has_success=%s",
+        type(data).__name__ if data else "None",
+        "content" in data if isinstance(data, dict) else False,
+        "analysis" in data if isinstance(data, dict) else False,
+        "success" in data if isinstance(data, dict) else False,
+    )
+
     if not isinstance(data, dict):
         return None
 
@@ -118,7 +127,18 @@ def _extract_tool_output_from_swarm_result(
         ...     print(data["analysis"])
     """
     if swarm_result is None:
+        logger.warning("[_extract] swarm_result is None!")
         return None
+
+    # BUG-020 v6: Diagnostic logging for Swarm result structure
+    logger.info(
+        "[_extract] START: swarm_result type=%s, has_results=%s, has_entry_point=%s",
+        type(swarm_result).__name__,
+        hasattr(swarm_result, "results") and bool(swarm_result.results),
+        hasattr(swarm_result, "entry_point") and bool(swarm_result.entry_point),
+    )
+    if hasattr(swarm_result, "results") and swarm_result.results:
+        logger.info("[_extract] results_keys=%s", list(swarm_result.results.keys()))
 
     # -------------------------------------------------------------------------
     # Priority 1: Extract from specific agent's result (official Strands pattern)
@@ -191,7 +211,16 @@ def _extract_from_agent_result(
 
     Uses _unwrap_tool_result() helper for consistent handling (BUG-020 v4).
     """
+    # BUG-020 v6: Diagnostic logging for agent result details
+    logger.info(
+        "[_extract_agent] agent=%s, has_result_attr=%s, result_type=%s",
+        agent_name,
+        hasattr(agent_result, "result"),
+        type(agent_result.result).__name__ if hasattr(agent_result, "result") and agent_result.result else "None",
+    )
+
     if not hasattr(agent_result, "result") or not agent_result.result:
+        logger.warning("[_extract_agent] agent=%s has NO result attribute!", agent_name)
         return None
 
     result_data = agent_result.result

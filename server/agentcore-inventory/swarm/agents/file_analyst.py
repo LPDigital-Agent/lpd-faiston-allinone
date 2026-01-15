@@ -131,6 +131,15 @@ def unified_analyze_file(
     # Reference: https://strandsagents.com SDK examples
     # This ensures proper extraction via result.results["file_analyst"].result
     # ==========================================================================
+
+    # BUG-020 v6: Diagnostic logging for tool output
+    logger.info(
+        "[unified_analyze_file] Returning ToolResult: success=%s, has_analysis=%s, content_length=%d",
+        result.get("success") if result else None,
+        "analysis" in result if result else False,
+        len(str(result)) if result else 0,
+    )
+
     return {
         "status": "success" if result.get("success") else "error",
         "content": [{"json": result}]
