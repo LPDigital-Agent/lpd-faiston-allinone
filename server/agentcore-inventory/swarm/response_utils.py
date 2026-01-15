@@ -1,5 +1,5 @@
 # =============================================================================
-# Swarm Response Extraction Utilities (BUG-019 + BUG-020 v10)
+# Swarm Response Extraction Utilities (BUG-019 + BUG-020 v11)
 # =============================================================================
 # Infrastructure code for extracting structured data from Strands Swarm results.
 #
@@ -18,11 +18,14 @@
 # 2. result.results["agent_name"].result as dict (fallback for raw dict returns)
 # 3. result.entry_point.messages[] (fallback for tool_result blocks)
 #
-# Message dict format (Strands SDK):
+# Message content block format (OFFICIAL Strands SDK - v11 FIX):
+# Content blocks use DIRECT KEYS, NOT a "type" field!
 # {
-#     "role": "assistant",
+#     "role": "user",
 #     "content": [
-#         {"type": "tool_result", "tool_use_id": "...", "content": "JSON_STRING"}
+#         {"text": "..."},           # Text block
+#         {"toolUse": {...}},        # Tool use block
+#         {"toolResult": {...}}      # Tool result block ← OUR DATA IS HERE
 #     ]
 # }
 #
@@ -31,8 +34,8 @@
 #     "toolUseId": str,       # Optional
 #     "status": str,          # "success" or "error"
 #     "content": [            # List of content items
-#         {"json": {...}},    # Structured data
-#         {"text": "..."}     # Text data
+#         {"json": {...}},    # Structured data ← ANALYSIS HERE
+#         {"text": "..."}     # Text data (may be JSON string)
 #     ]
 # }
 #
@@ -42,17 +45,18 @@
 # - Is INFRASTRUCTURE code (SDK parsing), NOT business logic
 # - Business logic runs 100% inside Strands agents with Gemini
 #
-# BUG-020 v10 FIX (2026-01-16):
-# - v8 used hasattr(dict, "content") which returns FALSE for dicts!
-# - Python dicts have KEYS, not attributes - use "key in dict" instead
-# - v10 properly iterates message["content"] array for tool_result blocks
-# - Extracts JSON from content_block["content"] (string or dict)
+# BUG-020 v11 FIX (2026-01-16):
+# - v10 looked for content_block.get("type") == "tool_result" - WRONG!
+# - Official Strands SDK uses "toolResult" as a KEY, NOT a type value
+# - v11 checks for "toolResult" in content_block (correct pattern)
+# - Extracts from content_block["toolResult"]["content"][0]["json"]
 #
 # Sources:
 # - https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/
-# - https://strandsagents.com/latest/documentation/docs/api-reference/multiagent/
+# - https://strandsagents.com/latest/documentation/docs/api-reference/agent (tool result format)
 # - https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/tools/custom-tools.md
 # - https://github.com/strands-agents/sdk-python/blob/v1.20.0/src/strands/agent/agent_result.py
+# - Context7 query 2026-01-16 (confirmed toolResult key format)
 # =============================================================================
 
 import json
@@ -183,68 +187,106 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
             logger.debug("[v8] Message is non-JSON string, skipping")
             pass
 
-    # Handle dict message directly (v10 FIX for Message-like dicts)
+    # Handle dict message directly (v11 FIX for Message-like dicts)
     if isinstance(message, dict):
-        # v10 FIX: Check if dict has Message structure (role + content array)
+        # v11 FIX: Check if dict has Message structure (role + content array)
         # NOTE: hasattr(dict, "content") returns FALSE for dicts - use "key in dict"
         if "content" in message and isinstance(message.get("content"), list):
-            logger.info("[v10] Dict has Message structure, iterating content array")
+            logger.info("[v11] Dict has Message structure, iterating content array")
             for content_block in message["content"]:
                 if isinstance(content_block, dict):
-                    # Look for tool_result blocks (Strands SDK format)
+                    # =====================================================
+                    # v11 FIX: Check for "toolResult" KEY (official Strands)
+                    # NOT "type": "tool_result" - that format doesn't exist!
+                    # Official format: {"toolResult": {"status": "...", "content": [...]}}
+                    # Source: Context7 query of strandsagents.com 2026-01-16
+                    # =====================================================
+                    if "toolResult" in content_block:
+                        tool_result = content_block["toolResult"]
+                        logger.info(
+                            "[v11] Found toolResult block, status=%s",
+                            tool_result.get("status") if isinstance(tool_result, dict) else "N/A",
+                        )
+
+                        # Extract from ToolResult.content array
+                        # Format: {"status": "success", "content": [{"json": {...}}, {"text": "..."}]}
+                        if isinstance(tool_result, dict) and "content" in tool_result:
+                            for tr_content in tool_result.get("content", []):
+                                if isinstance(tr_content, dict):
+                                    # json block (structured data) - PRIMARY
+                                    if "json" in tr_content:
+                                        inner = tr_content["json"]
+                                        if isinstance(inner, dict):
+                                            if "analysis" in inner or "success" in inner:
+                                                logger.info("[v11] SUCCESS: Extracted from toolResult.content[].json")
+                                                return inner
+                                            # Try unwrap if nested in another wrapper
+                                            unwrapped = _unwrap_tool_result(inner)
+                                            if unwrapped:
+                                                logger.info("[v11] SUCCESS: Unwrapped from toolResult.content[].json")
+                                                return unwrapped
+
+                                    # text block (JSON string) - SECONDARY
+                                    if "text" in tr_content:
+                                        try:
+                                            parsed = json.loads(tr_content["text"])
+                                            if isinstance(parsed, dict):
+                                                if "analysis" in parsed or "success" in parsed:
+                                                    logger.info("[v11] SUCCESS: Parsed from toolResult.content[].text")
+                                                    return parsed
+                                                unwrapped = _unwrap_tool_result(parsed)
+                                                if unwrapped:
+                                                    logger.info("[v11] SUCCESS: Unwrapped from toolResult.content[].text")
+                                                    return unwrapped
+                                        except json.JSONDecodeError:
+                                            logger.debug("[v11] text content is not JSON")
+
+                        # Fallback: Direct data in toolResult (non-standard but handle it)
+                        if isinstance(tool_result, dict):
+                            if "analysis" in tool_result or "success" in tool_result:
+                                logger.info("[v11] SUCCESS: Direct data from toolResult")
+                                return tool_result
+
+                    # =====================================================
+                    # KEEP legacy patterns as fallback (backward compatibility)
+                    # =====================================================
+
+                    # Legacy: "type": "tool_result" format (v10 code - may still work for some edge cases)
                     if content_block.get("type") == "tool_result":
                         tool_content = content_block.get("content", "")
-                        logger.info(
-                            "[v10] Found tool_result block, content type=%s",
-                            type(tool_content).__name__,
-                        )
-                        # Parse JSON string from tool_result content
+                        logger.info("[v11] Found legacy tool_result block (type key)")
                         if isinstance(tool_content, str):
                             try:
                                 parsed = json.loads(tool_content)
                                 if isinstance(parsed, dict):
                                     if "analysis" in parsed or "success" in parsed:
-                                        logger.info(
-                                            "[v10] SUCCESS: Extracted from dict.content[].tool_result"
-                                        )
+                                        logger.info("[v11] SUCCESS: Extracted from legacy tool_result")
                                         return parsed
-                                    # Try unwrap if wrapped in ToolResult format
                                     unwrapped = _unwrap_tool_result(parsed)
                                     if unwrapped:
-                                        logger.info(
-                                            "[v10] SUCCESS: Unwrapped from dict.content[].tool_result"
-                                        )
                                         return unwrapped
                             except json.JSONDecodeError:
-                                logger.debug("[v10] tool_result content is not JSON")
+                                pass
                         elif isinstance(tool_content, dict):
                             if "analysis" in tool_content or "success" in tool_content:
-                                logger.info(
-                                    "[v10] SUCCESS: Direct dict from tool_result content"
-                                )
                                 return tool_content
                             unwrapped = _unwrap_tool_result(tool_content)
                             if unwrapped:
-                                logger.info(
-                                    "[v10] SUCCESS: Unwrapped dict from tool_result"
-                                )
                                 return unwrapped
 
-                    # Look for direct json key in content block
+                    # Direct json key in content block
                     if "json" in content_block:
                         inner = content_block["json"]
                         if isinstance(inner, dict) and (
                             "analysis" in inner or "success" in inner
                         ):
-                            logger.info(
-                                "[v10] SUCCESS: Extracted from dict.content[].json"
-                            )
+                            logger.info("[v11] SUCCESS: Extracted from dict.content[].json")
                             return inner
 
         # Fallback: Try standard unwrap (for non-Message dicts)
         unwrapped = _unwrap_tool_result(message)
         if unwrapped:
-            logger.info("[v10] Extracted from direct dict message")
+            logger.info("[v11] Extracted from direct dict message")
             return unwrapped
 
     return None
