@@ -225,6 +225,36 @@ def _extract_from_agent_result(
 
     result_data = agent_result.result
 
+    # =========================================================================
+    # BUG-020 v7 FIX: Handle nested AgentResult objects
+    # =========================================================================
+    # CloudWatch logs revealed: result_type=AgentResult instead of dict
+    # Strands SDK may return AgentResult.result as another AgentResult object.
+    # This while loop unwraps until we get actual data (dict or str).
+    # =========================================================================
+    unwrap_depth = 0
+    max_unwrap_depth = 5  # Safety limit to prevent infinite loops
+    while (
+        hasattr(result_data, "result")
+        and not isinstance(result_data, (dict, str))
+        and unwrap_depth < max_unwrap_depth
+    ):
+        logger.debug(
+            "[_extract_agent] Unwrapping nested AgentResult for agent=%s (depth=%d)",
+            agent_name,
+            unwrap_depth,
+        )
+        result_data = result_data.result
+        unwrap_depth += 1
+
+    if unwrap_depth > 0:
+        logger.info(
+            "[_extract_agent] agent=%s unwrapped %d levels, final_type=%s",
+            agent_name,
+            unwrap_depth,
+            type(result_data).__name__,
+        )
+
     # Handle string JSON (LLM may return JSON as string)
     if isinstance(result_data, str):
         try:
@@ -237,6 +267,13 @@ def _extract_from_agent_result(
             return None
 
     if not isinstance(result_data, dict):
+        # BUG-020 v7: Enhanced logging for debugging unexpected types
+        logger.warning(
+            "[_extract_agent] agent=%s result_data is NOT a dict! type=%s, attrs=%s",
+            agent_name,
+            type(result_data).__name__,
+            [a for a in dir(result_data) if not a.startswith("_")][:10] if hasattr(result_data, "__dir__") else "N/A",
+        )
         return None
 
     # BUG-020 v4: Use helper for consistent ToolResult and direct format handling
