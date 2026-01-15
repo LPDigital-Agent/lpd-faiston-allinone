@@ -21,6 +21,7 @@ Secret Format: {"usuario": "...", "token": "...", "id_perfil": "..."}
 import json
 import os
 import logging
+import re
 import httpx
 from functools import lru_cache
 from typing import List, Dict, Any, Optional
@@ -279,11 +280,20 @@ class PostalServiceAdapter(ShippingAdapter):
                     else:
                         item = data
 
-                    # Parse Correios response
-                    if item.get("Valor"):
-                        price_str = item["Valor"].replace(".", "").replace(",", ".")
-                        price = float(price_str)
-                        delivery_days = int(item.get("PrazoEntrega", 0))
+                    # Parse Correios response (@@precosEPrazosView format)
+                    # Success: status == 200, price in "precoAgencia" (e.g., "R$ 40,40")
+                    # Delivery in "prazo" (e.g., "1 dia útil" or "5 dias úteis")
+                    if item.get("status") == 200:
+                        # Parse price: "R$ 40,40" -> 40.40
+                        price_str = item.get("precoAgencia", "R$ 0,00")
+                        price_str = price_str.replace("R$", "").replace(" ", "").strip()
+                        price_str = price_str.replace(".", "").replace(",", ".")
+                        price = float(price_str) if price_str else 0.0
+
+                        # Parse delivery days: "1 dia útil" or "5 dias úteis" -> extract number
+                        prazo_str = item.get("prazo", "0 dias")
+                        prazo_match = re.search(r"(\d+)", prazo_str)
+                        delivery_days = int(prazo_match.group(1)) if prazo_match else 0
 
                         quotes.append(QuoteResult(
                             carrier="Correios",
@@ -296,7 +306,11 @@ class PostalServiceAdapter(ShippingAdapter):
                             available=True,
                             raw_response=data,
                         ))
-                    elif item.get("Erro"):
+                    else:
+                        # Error case: status != 200 or msg contains error
+                        error_msg = item.get("msg", "").strip()
+                        if not error_msg or error_msg == " ":
+                            error_msg = "Servico indisponivel"
                         quotes.append(QuoteResult(
                             carrier="Correios",
                             service=service_name,
@@ -305,7 +319,7 @@ class PostalServiceAdapter(ShippingAdapter):
                             delivery_days=0,
                             is_simulated=False,
                             available=False,
-                            reason=item.get("MsgErro", "Servico indisponivel"),
+                            reason=error_msg,
                             raw_response=data,
                         ))
 
