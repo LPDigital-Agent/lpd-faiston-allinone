@@ -42,7 +42,7 @@ def get_shipping_adapter(force_mode: Optional[str] = None) -> ShippingAdapter:
     global _adapter_instance
 
     # Determine mode
-    mode = force_mode or os.getenv("CARRIER_MODE", "mock").lower()
+    mode = force_mode or os.getenv("CARRIER_MODE", "real").lower()
 
     # Return existing instance if mode matches
     if _adapter_instance is not None:
