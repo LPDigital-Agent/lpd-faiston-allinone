@@ -272,11 +272,18 @@ class PostalServiceAdapter(ShippingAdapter):
                 if response.status_code == 200:
                     data = response.json()
 
+                    # Handle list response from Correios API
+                    # The API returns a list of quotes, extract the first item
+                    if isinstance(data, list):
+                        item = data[0] if data else {}
+                    else:
+                        item = data
+
                     # Parse Correios response
-                    if data.get("Valor"):
-                        price_str = data["Valor"].replace(".", "").replace(",", ".")
+                    if item.get("Valor"):
+                        price_str = item["Valor"].replace(".", "").replace(",", ".")
                         price = float(price_str)
-                        delivery_days = int(data.get("PrazoEntrega", 0))
+                        delivery_days = int(item.get("PrazoEntrega", 0))
 
                         quotes.append(QuoteResult(
                             carrier="Correios",
@@ -289,7 +296,7 @@ class PostalServiceAdapter(ShippingAdapter):
                             available=True,
                             raw_response=data,
                         ))
-                    elif data.get("Erro"):
+                    elif item.get("Erro"):
                         quotes.append(QuoteResult(
                             carrier="Correios",
                             service=service_name,
@@ -298,7 +305,7 @@ class PostalServiceAdapter(ShippingAdapter):
                             delivery_days=0,
                             is_simulated=False,
                             available=False,
-                            reason=data.get("MsgErro", "Servico indisponivel"),
+                            reason=item.get("MsgErro", "Servico indisponivel"),
                             raw_response=data,
                         ))
 
