@@ -30,7 +30,7 @@ class TestSwarmResponseExtraction:
         https://github.com/strands-agents/docs/blob/main/docs/user-guide/concepts/multi-agent/swarm.md
         """
         # Import the function to test (will be created)
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         # Create mock SwarmResult with official structure
         mock_agent_result = Mock()
@@ -74,7 +74,7 @@ class TestSwarmResponseExtraction:
 
         Sometimes agents return JSON as string instead of dict.
         """
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         # Agent returns JSON string
         mock_agent_result = Mock()
@@ -101,7 +101,7 @@ class TestSwarmResponseExtraction:
 
     def test_returns_none_when_no_results(self):
         """Should return None when result.results is empty or missing."""
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         # No results attribute - use spec to explicitly exclude attributes
         mock_result = Mock(spec=["message"])  # Only has message, no results/entry_point
@@ -128,7 +128,7 @@ class TestSwarmResponseExtraction:
 
         This is the fallback method using agent message history.
         """
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         # Mock entry_point with messages containing tool_result
         mock_entry_point = Mock()
@@ -180,7 +180,7 @@ class TestProcessSwarmResult:
 
         This ensures we get the RAW tool output, not LLM-summarized text.
         """
-        from main import _process_swarm_result
+        from swarm.response_utils import _process_swarm_result
 
         # Create mock with both results and message
         mock_agent_result = Mock()
@@ -211,7 +211,7 @@ class TestProcessSwarmResult:
         """
         Priority 2: Should parse message as JSON if results unavailable.
         """
-        from main import _process_swarm_result
+        from swarm.response_utils import _process_swarm_result
 
         mock_result = Mock()
         mock_result.results = {}
@@ -242,7 +242,7 @@ class TestProcessSwarmResult:
 
         When LLM wraps JSON in text like "Here is the analysis: {...}"
         """
-        from main import _process_swarm_result
+        from swarm.response_utils import _process_swarm_result
 
         mock_result = Mock()
         mock_result.results = {}
@@ -266,7 +266,7 @@ class TestProcessSwarmResult:
         """
         Priority 4: Should store raw message if no JSON found.
         """
-        from main import _process_swarm_result
+        from swarm.response_utils import _process_swarm_result
 
         mock_result = Mock()
         mock_result.results = {}
@@ -285,7 +285,7 @@ class TestProcessSwarmResult:
 
     def test_process_swarm_result_updates_session_context(self):
         """Should update session context with analysis data."""
-        from main import _process_swarm_result
+        from swarm.response_utils import _process_swarm_result
 
         mock_agent_result = Mock()
         mock_agent_result.result = {
@@ -349,7 +349,7 @@ class TestNexoAnalyzeFileResponseContract:
                 "analysis_round": 1,
             }
 
-            from agents.nexo_import.tools.analyze_file import analyze_file_tool
+            from agents.specialists.nexo_import.tools.analyze_file import analyze_file_tool
 
             result = await analyze_file_tool(
                 s3_key="test/sample.csv",
@@ -384,7 +384,7 @@ class TestNexoAnalyzeFileResponseContract:
                 "analysis_round": 1,
             }
 
-            from agents.nexo_import.tools.analyze_file import analyze_file_tool
+            from agents.specialists.nexo_import.tools.analyze_file import analyze_file_tool
 
             result = await analyze_file_tool(s3_key="test/data.csv")
 
@@ -423,7 +423,7 @@ class TestNexoAnalyzeFileResponseContract:
                 "analysis_round": 1,
             }
 
-            from agents.nexo_import.tools.analyze_file import analyze_file_tool
+            from agents.specialists.nexo_import.tools.analyze_file import analyze_file_tool
 
             result = await analyze_file_tool(s3_key="test/inventory.csv")
 
@@ -467,7 +467,7 @@ class TestNexoAnalyzeFileResponseContract:
                 "analysis_round": 1,
             }
 
-            from agents.nexo_import.tools.analyze_file import analyze_file_tool
+            from agents.specialists.nexo_import.tools.analyze_file import analyze_file_tool
 
             result = await analyze_file_tool(s3_key="test/serials.csv")
 
@@ -554,7 +554,7 @@ class TestToolResultFormat:
 
         This is the PRIMARY format our unified_analyze_file tool now returns.
         """
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         mock_agent_result = Mock()
         mock_agent_result.result = {
@@ -591,7 +591,7 @@ class TestToolResultFormat:
 
         Fallback path when tool returns text instead of json block.
         """
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         mock_agent_result = Mock()
         mock_agent_result.result = {
@@ -626,7 +626,7 @@ class TestToolResultFormat:
 
         Tools may return status='error' but still have useful analysis data.
         """
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         mock_agent_result = Mock()
         mock_agent_result.result = {
@@ -662,7 +662,7 @@ class TestToolResultFormat:
 
         Ensures we don't break existing behavior if tool returns plain dict.
         """
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         mock_agent_result = Mock()
         mock_agent_result.result = {
@@ -690,7 +690,7 @@ class TestToolResultFormat:
 
         Some scenarios may serialize the entire ToolResult as a string.
         """
-        from main import _extract_tool_output_from_swarm_result
+        from swarm.response_utils import _extract_tool_output_from_swarm_result
 
         mock_agent_result = Mock()
         mock_agent_result.result = json.dumps({

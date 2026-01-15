@@ -12,6 +12,9 @@
 # 2. Re-exports app and invoke for AgentCore
 # 3. Provides deployment compatibility
 #
+# NOTE: Swarm utilities are in swarm/response_utils.py
+# DO NOT re-export them here - import directly from that module.
+#
 # See: docs/adr/ADR-002-faiston-agent-ecosystem.md
 # See: docs/ORCHESTRATOR_ARCHITECTURE.md
 # =============================================================================
@@ -25,8 +28,14 @@ from agents.orchestrators.estoque.main import (
     AGENT_NAME,
 )
 
-# For AgentCore deployment
-__all__ = ["app", "invoke", "create_orchestrator", "AGENT_ID", "AGENT_NAME"]
+# For AgentCore deployment ONLY - no utility re-exports
+__all__ = [
+    "app",
+    "invoke",
+    "create_orchestrator",
+    "AGENT_ID",
+    "AGENT_NAME",
+]
 
 # =============================================================================
 # Legacy Migration Note (2026-01-14)
@@ -43,6 +52,11 @@ __all__ = ["app", "invoke", "create_orchestrator", "AGENT_ID", "AGENT_NAME"]
 # File changes:
 # - shared/a2a_client.py: KEPT (used by specialists for inter-agent calls)
 # - shared/a2a_tool_provider.py: REMOVED (was orchestrator-only)
+#
+# Swarm Utilities (BUG-019):
+# - Location: swarm/response_utils.py
+# - Import directly: from swarm.response_utils import _extract_tool_output_from_swarm_result
+# - NO re-exports here (per ADR-002 no legacy compatibility)
 # =============================================================================
 
 if __name__ == "__main__":

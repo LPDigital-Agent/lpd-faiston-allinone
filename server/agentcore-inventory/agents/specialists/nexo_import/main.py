@@ -362,7 +362,7 @@ async def analyze_file(
             logger.warning(f"[{AGENT_NAME}] Memory fetch failed (non-blocking): {mem_error}")
 
         # Import tool implementation
-        from agents.nexo_import.tools.analyze_file import analyze_file_impl
+        from .tools.analyze_file import analyze_file_impl
 
         result = await analyze_file_impl(
             s3_key=s3_key,
@@ -460,7 +460,7 @@ async def reason_mappings(
             logger.info(f"[{AGENT_NAME}] OBSERVE: Found {len(prior_knowledge)} prior patterns")
 
         # Import tool implementation
-        from agents.nexo_import.tools.reason_mappings import reason_mappings_impl
+        from .tools.reason_mappings import reason_mappings_impl
 
         result = await reason_mappings_impl(
             file_analysis=file_analysis,
@@ -497,7 +497,7 @@ async def generate_questions(
     logger.info(f"[{AGENT_NAME}] HIL: Generating questions for confidence < {confidence_threshold}")
 
     try:
-        from agents.nexo_import.tools.generate_questions import generate_questions_impl
+        from .tools.generate_questions import generate_questions_impl
 
         result = await generate_questions_impl(
             mappings=mappings,

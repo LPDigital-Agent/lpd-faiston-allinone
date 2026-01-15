@@ -39,7 +39,7 @@ from swarm.tools.meta_tools import get_meta_tools
 
 # Import unified analyze_file_tool from A2A agent (returns NexoAnalyzeFileResponse format)
 # This ensures Swarm responses match the TypeScript contract
-from agents.nexo_import.tools.analyze_file import analyze_file_tool as _async_analyze_file
+from agents.specialists.nexo_import.tools.analyze_file import analyze_file_tool as _async_analyze_file
 
 logger = logging.getLogger(__name__)
 
