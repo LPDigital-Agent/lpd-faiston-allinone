@@ -16,6 +16,7 @@
 
 import os
 import sys
+import json
 import logging
 from typing import Dict, Any, Optional, List
 
@@ -34,9 +35,6 @@ from agents.utils import get_model, AGENT_VERSION, create_gemini_model
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
 
-# Hooks for observability (ADR-002)
-from shared.hooks import LoggingHook, MetricsHook
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -50,6 +48,16 @@ logger = logging.getLogger(__name__)
 
 AGENT_ID = "reverse"
 AGENT_NAME = "ReverseAgent"
+
+# Faiston Warehouse Address (destination for return shipments)
+FAISTON_WAREHOUSE = {
+    "name": "Faiston Warehouse - Centro de Distribuicao",
+    "address": "Rua das Industrias, 500",
+    "number": "500",
+    "city": "Sao Paulo",
+    "state": "SP",
+    "cep": "04753-060",
+}
 AGENT_DESCRIPTION = """SUPPORT Agent for Reverse Logistics.
 
 This agent handles:
@@ -144,6 +152,27 @@ AGENT_SKILLS = [
             "required": [],
         },
     ),
+    AgentSkill(
+        name="request_return_shipment",
+        description="Request a return shipment via CarrierAgent A2A. Creates a shipment for physical return logistics from pickup location to Faiston warehouse.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "return_id": {"type": "string", "description": "Return ID for tracking and reference"},
+                "pickup_name": {"type": "string", "description": "Pickup contact name or company"},
+                "pickup_address": {"type": "string", "description": "Pickup street address"},
+                "pickup_number": {"type": "string", "description": "Pickup address number"},
+                "pickup_city": {"type": "string", "description": "Pickup city"},
+                "pickup_state": {"type": "string", "description": "Pickup state (2-letter code)"},
+                "pickup_cep": {"type": "string", "description": "Pickup postal code (CEP)"},
+                "weight_grams": {"type": "integer", "description": "Optional package weight in grams"},
+                "notes": {"type": "string", "description": "Optional shipment notes"},
+                "session_id": {"type": "string", "description": "Session ID for context"},
+                "user_id": {"type": "string", "description": "User ID for audit"},
+            },
+            "required": ["return_id", "pickup_name", "pickup_address", "pickup_number", "pickup_city", "pickup_state", "pickup_cep"],
+        },
+    ),
 ]
 
 # =============================================================================
@@ -175,6 +204,13 @@ Avalia condicao do material:
 - Bom estado (reintegracao)
 - Danificado (reparo)
 - Defeituoso (descarte)
+
+### 4. `request_return_shipment`
+Solicita envio de devolucao via CarrierAgent:
+- Cria remessa para logistica reversa
+- Origem: local de coleta informado
+- Destino: Armazem Faiston (automatico)
+- Retorna codigo de rastreamento
 
 ## Tipos de Devolucao
 
@@ -242,7 +278,7 @@ async def process_return(
 
     try:
         # Import tool implementation
-        from agents.reverse.tools.process_return import process_return_tool
+        from agents.specialists.reverse.tools.process_return import process_return_tool
 
         result = await process_return_tool(
             items=items,
@@ -298,7 +334,7 @@ async def validate_origin(
 
     try:
         # Import tool implementation
-        from agents.reverse.tools.validate_origin import validate_origin_tool
+        from agents.specialists.reverse.tools.validate_origin import validate_origin_tool
 
         result = await validate_origin_tool(
             serial_number=serial_number,
@@ -347,7 +383,7 @@ async def evaluate_condition(
 
     try:
         # Import tool implementation
-        from agents.reverse.tools.evaluate_condition import evaluate_condition_tool
+        from agents.specialists.reverse.tools.evaluate_condition import evaluate_condition_tool
 
         result = await evaluate_condition_tool(
             serial_number=serial_number,
@@ -384,6 +420,137 @@ async def evaluate_condition(
 
 
 @tool
+async def request_return_shipment(
+    return_id: str,
+    pickup_name: str,
+    pickup_address: str,
+    pickup_number: str,
+    pickup_city: str,
+    pickup_state: str,
+    pickup_cep: str,
+    weight_grams: Optional[int] = None,
+    notes: Optional[str] = None,
+    session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Request a return shipment via CarrierAgent A2A.
+
+    Creates a shipment for physical return logistics from the pickup location
+    to the Faiston warehouse. Uses CarrierAgent's create_shipment skill via A2A.
+
+    Args:
+        return_id: Return ID for tracking and reference
+        pickup_name: Pickup contact name or company
+        pickup_address: Pickup street address
+        pickup_number: Pickup address number
+        pickup_city: Pickup city
+        pickup_state: Pickup state (2-letter code)
+        pickup_cep: Pickup postal code (CEP)
+        weight_grams: Optional package weight in grams
+        notes: Optional shipment notes
+        session_id: Session ID for context
+        user_id: User ID for audit
+
+    Returns:
+        Shipment details including tracking code
+    """
+    logger.info(f"[{AGENT_NAME}] Requesting return shipment for return_id={return_id}")
+
+    try:
+        # Build shipment request payload for CarrierAgent
+        shipment_payload = {
+            "action": "create_shipment",
+            "shipment_type": "RETURN",
+            "reference_id": return_id,
+            # Origin (pickup location)
+            "origin": {
+                "name": pickup_name,
+                "address": pickup_address,
+                "number": pickup_number,
+                "city": pickup_city,
+                "state": pickup_state,
+                "cep": pickup_cep,
+            },
+            # Destination (Faiston warehouse - always the same for returns)
+            "destination": {
+                "name": FAISTON_WAREHOUSE["name"],
+                "address": FAISTON_WAREHOUSE["address"],
+                "number": FAISTON_WAREHOUSE["number"],
+                "city": FAISTON_WAREHOUSE["city"],
+                "state": FAISTON_WAREHOUSE["state"],
+                "cep": FAISTON_WAREHOUSE["cep"],
+            },
+            "session_id": session_id,
+            "user_id": user_id,
+        }
+
+        # Add optional fields if provided
+        if weight_grams:
+            shipment_payload["weight_grams"] = weight_grams
+        if notes:
+            shipment_payload["notes"] = f"Return shipment: {notes}"
+
+        # Call CarrierAgent via A2A
+        logger.info(f"[{AGENT_NAME}] Delegating to CarrierAgent for shipment creation")
+        carrier_response = await a2a_client.invoke_agent(
+            agent_id="carrier",
+            payload=shipment_payload,
+            session_id=session_id,
+        )
+
+        if not carrier_response.success:
+            logger.error(f"[{AGENT_NAME}] CarrierAgent A2A call failed: {carrier_response.error}")
+            return {
+                "success": False,
+                "error": f"Failed to create shipment: {carrier_response.error}",
+                "return_id": return_id,
+            }
+
+        # Parse CarrierAgent response
+        try:
+            shipment_result = json.loads(carrier_response.response)
+        except json.JSONDecodeError:
+            shipment_result = {"raw_response": carrier_response.response}
+
+        # Log to ObservationAgent
+        await a2a_client.invoke_agent("observation", {
+            "action": "log_event",
+            "event_type": "RETURN_SHIPMENT_CREATED",
+            "agent_id": AGENT_ID,
+            "session_id": session_id,
+            "details": {
+                "return_id": return_id,
+                "tracking_code": shipment_result.get("tracking_code"),
+                "pickup_city": pickup_city,
+                "pickup_state": pickup_state,
+            },
+        }, session_id)
+
+        return {
+            "success": True,
+            "return_id": return_id,
+            "shipment": shipment_result,
+            "tracking_code": shipment_result.get("tracking_code"),
+            "carrier": shipment_result.get("carrier"),
+            "estimated_delivery": shipment_result.get("estimated_delivery"),
+            "destination": {
+                "name": FAISTON_WAREHOUSE["name"],
+                "city": FAISTON_WAREHOUSE["city"],
+                "state": FAISTON_WAREHOUSE["state"],
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] request_return_shipment failed: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "return_id": return_id,
+        }
+
+
+@tool
 async def health_check() -> Dict[str, Any]:
     """
     Health check endpoint for monitoring.
@@ -413,7 +580,7 @@ def create_agent() -> Agent:
     Create Strands Agent with all tools.
 
     Returns:
-        Configured Strands Agent with hooks (ADR-002)
+        Configured Strands Agent
     """
     return Agent(
         name=AGENT_NAME,
@@ -423,10 +590,10 @@ def create_agent() -> Agent:
             process_return,
             validate_origin,
             evaluate_condition,
+            request_return_shipment,
             health_check,
         ],
         system_prompt=SYSTEM_PROMPT,
-        hooks=[LoggingHook(), MetricsHook()],  # ADR-002: Observability hooks
     )
 
 
