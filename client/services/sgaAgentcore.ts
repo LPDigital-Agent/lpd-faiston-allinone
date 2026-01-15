@@ -130,10 +130,66 @@ export type { AgentCoreRequest, AgentCoreResponse, InvokeOptions };
 export type { SGAGetUploadUrlResponse };
 
 // =============================================================================
-// Core Functions (delegated to base service)
+// Orchestrator Envelope Handling
 // =============================================================================
 
-export const invokeSGAAgentCore = sgaService.invoke;
+/**
+ * Orchestrator envelope structure - wraps specialist agent responses.
+ * The orchestrator adds metadata (specialist_agent) and wraps the actual
+ * response in a "response" field for tracing/debugging purposes.
+ */
+interface OrchestratorEnvelope<T> {
+  success: boolean;
+  specialist_agent?: string;
+  response?: T;
+  error?: string;
+}
+
+/**
+ * Unwraps orchestrator envelope to extract the actual specialist response.
+ * If the response has the envelope structure (specialist_agent + response),
+ * returns the inner response. Otherwise returns the data as-is.
+ */
+function unwrapOrchestratorResponse<T>(data: unknown): T {
+  // Check if data has orchestrator envelope structure
+  if (
+    data &&
+    typeof data === 'object' &&
+    'specialist_agent' in data &&
+    'response' in data
+  ) {
+    const envelope = data as OrchestratorEnvelope<T>;
+    // Return the inner response, preserving error if present
+    if (envelope.response) {
+      return envelope.response;
+    }
+    // If no response but has error, return the envelope itself
+    // (this handles error cases from orchestrator)
+  }
+  // Not an envelope or no inner response - return as-is
+  return data as T;
+}
+
+// =============================================================================
+// Core Functions (delegated to base service with envelope unwrapping)
+// =============================================================================
+
+/**
+ * Invoke SGA AgentCore with automatic orchestrator envelope unwrapping.
+ * The orchestrator wraps specialist responses with metadata. This function
+ * transparently unwraps that envelope so callers get the actual response.
+ */
+export async function invokeSGAAgentCore<T = unknown>(
+  request: AgentCoreRequest,
+  options?: InvokeOptions | boolean
+): Promise<AgentCoreResponse<T>> {
+  const result = await sgaService.invoke<unknown>(request, options);
+  return {
+    data: unwrapOrchestratorResponse<T>(result.data),
+    sessionId: result.sessionId,
+  };
+}
+
 export const getSGASessionId = sgaService.getSessionId;
 export const clearSGASession = sgaService.clearSession;
 export const getSGAAgentCoreConfig = sgaService.getConfig;
