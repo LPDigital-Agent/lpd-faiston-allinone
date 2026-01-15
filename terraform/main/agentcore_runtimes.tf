@@ -198,6 +198,10 @@ locals {
         "track_shipment",
         "calculate_freight"
       ]
+      # Agent-specific environment variables for real VIPP API integration
+      env_vars = {
+        CARRIER_MODE = "real"
+      }
     }
 
     reverse = {
@@ -343,7 +347,9 @@ resource "aws_bedrockagentcore_agent_runtime" "sga_agents" {
 
       # A2A URLs for other agents (populated by SSM lookup at runtime)
       # Format: AGENT_URL_{AGENT_ID} = https://...
-    }
+    },
+    # Merge agent-specific env vars (e.g., CARRIER_MODE for carrier agent)
+    lookup(each.value, "env_vars", {})
   )
 
   # Lifecycle configuration
