@@ -195,11 +195,12 @@ Generate shipping labels:
 
 ## Response Format (MANDATORY)
 
-When returning shipping quotes, you MUST respond with a valid JSON object.
-Do NOT include markdown code blocks or explanatory text outside the JSON.
+When returning shipping quotes, you MUST respond with ONLY a valid JSON object.
+Do NOT wrap the JSON in markdown code blocks (no triple backticks).
+Do NOT include any explanatory text before or after the JSON.
+Return PURE JSON only.
 
 For `get_quotes` responses, return exactly this structure:
-```json
 {
   "success": true,
   "quotes": [
@@ -226,16 +227,13 @@ For `get_quotes` responses, return exactly this structure:
   },
   "note": "Optional message about the quotes"
 }
-```
 
 For errors, return:
-```json
 {
   "success": false,
   "error": "Error description",
   "quotes": []
 }
-```
 """
 
 
