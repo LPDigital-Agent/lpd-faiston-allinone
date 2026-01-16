@@ -29,6 +29,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from typing import Optional
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -288,9 +289,15 @@ async def _handle_posting_action(
             )
 
             # Check if shipment creation succeeded
+            # BUG-021 FIX: Handle natural language responses from carrier agent
+            # When Gemini LLM returns "Shipment created successfully with tracking code X...",
+            # the A2A parser returns {"success": True, "response": {"message": "..."}}
+            # We need to check for tracking code in either structured or message format.
             response_data = shipment_result.get("response", {})
-            if not shipment_result.get("success") or not response_data.get("success"):
-                logger.warning(f"[Posting] create_shipment failed: {shipment_result}")
+
+            # First check: A2A call must succeed
+            if not shipment_result.get("success"):
+                logger.warning(f"[Posting] A2A call to carrier failed: {shipment_result}")
                 return {
                     "success": False,
                     "error": response_data.get("error", "Failed to create shipment"),
@@ -298,8 +305,29 @@ async def _handle_posting_action(
                     "details": shipment_result,
                 }
 
-            # Extract tracking code from shipment result
+            # Second check: Look for explicit failure in structured response
+            # Note: response_data.get("success") being None is OK (LLM returned natural language)
+            if response_data.get("success") is False:
+                logger.warning(f"[Posting] Carrier returned explicit failure: {response_data}")
+                return {
+                    "success": False,
+                    "error": response_data.get("error", "Failed to create shipment"),
+                    "step": "create_shipment",
+                    "details": shipment_result,
+                }
+
+            # Extract tracking code - try structured response first, then parse message
             tracking_code = response_data.get("tracking_code")
+
+            # BUG-021: If no tracking_code in structured response, try to extract from message
+            if not tracking_code and response_data.get("message"):
+                message = response_data.get("message", "")
+                # Brazilian tracking codes: 2 letters + 9 digits + 2 letters (e.g., SQ000300518BR)
+                match = re.search(r'\b([A-Z]{2}\d{9}[A-Z]{2})\b', message)
+                if match:
+                    tracking_code = match.group(1)
+                    logger.info(f"[Posting] Extracted tracking code from message: {tracking_code}")
+
             if not tracking_code:
                 logger.warning("[Posting] No tracking code in shipment response")
                 return {
