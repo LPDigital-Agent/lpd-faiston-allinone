@@ -437,12 +437,21 @@ async def get_adaptive_threshold(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_adaptive_threshold failed: {e}", exc_info=True)
-        # Return default threshold on error
+        # Sandwich Pattern: Be honest about errors - let LLM decide how to proceed
+        # DO NOT lie about success - the LLM needs accurate information
         return {
-            "success": True,
-            "threshold": 0.8,
-            "reason": "Using default threshold due to error",
+            "success": False,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_adaptive_threshold",
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "fallback_available": {
+                "threshold": 0.8,
+                "reason": "Default threshold available if LLM chooses to use it",
+            },
+            "suggested_actions": ["use_fallback_threshold", "retry", "escalate"],
         }
 
 

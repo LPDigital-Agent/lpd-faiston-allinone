@@ -230,11 +230,19 @@ async def validate_operation(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] validate_operation failed: {e}", exc_info=True)
+        # Sandwich Pattern: DO NOT make business decisions in exception handlers
+        # is_compliant and requires_approval are BUSINESS decisions - let LLM decide
         return {
             "success": False,
-            "is_compliant": False,
             "error": str(e),
-            "requires_approval": True,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "validate_operation",
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+                "compliance_unknown": True,  # We couldn't determine compliance
+            },
+            "suggested_actions": ["retry", "manual_compliance_review", "escalate"],
+            # NOTE: is_compliant and requires_approval NOT included - LLM decides
         }
 
 
