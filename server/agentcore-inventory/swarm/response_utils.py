@@ -78,6 +78,109 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# BUG-020 v13 FIX: Helper function for _response wrapper extraction
+# =============================================================================
+# CloudWatch revealed: The "_response" wrapper is INSIDE parsed JSON strings,
+# NOT at the content_block level where v12 was looking.
+#
+# Data flow:
+# 1. content_block = {"type": "tool_result", "content": "JSON_STRING"}
+# 2. json.loads(content_block["content"]) → {"unified_analyze_file_response": {...}}
+# 3. v13 checks HERE (after json.loads) for _response pattern
+#
+# v12 checked content_block.keys() → ["type", "content"] → No _response found!
+# v13 checks parsed.keys() → ["unified_analyze_file_response"] → Found!
+# =============================================================================
+
+
+def _extract_from_response_wrapper(data: Any) -> Optional[Dict]:
+    """
+    Extract data from Strands SDK tool response wrapper format.
+
+    BUG-020 v13 FIX: This helper extracts from the wrapper format produced by
+    Strands SDK @tool decorated functions:
+    {"<tool_name>_response": {"output": [{"text": "{'success': True, ...}"}]}}
+
+    The text content may be:
+    - JSON with double quotes (valid JSON)
+    - Python repr with single quotes (requires ast.literal_eval)
+
+    This helper is called AFTER json.loads() at every extraction point where
+    the wrapper might appear.
+
+    Args:
+        data: Parsed dict that may contain a _response wrapper
+
+    Returns:
+        Extracted dict with "analysis" or "success" key, or None if no wrapper found
+    """
+    if not isinstance(data, dict):
+        return None
+
+    for key in data.keys():
+        if key.endswith("_response"):
+            logger.info("[v13] Found _response wrapper: %s", key)
+            wrapper = data[key]
+
+            if isinstance(wrapper, dict) and "output" in wrapper:
+                for output_item in wrapper.get("output", []):
+                    if isinstance(output_item, dict):
+                        # Check "text" key (most common - Strands SDK format)
+                        if "text" in output_item:
+                            text_content = output_item["text"]
+                            logger.debug(
+                                "[v13] Processing text content, type=%s, len=%d",
+                                type(text_content).__name__,
+                                len(text_content) if isinstance(text_content, str) else 0,
+                            )
+
+                            if isinstance(text_content, str):
+                                # Try JSON first (double quotes)
+                                try:
+                                    parsed = json.loads(text_content)
+                                    if isinstance(parsed, dict) and (
+                                        "analysis" in parsed or "success" in parsed
+                                    ):
+                                        logger.info(
+                                            "[v13] SUCCESS: Extracted from _response.output[].text (JSON)"
+                                        )
+                                        return parsed
+                                except json.JSONDecodeError:
+                                    # Try Python repr (single quotes)
+                                    try:
+                                        parsed = ast.literal_eval(text_content)
+                                        if isinstance(parsed, dict) and (
+                                            "analysis" in parsed or "success" in parsed
+                                        ):
+                                            logger.info(
+                                                "[v13] SUCCESS: Extracted from _response.output[].text (repr)"
+                                            )
+                                            return parsed
+                                    except (ValueError, SyntaxError) as e:
+                                        logger.debug("[v13] ast.literal_eval failed: %s", e)
+
+                            elif isinstance(text_content, dict):
+                                if "analysis" in text_content or "success" in text_content:
+                                    logger.info(
+                                        "[v13] SUCCESS: Direct dict from _response.output[].text"
+                                    )
+                                    return text_content
+
+                        # Check "json" key (alternative format)
+                        if "json" in output_item:
+                            inner = output_item["json"]
+                            if isinstance(inner, dict) and (
+                                "analysis" in inner or "success" in inner
+                            ):
+                                logger.info(
+                                    "[v13] SUCCESS: Extracted from _response.output[].json"
+                                )
+                                return inner
+
+    return None
+
+
+# =============================================================================
 # BUG-020 v8 FIX: Extract from AgentResult.message
 # =============================================================================
 # CloudWatch logs revealed: AgentResult has .message, NOT nested .result!
@@ -235,6 +338,12 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
             logger.info("[v11] Dict has Message structure, iterating content array")
             for content_block in message["content"]:
                 if isinstance(content_block, dict):
+                    # v13 DEBUG: Log content_block structure to trace data flow
+                    logger.info(
+                        "[v13-DEBUG] content_block type=%s, keys=%s",
+                        type(content_block).__name__,
+                        list(content_block.keys())[:5],
+                    )
                     # =====================================================
                     # v11 FIX: Check for "toolResult" KEY (official Strands)
                     # NOT "type": "tool_result" - that format doesn't exist!
@@ -362,8 +471,14 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
                                 parsed = json.loads(tool_content)
                                 if isinstance(parsed, dict):
                                     if "analysis" in parsed or "success" in parsed:
-                                        logger.info("[v11] SUCCESS: Extracted from legacy tool_result")
+                                        logger.info("[v13] SUCCESS: Direct from legacy tool_result")
                                         return parsed
+                                    # v13 FIX: Check for _response wrapper BEFORE _unwrap_tool_result
+                                    # This is the CRITICAL path for NEXO Smart Import!
+                                    from_wrapper = _extract_from_response_wrapper(parsed)
+                                    if from_wrapper:
+                                        logger.info("[v13] SUCCESS: Extracted _response from legacy tool_result")
+                                        return from_wrapper
                                     unwrapped = _unwrap_tool_result(parsed)
                                     if unwrapped:
                                         return unwrapped
@@ -372,6 +487,10 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
                         elif isinstance(tool_content, dict):
                             if "analysis" in tool_content or "success" in tool_content:
                                 return tool_content
+                            # v13 FIX: Check for _response wrapper BEFORE _unwrap_tool_result
+                            from_wrapper = _extract_from_response_wrapper(tool_content)
+                            if from_wrapper:
+                                return from_wrapper
                             unwrapped = _unwrap_tool_result(tool_content)
                             if unwrapped:
                                 return unwrapped
@@ -446,6 +565,13 @@ def _unwrap_tool_result(data: Any) -> Optional[Dict]:
     # Priority 2: Direct valid response (backwards compatibility)
     if "analysis" in data or "success" in data:
         return data
+
+    # Priority 3: v13 FIX - Check for _response wrapper as last resort
+    # This provides automatic coverage for ALL code paths that call _unwrap_tool_result()
+    from_wrapper = _extract_from_response_wrapper(data)
+    if from_wrapper:
+        logger.info("[v13] Extracted from _response wrapper via _unwrap_tool_result")
+        return from_wrapper
 
     return None
 
