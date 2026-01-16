@@ -396,7 +396,11 @@ export default function ExpedicaoPage() {
                             <div className="flex items-center gap-1 text-xs text-text-muted">
                               <Calendar className="w-3 h-3" />
                               <span>
-                                {new Date(order.dataPrevista).toLocaleDateString("pt-BR")}
+                                {order.dataPrevista && order.dataPrevista !== ""
+                                  ? new Date(order.dataPrevista).toLocaleDateString("pt-BR")
+                                  : order.dataCriacao
+                                    ? new Date(order.dataCriacao).toLocaleDateString("pt-BR")
+                                    : "—"}
                               </span>
                             </div>
                             {order.status !== "entregue" && (
