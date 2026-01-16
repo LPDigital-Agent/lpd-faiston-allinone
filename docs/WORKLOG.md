@@ -4,6 +4,58 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-16 (Session 7) - BUG-020 v13 FIX (Correct Nesting Level)
+
+**Bug:** BUG-020 - "Swarm extraction failed" persisted through v8-v12 fixes
+
+**Analysis Method:** Sequential Thinking MCP (15 steps), exhaustive code trace of 1,816 lines
+
+**Root Cause (v13):** v12 checked `content_block.keys()` which returns `["type", "content"]`, but the `_response` wrapper is INSIDE the JSON string at `content_block["content"]`. The extraction code was checking at the wrong nesting level.
+
+**Data Structure:**
+```
+content_block = {
+    "type": "tool_result",
+    "content": "{\"unified_analyze_file_response\": {\"output\": [...]}}"  # ← JSON STRING
+}
+```
+
+- v12 checked HERE: `content_block.keys()` → `["type", "content"]` → No `_response` found ❌
+- v13 checks HERE: After `json.loads(content_block["content"])` → `["unified_analyze_file_response"]` → Found! ✅
+
+**Solution Implemented (v13):**
+1. Created reusable `_extract_from_response_wrapper()` helper function (~95 lines)
+2. Added diagnostic logging for content_block analysis
+3. Applied helper in legacy tool_result section (after json.loads)
+4. Applied helper in `_unwrap_tool_result()` as fallback
+
+**Files Modified:**
+- `server/agentcore-inventory/swarm/response_utils.py` (842 → 969 lines)
+  - Line ~80: Added `_extract_from_response_wrapper()` helper
+  - Line ~340: Added diagnostic logging
+  - Line ~475: Applied helper in legacy tool_result section
+  - Line ~575: Applied helper in `_unwrap_tool_result()`
+
+**Key Findings:**
+- 13 `json.loads()` calls in response_utils.py, only 2 had `_response` handling before v13
+- Helper handles both JSON (double quotes) and Python repr (single quotes) via `ast.literal_eval()`
+
+**Commits:**
+- `a35fad5` - 🐛 fix(swarm): BUG-020 v13 apply _response extraction at correct nesting level
+
+**GitHub Actions:** All 18 jobs completed successfully (17 agent deployments + JWT config)
+
+**Expected CloudWatch Logs (v13):**
+```
+[v13-DEBUG] content_block type=dict, keys=['type', 'content']
+[v13] Found _response wrapper: unified_analyze_file_response
+[v13] SUCCESS: Extracted from _response.output[].text (repr)
+```
+
+**Status:** ✅ Deployed, awaiting E2E validation via NEXO Smart Import
+
+---
+
 ## 2026-01-15 (Session 6) - BUG-020 v8 FIX + /sync-project
 
 **Bug:** BUG-020 - "Swarm extraction failed" in NEXO Smart Import analysis
@@ -2541,6 +2593,102 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-15 23:00:19 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-15 23:02:28 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-15 23:22:54 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-15 23:23:02 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-15 23:43:44 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 13:10:21 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 13:10:31 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 13:49:35 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 13:50:47 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 14:30:32 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 14:36:58 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 17:07:37 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 20:53:59 UTC
 
 **User:** (no user message captured)
 
