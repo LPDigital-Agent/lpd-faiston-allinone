@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import re
+from datetime import datetime
 from typing import Optional
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -384,25 +385,56 @@ async def _handle_posting_action(
             
             # Extract posting data - try to get from response first
             posting = posting_response.get("posting")
+            posting_id = posting_response.get("posting_id")
+            order_code = posting_response.get("order_code")
             
-            # BUG-FIX: If posting is None but we have posting_id/order_code,
-            # construct the posting object from available data (agent layer fix pending)
-            if posting is None and posting_response.get("posting_id"):
-                logger.warning("[Posting] Agent didn't return posting object, constructing from available data")
-                posting = {
-                    "posting_id": posting_response.get("posting_id"),
-                    "order_code": posting_response.get("order_code"),
-                    "tracking_code": tracking_code,
-                    "status": "aguardando",
-                    "carrier": posting_data.get("carrier", ""),
-                    "service": posting_data.get("service", ""),
-                }
+            # BUG-FIX: If posting is None, try to lookup by tracking_code in DynamoDB
+            # The save_posting_tool saves data even if the LLM doesn't return it properly
+            if posting is None and tracking_code:
+                logger.warning(f"[Posting] Agent didn't return posting object, looking up by tracking_code: {tracking_code}")
+                try:
+                    # Query DynamoDB directly using GSI3-TrackingQuery
+                    lookup_result = await _invoke_agent_via_a2a(
+                        agent_id="carrier",
+                        action="get_posting_by_tracking",
+                        payload={"tracking_code": tracking_code},
+                        session_id=session_id,
+                        user_id=user_id,
+                    )
+                    lookup_response = lookup_result.get("response", {})
+                    if lookup_response.get("success") and lookup_response.get("posting"):
+                        posting = lookup_response.get("posting")
+                        posting_id = posting.get("posting_id")
+                        order_code = posting.get("order_code")
+                        logger.info(f"[Posting] Found posting via tracking lookup: {posting_id}")
+                    else:
+                        # Last resort: construct minimal posting from available data
+                        logger.warning("[Posting] Lookup failed, constructing minimal posting")
+                        posting = {
+                            "tracking_code": tracking_code,
+                            "status": "aguardando",
+                            "carrier": posting_data.get("carrier", ""),
+                            "service": posting_data.get("service", ""),
+                            "destination": posting_data.get("destination", {}),
+                            "created_at": datetime.utcnow().isoformat() + "Z",
+                        }
+                except Exception as e:
+                    logger.error(f"[Posting] Tracking lookup failed: {e}")
+                    # Construct minimal posting anyway
+                    posting = {
+                        "tracking_code": tracking_code,
+                        "status": "aguardando",
+                        "carrier": posting_data.get("carrier", ""),
+                        "service": posting_data.get("service", ""),
+                        "destination": posting_data.get("destination", {}),
+                        "created_at": datetime.utcnow().isoformat() + "Z",
+                    }
             
             return {
                 "success": True,
                 "tracking_code": tracking_code,
-                "posting_id": posting_response.get("posting_id"),
-                "order_code": posting_response.get("order_code"),
+                "posting_id": posting_id or (posting.get("posting_id") if posting else None),
+                "order_code": order_code or (posting.get("order_code") if posting else None),
                 "shipment": response_data,
                 "posting": posting,
                 "message": "Postage created successfully",
