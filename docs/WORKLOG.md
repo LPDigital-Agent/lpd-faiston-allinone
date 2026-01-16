@@ -4,6 +4,52 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-16 (Session 8) - REFACTOR-001: Inventory Orchestrator Cleanup & Rename
+
+**Task:** Two-part refactoring requested by user:
+1. Remove carrier/shipping code from Inventory Orchestrator (dedicated to inventory only)
+2. Rename AgentCore Runtime from `faiston_asset_management` to `faiston_inventory_orchestration`
+
+**Strategy:** Blue-Green Deployment (deploy NEW agent, update references, delete old)
+
+**Phase 1 - Remove Carrier Code (COMPLETE):**
+- Removed ~337 lines of carrier-specific code from orchestrator
+- Deleted: `POSTING_ACTIONS` constant, `_handle_posting_action()` function, Mode 2.5 posting routing
+- Removed 4 unused imports: `re`, `datetime`, `get_agent_url`, `_extract_tool_output_from_swarm_result`
+- Verification: Python import test + ruff lint both passed
+- **Commit:** `7a0168b` - 🧹 refactor(orchestrator): remove carrier/posting code
+
+**Phase 2 - Rename Runtime Configuration (COMPLETE - Pre-Deployment):**
+- Updated `.bedrock_agentcore.yaml`: agent_name → `faiston_inventory_orchestration`
+- Updated `.github/workflows/deploy-agentcore-inventory.yml`: 8 references
+- Updated `.github/workflows/deploy-agentcore-dev.yml`: 6 references
+- Updated `config/agent_urls.py`: Placeholder `faiston_inventory_orchestration-PENDING_DEPLOYMENT`
+- Updated `client/lib/config/agentcore.ts`: Placeholder for new runtime ID
+- **Commit:** `ca83ef3` - 🚀 chore(agentcore): rename runtime configuration
+
+**Phase 3 - Update Documentation (COMPLETE):**
+- Updated `.claude/rules/infrastructure/frontend.md`: Auth flow diagram
+- Updated `.claude/rules/agents/nexo-agi.md`: Protocol architecture
+- Updated 11 docs/*.md files via sed (README, SMART_IMPORT, AUTHENTICATION, INFRASTRUCTURE, etc.)
+- Updated scripts, terraform, prime.md, handoff.md
+- **Commit:** `4c09514` - 📝 docs: update all documentation for rename
+
+**Pending Actions (User Required):**
+1. Trigger GitHub Actions: `deploy-agentcore-inventory.yml`
+2. Note new runtime ID from deployment output
+3. Update `config/agent_urls.py` with actual runtime ID
+4. Update `client/lib/config/agentcore.ts` with actual runtime ID
+5. Delete old agent: `faiston_asset_management-uSuLPsFQNH`
+
+**MCP Memory Updates:**
+- Created entity: `REFACTOR-001` (type: Refactoring)
+- Created entity: `faiston_inventory_orchestration` (type: AgentCore Runtime)
+- Added relations: REFACTOR-001 creates faiston_inventory_orchestration, replaces faiston_asset_management
+
+**Status:** ✅ Code Complete - Awaiting Deployment
+
+---
+
 ## 2026-01-16 (Session 7) - BUG-020 v13 FIX (Correct Nesting Level)
 
 **Bug:** BUG-020 - "Swarm extraction failed" persisted through v8-v12 fixes
@@ -2769,6 +2815,22 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-16 22:32:46 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 23:15:23 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-16 23:19:19 UTC
 
 **User:** (no user message captured)
 
