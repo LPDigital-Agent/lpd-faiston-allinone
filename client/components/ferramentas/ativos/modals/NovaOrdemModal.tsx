@@ -10,7 +10,7 @@
 // Pattern: Two-phase interaction (get quotes, then create order)
 // =============================================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -79,8 +79,24 @@ interface ShippingOrder {
 interface ExtendedFormState extends FormState {
   destinoNome: string;
   destinoEndereco: string;
+  destinoNumero: string;
+  destinoComplemento: string;
+  destinoBairro: string;
   destinoCidade: string;
   destinoEstado: string;
+}
+
+/**
+ * ViaCEP API response interface
+ */
+interface ViaCEPResponse {
+  cep: string;
+  logradouro: string;
+  complemento: string;
+  bairro: string;
+  localidade: string;
+  uf: string;
+  erro?: boolean;
 }
 
 interface NovaOrdemModalProps {
@@ -130,6 +146,7 @@ interface FormState {
 
 interface FormErrors {
   destinoCep?: string;
+  destinoNumero?: string;
   peso?: string;
 }
 
@@ -179,6 +196,9 @@ export function NovaOrdemModal({
     destinoCep: '',
     destinoNome: '',
     destinoEndereco: '',
+    destinoNumero: '',
+    destinoComplemento: '',
+    destinoBairro: '',
     destinoCidade: '',
     destinoEstado: '',
     peso: '',
@@ -190,6 +210,7 @@ export function NovaOrdemModal({
   });
 
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
 
   // Step and loading states
   const [step, setStep] = useState<ModalStep>('form');
@@ -201,6 +222,40 @@ export function NovaOrdemModal({
   const [quotes, setQuotes] = useState<SGAShippingQuote[]>([]);
   const [recommendation, setRecommendation] = useState<SGACarrierRecommendation | null>(null);
   const [selectedQuote, setSelectedQuote] = useState<SGAShippingQuote | null>(null);
+
+  // =============================================================================
+  // ViaCEP Auto-fetch Effect
+  // =============================================================================
+
+  useEffect(() => {
+    const cep = parseCEP(formState.destinoCep);
+    if (cep.length !== 8) return;
+
+    const fetchAddress = async () => {
+      setIsLoadingCep(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data: ViaCEPResponse = await response.json();
+        
+        if (!data.erro) {
+          setFormState((prev) => ({
+            ...prev,
+            destinoEndereco: data.logradouro || '',
+            destinoBairro: data.bairro || '',
+            destinoCidade: data.localidade || '',
+            destinoEstado: data.uf || '',
+            destinoComplemento: data.complemento || '',
+          }));
+        }
+      } catch (error) {
+        console.error('[NovaOrdemModal] Failed to fetch CEP:', error);
+      } finally {
+        setIsLoadingCep(false);
+      }
+    };
+
+    fetchAddress();
+  }, [formState.destinoCep]);
 
   // =============================================================================
   // Form Handlers
@@ -225,6 +280,10 @@ export function NovaOrdemModal({
       errors.destinoCep = 'CEP deve ter 8 digitos';
     }
 
+    if (!formState.destinoNumero || formState.destinoNumero.trim() === '') {
+      errors.destinoNumero = 'Numero e obrigatorio';
+    }
+
     const peso = parseFloat(formState.peso);
     if (!formState.peso || isNaN(peso) || peso <= 0) {
       errors.peso = 'Peso deve ser maior que zero';
@@ -232,7 +291,7 @@ export function NovaOrdemModal({
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [formState.destinoCep, formState.peso]);
+  }, [formState.destinoCep, formState.destinoNumero, formState.peso]);
 
   // =============================================================================
   // API Handlers
@@ -294,11 +353,20 @@ export function NovaOrdemModal({
     setApiError(null);
 
     try {
+      // Build full address: "Rua Example, 123, Apto 45, Centro"
+      const addressParts = [
+        formState.destinoEndereco,
+        formState.destinoNumero,
+        formState.destinoComplemento,
+        formState.destinoBairro,
+      ].filter(Boolean);
+      const fullAddress = addressParts.join(', ') || 'Endereco nao informado';
+
       // Call the real API to create the postage
       const response = await createPostage({
         destination_cep: parseCEP(formState.destinoCep),
         destination_name: formState.destinoNome || 'Destinatario',
-        destination_address: formState.destinoEndereco || 'Endereco nao informado',
+        destination_address: fullAddress,
         destination_city: formState.destinoCidade || 'Cidade nao informada',
         destination_state: formState.destinoEstado || 'SP',
         weight_kg: parseFloat(formState.peso),
@@ -312,27 +380,31 @@ export function NovaOrdemModal({
         selected_quote: selectedQuote,
       });
 
+      // Handle success - posting object is required for valid order creation
+      // Backend now ensures posting is always returned when save succeeds
       if (response.data.success && response.data.posting) {
         const posting = response.data.posting;
+        const trackingCode = posting.tracking_code || response.data.tracking_code;
+        const now = new Date().toISOString();
 
         // Transform SGAPostage to ShippingOrder for the page component
         const newOrder: ShippingOrder = {
-          id: posting.posting_id,
-          codigo: posting.order_code,
-          cliente: posting.destination.name,
+          id: posting.posting_id || response.data.posting_id,
+          codigo: posting.order_code || response.data.order_code || generateOrderCode(),
+          cliente: posting.destination?.name || formState.destinoNome || 'Destinatario',
           destino: {
-            nome: posting.destination.name,
-            cep: posting.destination.cep,
+            nome: posting.destination?.name || formState.destinoNome || 'Destinatario',
+            cep: posting.destination?.cep || parseCEP(formState.destinoCep),
           },
-          status: posting.status,
-          prioridade: (posting.urgency || 'normal').toLowerCase(),
+          status: posting.status || 'aguardando',
+          prioridade: (posting.urgency || formState.urgencia || 'normal').toLowerCase(),
           responsavel: { nome: 'Usuario Atual' },
           itens: [],
-          dataCriacao: posting.created_at,
-          dataPrevista: posting.estimated_delivery,
-          carrier: posting.carrier,
-          trackingCode: posting.tracking_code,
-          price: posting.price,
+          dataCriacao: posting.created_at || now,
+          dataPrevista: posting.estimated_delivery || selectedQuote?.delivery_date || '',
+          carrier: posting.carrier || selectedQuote?.carrier || 'Correios',
+          trackingCode: trackingCode,
+          price: posting.price || selectedQuote?.price || 0,
         };
 
         onOrderCreated(newOrder);
@@ -363,6 +435,9 @@ export function NovaOrdemModal({
       destinoCep: '',
       destinoNome: '',
       destinoEndereco: '',
+      destinoNumero: '',
+      destinoComplemento: '',
+      destinoBairro: '',
       destinoCidade: '',
       destinoEstado: '',
       peso: '',
@@ -399,20 +474,27 @@ export function NovaOrdemModal({
           <MapPin className="w-4 h-4 text-[#00FAFB]" />
           CEP Destino <span className="text-[#FD5665]">*</span>
         </Label>
-        <Input
-          id="destinoCep"
-          type="text"
-          placeholder="00000-000"
-          value={formatCEP(formState.destinoCep)}
-          onChange={(e) => updateFormField('destinoCep', e.target.value)}
-          maxLength={9}
-          className={cn(
-            'bg-white/5 border-white/10 text-white placeholder:text-gray-500',
-            'focus:border-[#00FAFB] focus:ring-[#00FAFB]/20',
-            formErrors.destinoCep && 'border-[#FD5665] focus:border-[#FD5665]'
+        <div className="relative">
+          <Input
+            id="destinoCep"
+            type="text"
+            placeholder="00000-000"
+            value={formatCEP(formState.destinoCep)}
+            onChange={(e) => updateFormField('destinoCep', e.target.value)}
+            maxLength={9}
+            className={cn(
+              'bg-white/5 border-white/10 text-white placeholder:text-gray-500',
+              'focus:border-[#00FAFB] focus:ring-[#00FAFB]/20',
+              formErrors.destinoCep && 'border-[#FD5665] focus:border-[#FD5665]'
+            )}
+            aria-invalid={!!formErrors.destinoCep}
+          />
+          {isLoadingCep && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <Loader2 className="w-4 h-4 animate-spin text-[#00FAFB]" />
+            </div>
           )}
-          aria-invalid={!!formErrors.destinoCep}
-        />
+        </div>
         {formErrors.destinoCep && (
           <p className="text-xs text-[#FD5665] flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
@@ -438,19 +520,77 @@ export function NovaOrdemModal({
         />
       </div>
 
-      {/* Endereco */}
+      {/* Endereco (Rua) - auto-filled by ViaCEP */}
       <div className="space-y-2">
         <Label htmlFor="destinoEndereco" className="text-sm font-medium text-gray-300 flex items-center gap-2">
           <MapPin className="w-4 h-4 text-[#00FAFB]" />
-          Endereco
-          <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+          Rua/Logradouro
+          <span className="text-xs text-gray-500 font-normal ml-1">auto-preenchido</span>
         </Label>
         <Input
           id="destinoEndereco"
           type="text"
-          placeholder="Rua, numero, complemento"
+          placeholder="Rua, Avenida, etc."
           value={formState.destinoEndereco}
           onChange={(e) => updateFormField('destinoEndereco', e.target.value)}
+          className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#00FAFB]"
+        />
+      </div>
+
+      {/* Numero e Complemento */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="destinoNumero" className="text-sm font-medium text-gray-300">
+            Número <span className="text-[#FD5665]">*</span>
+          </Label>
+          <Input
+            id="destinoNumero"
+            type="text"
+            placeholder="123"
+            value={formState.destinoNumero}
+            onChange={(e) => updateFormField('destinoNumero', e.target.value)}
+            className={cn(
+              'bg-white/5 border-white/10 text-white placeholder:text-gray-500',
+              'focus:border-[#00FAFB] focus:ring-[#00FAFB]/20',
+              formErrors.destinoNumero && 'border-[#FD5665] focus:border-[#FD5665]'
+            )}
+            aria-invalid={!!formErrors.destinoNumero}
+          />
+          {formErrors.destinoNumero && (
+            <p className="text-xs text-[#FD5665] flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />
+              {formErrors.destinoNumero}
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="destinoComplemento" className="text-sm font-medium text-gray-300">
+            Complemento
+            <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+          </Label>
+          <Input
+            id="destinoComplemento"
+            type="text"
+            placeholder="Apto 45, Bloco B"
+            value={formState.destinoComplemento}
+            onChange={(e) => updateFormField('destinoComplemento', e.target.value)}
+            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#00FAFB]"
+          />
+        </div>
+      </div>
+
+      {/* Bairro */}
+      <div className="space-y-2">
+        <Label htmlFor="destinoBairro" className="text-sm font-medium text-gray-300">
+          Bairro
+          <span className="text-xs text-gray-500 font-normal ml-1">auto-preenchido</span>
+        </Label>
+        <Input
+          id="destinoBairro"
+          type="text"
+          placeholder="Bairro"
+          value={formState.destinoBairro}
+          onChange={(e) => updateFormField('destinoBairro', e.target.value)}
           className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#00FAFB]"
         />
       </div>
@@ -460,7 +600,7 @@ export function NovaOrdemModal({
         <div className="space-y-2">
           <Label htmlFor="destinoCidade" className="text-sm font-medium text-gray-300">
             Cidade
-            <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+            <span className="text-xs text-gray-500 font-normal ml-1">auto-preenchido</span>
           </Label>
           <Input
             id="destinoCidade"
@@ -474,7 +614,7 @@ export function NovaOrdemModal({
         <div className="space-y-2">
           <Label htmlFor="destinoEstado" className="text-sm font-medium text-gray-300">
             Estado
-            <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+            <span className="text-xs text-gray-500 font-normal ml-1">auto-preenchido</span>
           </Label>
           <Input
             id="destinoEstado"

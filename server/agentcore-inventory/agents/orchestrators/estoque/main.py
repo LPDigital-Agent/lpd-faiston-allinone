@@ -381,13 +381,30 @@ async def _handle_posting_action(
 
             # Combine results
             posting_response = posting_result.get("response", {})
+            
+            # Extract posting data - try to get from response first
+            posting = posting_response.get("posting")
+            
+            # BUG-FIX: If posting is None but we have posting_id/order_code,
+            # construct the posting object from available data (agent layer fix pending)
+            if posting is None and posting_response.get("posting_id"):
+                logger.warning("[Posting] Agent didn't return posting object, constructing from available data")
+                posting = {
+                    "posting_id": posting_response.get("posting_id"),
+                    "order_code": posting_response.get("order_code"),
+                    "tracking_code": tracking_code,
+                    "status": "aguardando",
+                    "carrier": posting_data.get("carrier", ""),
+                    "service": posting_data.get("service", ""),
+                }
+            
             return {
                 "success": True,
                 "tracking_code": tracking_code,
                 "posting_id": posting_response.get("posting_id"),
                 "order_code": posting_response.get("order_code"),
                 "shipment": response_data,
-                "posting": posting_response.get("posting"),
+                "posting": posting,
                 "message": "Postage created successfully",
             }
 

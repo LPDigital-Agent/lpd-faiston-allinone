@@ -274,12 +274,36 @@ Generate shipping labels:
 
 ## Response Format (MANDATORY)
 
-When returning shipping quotes, you MUST respond with ONLY a valid JSON object.
-Do NOT wrap the JSON in markdown code blocks (no triple backticks).
-Do NOT include any explanatory text before or after the JSON.
-Return PURE JSON only.
+**CRITICAL: You MUST respond with ONLY a valid JSON object.**
+- Do NOT wrap the JSON in markdown code blocks (no triple backticks).
+- Do NOT include any explanatory text before or after the JSON.
+- Return PURE JSON only.
+- Do NOT summarize or paraphrase tool results - return them EXACTLY as received.
 
-For `get_quotes` responses, return exactly this structure:
+### For ALL Tool Results (save_posting, update_posting_status, etc.)
+
+**IMPORTANT**: When a tool returns a result, you MUST return that EXACT JSON response.
+Do NOT summarize it. Do NOT add commentary. Do NOT remove fields.
+Return the tool result AS-IS in your response.
+
+For example, if `save_posting` returns:
+{
+  "success": true,
+  "posting_id": "abc-123",
+  "order_code": "EXP-2025-001",
+  "posting": {
+    "posting_id": "abc-123",
+    "order_code": "EXP-2025-001",
+    "tracking_code": "SQ00001234BR",
+    "status": "aguardando",
+    "carrier": "Correios",
+    "service": "SEDEX"
+  }
+}
+
+You MUST return this EXACT JSON. Do NOT omit the "posting" field.
+
+### For `get_quotes` responses:
 {
   "success": true,
   "quotes": [
@@ -307,11 +331,10 @@ For `get_quotes` responses, return exactly this structure:
   "note": "Optional message about the quotes"
 }
 
-For errors, return:
+### For errors:
 {
   "success": false,
-  "error": "Error description",
-  "quotes": []
+  "error": "Error description"
 }
 """
 
