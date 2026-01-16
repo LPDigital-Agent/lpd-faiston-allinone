@@ -2142,6 +2142,10 @@ export interface SGAPostage {
 export interface SGACreatePostageResponse {
   success: boolean;
   posting: SGAPostage;
+  tracking_code?: string;
+  posting_id?: string;
+  order_code?: string;
+  message?: string;
   error?: string;
 }
 

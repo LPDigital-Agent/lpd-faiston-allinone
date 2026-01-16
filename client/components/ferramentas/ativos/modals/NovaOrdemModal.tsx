@@ -384,7 +384,7 @@ export function NovaOrdemModal({
       // Backend now ensures posting is always returned when save succeeds
       if (response.data.success && response.data.posting) {
         const posting = response.data.posting;
-        const trackingCode = posting.tracking_code || response.data.tracking_code;
+        const trackingCode = posting.tracking_code;
         const now = new Date().toISOString();
 
         // Transform SGAPostage to ShippingOrder for the page component
