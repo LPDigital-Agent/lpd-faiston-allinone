@@ -137,6 +137,7 @@ jobs:
             --env HIL_TASKS_TABLE=faiston-one-sga-hil-tasks-prod
             --env AUDIT_LOG_TABLE=faiston-one-sga-audit-log-prod
             --env SESSIONS_TABLE=faiston-one-sga-sessions-prod
+            --env POSTINGS_TABLE=faiston-one-sga-postings-prod
             --env DOCUMENTS_BUCKET=faiston-one-sga-documents-prod
             --env USE_POSTGRES_MCP=true
             --env AGENTCORE_GATEWAY_ID=faiston-one-sga-gateway-prod-qbnlm3ao63
