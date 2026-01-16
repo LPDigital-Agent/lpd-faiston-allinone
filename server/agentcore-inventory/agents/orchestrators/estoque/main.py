@@ -29,8 +29,6 @@ import asyncio
 import json
 import logging
 import os
-import re
-from datetime import datetime
 from typing import Optional
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -40,7 +38,7 @@ from strands import Agent, tool, ToolContext
 from agents.utils import create_gemini_model, AGENT_VERSION, extract_json
 
 # Configuration
-from config.agent_urls import RUNTIME_IDS, get_agent_url
+from config.agent_urls import RUNTIME_IDS
 
 # Direct tool imports for Infrastructure Actions (bypass A2A for deterministic ops)
 # NOTE: Import is done lazily in _handle_infrastructure_action() to avoid circular deps
@@ -52,10 +50,7 @@ from shared.hooks.guardrails_hook import GuardrailsHook
 
 # Swarm response extraction (BUG-020)
 # BUG-020 v5: Use _process_swarm_result() for 100% Strands-compliant extraction
-from swarm.response_utils import (
-    _extract_tool_output_from_swarm_result,
-    _process_swarm_result,
-)
+from swarm.response_utils import _process_swarm_result
 
 logger = logging.getLogger(__name__)
 
@@ -148,24 +143,6 @@ INFRASTRUCTURE_ACTIONS = {
     "get_presigned_download_url": ("intake", "get_download_url"),
 }
 
-# =============================================================================
-# Posting Actions (Deterministic A2A Routing to Carrier Agent)
-# =============================================================================
-#
-# Posting operations for Kanban board workflow. These are deterministic
-# operations that route directly to the carrier agent without LLM reasoning.
-#
-# - create_postage: Composite action (create_shipment + save_posting)
-# - get_postages: Direct pass-through to carrier agent
-# - update_postage_status: Direct pass-through to carrier agent
-#
-POSTING_ACTIONS = {
-    "create_postage": "carrier",      # Composite: create_shipment + save_posting
-    "get_postages": "carrier",        # Direct: get_postings
-    "update_postage_status": "carrier",  # Direct: update_posting_status
-}
-
-
 def _handle_infrastructure_action(action: str, payload: dict) -> dict:
     """
     Handle infrastructure actions directly without A2A protocol.
@@ -250,293 +227,6 @@ def _handle_infrastructure_action(action: str, payload: dict) -> dict:
                 "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
             },
             "suggested_actions": ["retry", "check_s3_permissions", "escalate"],
-        }
-
-
-async def _handle_posting_action(
-    action: str,
-    payload: dict,
-    user_id: str,
-    session_id: str,
-) -> dict:
-    """
-    Handle posting actions with deterministic A2A routing to carrier agent.
-
-    Mode 2.5 routing for posting operations:
-    - create_postage: Composite action (create_shipment + save_posting)
-    - get_postages: Direct pass-through to carrier agent's get_postings
-    - update_postage_status: Direct pass-through to carrier agent's update_posting_status
-
-    Args:
-        action: Posting action name (from POSTING_ACTIONS)
-        payload: Action parameters
-        user_id: User ID for context
-        session_id: Session ID for context
-
-    Returns:
-        Response from carrier agent
-    """
-    logger.info(f"[Orchestrator] Posting action: {action}, user={user_id}")
-
-    try:
-        if action == "create_postage":
-            # =================================================================
-            # Composite Action: create_shipment + save_posting
-            # =================================================================
-            # 1. First call carrier's create_shipment to get tracking code
-            # 2. Then call save_posting to persist the posting for Kanban
-            # =================================================================
-
-            # Step 1: Create shipment with carrier
-            shipment_result = await _invoke_agent_via_a2a(
-                agent_id="carrier",
-                action="create_shipment",
-                payload=payload,
-                session_id=session_id,
-                user_id=user_id,
-            )
-
-            # Check if shipment creation succeeded
-            # BUG-021 FIX: Handle natural language responses from carrier agent
-            # When Gemini LLM returns "Shipment created successfully with tracking code X...",
-            # the A2A parser returns {"success": True, "response": {"message": "..."}}
-            # We need to check for tracking code in either structured or message format.
-            response_data = shipment_result.get("response", {})
-
-            # First check: A2A call must succeed
-            if not shipment_result.get("success"):
-                logger.warning(f"[Posting] A2A call to carrier failed: {shipment_result}")
-                # Sandwich Pattern: Include error context for recovery decisions
-                return {
-                    "success": False,
-                    "error": response_data.get("error", "Failed to create shipment"),
-                    "step": "create_shipment",
-                    "details": shipment_result,
-                    "error_context": {
-                        "error_type": "a2a_call_failure",
-                        "operation": "carrier_create_shipment",
-                        "recoverable": True,
-                    },
-                    "suggested_actions": ["retry", "check_carrier_agent_health", "escalate"],
-                }
-
-            # Second check: Look for explicit failure in structured response
-            # Note: response_data.get("success") being None is OK (LLM returned natural language)
-            if response_data.get("success") is False:
-                logger.warning(f"[Posting] Carrier returned explicit failure: {response_data}")
-                # Sandwich Pattern: Include error context for recovery decisions
-                return {
-                    "success": False,
-                    "error": response_data.get("error", "Failed to create shipment"),
-                    "step": "create_shipment",
-                    "details": shipment_result,
-                    "error_context": {
-                        "error_type": "carrier_explicit_failure",
-                        "operation": "carrier_create_shipment",
-                        "recoverable": True,
-                    },
-                    "suggested_actions": ["retry_with_different_carrier", "validate_shipment_data", "escalate"],
-                }
-
-            # Extract tracking code - try structured response first, then parse message
-            tracking_code = response_data.get("tracking_code")
-
-            # BUG-021: If no tracking_code in structured response, try to extract from message
-            if not tracking_code and response_data.get("message"):
-                message = response_data.get("message", "")
-                # Brazilian tracking codes: 2 letters + 9 digits + 2 letters (e.g., SQ000300518BR)
-                match = re.search(r'\b([A-Z]{2}\d{9}[A-Z]{2})\b', message)
-                if match:
-                    tracking_code = match.group(1)
-                    logger.info(f"[Posting] Extracted tracking code from message: {tracking_code}")
-
-            if not tracking_code:
-                logger.warning("[Posting] No tracking code in shipment response")
-                # Sandwich Pattern: Include error context for recovery decisions
-                return {
-                    "success": False,
-                    "error": "Shipment created but no tracking code returned",
-                    "step": "create_shipment",
-                    "details": shipment_result,
-                    "error_context": {
-                        "error_type": "missing_tracking_code",
-                        "operation": "carrier_create_shipment",
-                        "recoverable": True,
-                        "carrier_response_has_message": bool(response_data.get("message")),
-                    },
-                    "suggested_actions": ["query_carrier_for_tracking", "retry_shipment", "manual_lookup"],
-                }
-
-            logger.info(f"[Posting] Shipment created: tracking_code={tracking_code}")
-
-            # Step 2: Save posting to database
-            # Build posting_data with all required fields for DynamoDB
-            posting_data = {
-                "tracking_code": tracking_code,
-                "carrier": payload.get("carrier", "Correios"),
-                "service": payload.get("service", ""),
-                "service_code": payload.get("service_code", ""),
-                "destination": {
-                    "name": payload.get("destination_name", ""),
-                    "address": payload.get("destination_address", ""),
-                    "number": payload.get("destination_number", ""),
-                    "complement": payload.get("destination_complement", ""),
-                    "neighborhood": payload.get("destination_neighborhood", ""),
-                    "city": payload.get("destination_city", ""),
-                    "state": payload.get("destination_state", ""),
-                    "cep": payload.get("destination_cep", ""),
-                    "phone": payload.get("destination_phone", ""),
-                    "email": payload.get("destination_email", ""),
-                },
-                "weight_grams": payload.get("weight_grams", 0),
-                "dimensions": {
-                    "length": payload.get("length_cm", 0),
-                    "width": payload.get("width_cm", 0),
-                    "height": payload.get("height_cm", 0),
-                },
-                "declared_value": payload.get("declared_value", 0),
-                "user_id": user_id,
-                "invoice_number": payload.get("invoice_number", ""),
-                "notes": payload.get("notes", ""),
-                "urgency": payload.get("urgency", "NORMAL"),
-            }
-
-            posting_result = await _invoke_agent_via_a2a(
-                agent_id="carrier",
-                action="save_posting",
-                payload={"posting_data": posting_data},
-                session_id=session_id,
-                user_id=user_id,
-            )
-
-            # Combine results
-            posting_response = posting_result.get("response", {})
-            
-            # Extract posting data - try to get from response first
-            posting = posting_response.get("posting")
-            posting_id = posting_response.get("posting_id")
-            order_code = posting_response.get("order_code")
-            
-            # BUG-FIX: If posting is None, try to lookup by tracking_code in DynamoDB
-            # The save_posting_tool saves data even if the LLM doesn't return it properly
-            if posting is None and tracking_code:
-                logger.warning(f"[Posting] Agent didn't return posting object, looking up by tracking_code: {tracking_code}")
-                try:
-                    # Query DynamoDB directly using GSI3-TrackingQuery
-                    lookup_result = await _invoke_agent_via_a2a(
-                        agent_id="carrier",
-                        action="get_posting_by_tracking",
-                        payload={"tracking_code": tracking_code},
-                        session_id=session_id,
-                        user_id=user_id,
-                    )
-                    lookup_response = lookup_result.get("response", {})
-                    if lookup_response.get("success") and lookup_response.get("posting"):
-                        posting = lookup_response.get("posting")
-                        posting_id = posting.get("posting_id")
-                        order_code = posting.get("order_code")
-                        logger.info(f"[Posting] Found posting via tracking lookup: {posting_id}")
-                    else:
-                        # Last resort: construct minimal posting from available data
-                        logger.warning("[Posting] Lookup failed, constructing minimal posting")
-                        posting = {
-                            "tracking_code": tracking_code,
-                            "status": "aguardando",
-                            "carrier": posting_data.get("carrier", ""),
-                            "service": posting_data.get("service", ""),
-                            "destination": posting_data.get("destination", {}),
-                            "created_at": datetime.utcnow().isoformat() + "Z",
-                        }
-                except Exception as e:
-                    logger.error(f"[Posting] Tracking lookup failed: {e}")
-                    # Construct minimal posting anyway
-                    posting = {
-                        "tracking_code": tracking_code,
-                        "status": "aguardando",
-                        "carrier": posting_data.get("carrier", ""),
-                        "service": posting_data.get("service", ""),
-                        "destination": posting_data.get("destination", {}),
-                        "created_at": datetime.utcnow().isoformat() + "Z",
-                    }
-            
-            return {
-                "success": True,
-                "tracking_code": tracking_code,
-                "posting_id": posting_id or (posting.get("posting_id") if posting else None),
-                "order_code": order_code or (posting.get("order_code") if posting else None),
-                "shipment": response_data,
-                "posting": posting,
-                "message": "Postage created successfully",
-            }
-
-        elif action == "get_postages":
-            # =================================================================
-            # Direct Pass-through: get_postings
-            # =================================================================
-            result = await _invoke_agent_via_a2a(
-                agent_id="carrier",
-                action="get_postings",
-                payload={
-                    "status": payload.get("status"),
-                    "user_id": payload.get("user_id"),
-                    "limit": payload.get("limit", 50),
-                },
-                session_id=session_id,
-                user_id=user_id,
-            )
-
-            response_data = result.get("response", {})
-            return {
-                "success": response_data.get("success", False),
-                "postings": response_data.get("postings", []),
-                "count": response_data.get("count", 0),
-            }
-
-        elif action == "update_postage_status":
-            # =================================================================
-            # Direct Pass-through: update_posting_status
-            # =================================================================
-            result = await _invoke_agent_via_a2a(
-                agent_id="carrier",
-                action="update_posting_status",
-                payload={
-                    "posting_id": payload.get("posting_id"),
-                    "new_status": payload.get("new_status"),
-                    "actor_id": user_id,
-                    "notes": payload.get("notes"),
-                },
-                session_id=session_id,
-                user_id=user_id,
-            )
-
-            response_data = result.get("response", {})
-            return {
-                "success": response_data.get("success", False),
-                "posting": response_data.get("posting"),
-                "previous_status": response_data.get("previous_status"),
-                "new_status": response_data.get("new_status"),
-            }
-
-        else:
-            # Unknown posting action (shouldn't happen)
-            return {
-                "success": False,
-                "error": f"Unknown posting action: {action}",
-            }
-
-    except Exception as e:
-        logger.exception(f"[Posting] Error handling {action}: {e}")
-        # Sandwich Pattern: Provide error context for potential LLM recovery decision
-        return {
-            "success": False,
-            "error": str(e),
-            "action": action,
-            "error_context": {
-                "error_type": type(e).__name__,
-                "operation": f"posting_{action}",
-                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
-            },
-            "suggested_actions": ["retry", "check_carrier_api", "escalate"],
         }
 
 
@@ -1309,21 +999,17 @@ def invoke(payload: dict, context) -> dict:
     Routing Modes:
     1. Health check → Direct response
     2. NEXO Swarm actions → Autonomous 5-agent Swarm
-    2.5a. Infrastructure actions → Deterministic routing for pure infra (S3 URLs)
-    2.5b. Posting actions → Deterministic A2A routing to carrier agent
-          - create_postage: Composite (create_shipment + save_posting)
-          - get_postages: Direct pass-through to carrier get_postings
-          - update_postage_status: Direct pass-through to carrier update_posting_status
+    2.5. Infrastructure actions → Deterministic routing for pure infra (S3 URLs)
     3. Natural language or action → LLM-based routing (100% Agentic)
 
     IMPORTANT: Business data queries (query_balance, query_asset_location, etc.)
     MUST go through Mode 3 (LLM) to maintain 100% Agentic AI principle.
-    Only pure infrastructure ops (S3 URLs) and posting ops bypass LLM via Mode 2.5.
+    Only pure infrastructure ops (S3 URLs) bypass LLM via Mode 2.5.
 
     Args:
         payload: Request with either:
             - prompt: Natural language request
-            - action: Direct action name (for Swarm/Infrastructure/Posting)
+            - action: Direct action name (for Swarm/Infrastructure)
         context: AgentCore context with session_id, identity
 
     Returns:
@@ -1375,24 +1061,6 @@ def invoke(payload: dict, context) -> dict:
         if action and action in INFRASTRUCTURE_ACTIONS:
             logger.info(f"[Orchestrator] Infrastructure direct call: {action}")
             return _handle_infrastructure_action(action=action, payload=payload)
-
-        # Mode 2.5: Posting Actions (Deterministic A2A to Carrier Agent)
-        # Posting operations for Kanban board workflow. These route directly
-        # to the carrier agent without LLM reasoning for performance.
-        #
-        # - create_postage: Composite (create_shipment + save_posting)
-        # - get_postages: Direct pass-through to get_postings
-        # - update_postage_status: Direct pass-through to update_posting_status
-        if action and action in POSTING_ACTIONS:
-            logger.info(f"[Orchestrator] Posting action routing: {action}")
-            return asyncio.run(
-                _handle_posting_action(
-                    action=action,
-                    payload=payload,
-                    user_id=user_id,
-                    session_id=session_id,
-                )
-            )
 
         # Mode 3: LLM-based Routing (Natural Language or Direct Action)
         orchestrator = _get_orchestrator()
