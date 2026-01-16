@@ -1,5 +1,5 @@
 # =============================================================================
-# Swarm Response Extraction Utilities (BUG-019 + BUG-020 v11)
+# Swarm Response Extraction Utilities (BUG-019 + BUG-020 v12)
 # =============================================================================
 # Infrastructure code for extracting structured data from Strands Swarm results.
 #
@@ -51,6 +51,15 @@
 # - v11 checks for "toolResult" in content_block (correct pattern)
 # - Extracts from content_block["toolResult"]["content"][0]["json"]
 #
+# BUG-020 v12 FIX (2026-01-16):
+# - CloudWatch revealed the REAL format produced by Strands SDK tools:
+#   {"<tool_name>_response": {"output": [{"text": "{'success': True, ...}"}]}}
+# - Key is <tool_name>_response (e.g., unified_analyze_file_response), NOT toolResult!
+# - Content is Python repr STRING with SINGLE QUOTES, NOT valid JSON!
+# - v12 checks for key.endswith("_response") pattern
+# - Uses ast.literal_eval() as fallback for Python repr strings
+# - CloudWatch evidence: 2026-01-16 12:49:38 shows exact format
+#
 # Sources:
 # - https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/
 # - https://strandsagents.com/latest/documentation/docs/api-reference/agent (tool result format)
@@ -59,6 +68,7 @@
 # - Context7 query 2026-01-16 (confirmed toolResult key format)
 # =============================================================================
 
+import ast  # v12: For parsing Python repr strings (single quotes)
 import json
 import re
 import logging
@@ -153,24 +163,54 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
             parsed = json.loads(message)
             if isinstance(parsed, dict):
                 # Check for tool response wrapper format
-                # Format: {"<tool_name>_response": {"output": [{"json": {...}}]}}
+                # Format: {"<tool_name>_response": {"output": [{"json": {...}}]}} OR
+                #         {"<tool_name>_response": {"output": [{"text": "{'success': True, ...}"}]}}
                 for key, value in parsed.items():
                     if key.endswith("_response") and isinstance(value, dict):
+                        logger.info("[v12] Found tool_response wrapper in JSON string: %s", key)
                         output = value.get("output", [])
                         if isinstance(output, list):
                             for item in output:
-                                if isinstance(item, dict) and "json" in item:
-                                    inner = item["json"]
-                                    if isinstance(inner, dict):
-                                        # Use unwrap helper or return directly
-                                        unwrapped = _unwrap_tool_result(inner)
-                                        if unwrapped:
-                                            logger.info("[v8] Extracted from tool_response wrapper")
-                                            return unwrapped
-                                        # Direct return if has analysis/success
-                                        if "analysis" in inner or "success" in inner:
-                                            logger.info("[v8] Direct return from tool_response inner")
-                                            return inner
+                                if isinstance(item, dict):
+                                    # v12 FIX: Check for "text" key with Python repr
+                                    if "text" in item:
+                                        text_val = item["text"]
+                                        if isinstance(text_val, str):
+                                            # Try JSON first, then Python repr
+                                            try:
+                                                inner = json.loads(text_val)
+                                            except json.JSONDecodeError:
+                                                try:
+                                                    inner = ast.literal_eval(text_val)
+                                                except (ValueError, SyntaxError):
+                                                    continue
+                                            if isinstance(inner, dict) and (
+                                                "analysis" in inner or "success" in inner
+                                            ):
+                                                logger.info(
+                                                    "[v12] SUCCESS: Extracted from tool_response.output[].text"
+                                                )
+                                                return inner
+                                        elif isinstance(text_val, dict):
+                                            if "analysis" in text_val or "success" in text_val:
+                                                logger.info(
+                                                    "[v12] SUCCESS: Direct dict from tool_response.output[].text"
+                                                )
+                                                return text_val
+
+                                    # Check for "json" key (original format)
+                                    if "json" in item:
+                                        inner = item["json"]
+                                        if isinstance(inner, dict):
+                                            # Use unwrap helper or return directly
+                                            unwrapped = _unwrap_tool_result(inner)
+                                            if unwrapped:
+                                                logger.info("[v8] Extracted from tool_response wrapper")
+                                                return unwrapped
+                                            # Direct return if has analysis/success
+                                            if "analysis" in inner or "success" in inner:
+                                                logger.info("[v8] Direct return from tool_response inner")
+                                                return inner
 
                 # Try direct unwrap (ToolResult format or direct response)
                 unwrapped = _unwrap_tool_result(parsed)
@@ -246,6 +286,68 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
                             if "analysis" in tool_result or "success" in tool_result:
                                 logger.info("[v11] SUCCESS: Direct data from toolResult")
                                 return tool_result
+
+                    # =====================================================
+                    # v12 FIX: Check for "<tool_name>_response" KEY
+                    # Strands SDK wraps @tool returns in this format!
+                    # Format: {"<tool>_response": {"output": [{"text": "..."}]}}
+                    # Source: CloudWatch logs 2026-01-16 12:49:38
+                    # =====================================================
+                    for key in content_block.keys():
+                        if key.endswith("_response"):
+                            logger.info("[v12] Found tool_response wrapper: %s", key)
+                            wrapper = content_block[key]
+
+                            if isinstance(wrapper, dict) and "output" in wrapper:
+                                for output_item in wrapper.get("output", []):
+                                    if isinstance(output_item, dict):
+                                        # Check for "text" key (Strands SDK format)
+                                        if "text" in output_item:
+                                            text_content = output_item["text"]
+                                            logger.info(
+                                                "[v12] Found text in output, length=%d",
+                                                len(text_content) if text_content else 0,
+                                            )
+
+                                            # Try JSON first (double quotes)
+                                            if isinstance(text_content, str):
+                                                try:
+                                                    parsed = json.loads(text_content)
+                                                    if isinstance(parsed, dict):
+                                                        if "analysis" in parsed or "success" in parsed:
+                                                            logger.info(
+                                                                "[v12] SUCCESS: Parsed JSON from tool_response.output[].text"
+                                                            )
+                                                            return parsed
+                                                except json.JSONDecodeError:
+                                                    # Python repr with single quotes - use ast.literal_eval
+                                                    try:
+                                                        parsed = ast.literal_eval(text_content)
+                                                        if isinstance(parsed, dict):
+                                                            if "analysis" in parsed or "success" in parsed:
+                                                                logger.info(
+                                                                    "[v12] SUCCESS: Parsed Python repr from tool_response.output[].text"
+                                                                )
+                                                                return parsed
+                                                    except (ValueError, SyntaxError) as e:
+                                                        logger.debug("[v12] ast.literal_eval failed: %s", e)
+
+                                            elif isinstance(text_content, dict):
+                                                if "analysis" in text_content or "success" in text_content:
+                                                    logger.info(
+                                                        "[v12] SUCCESS: Direct dict from tool_response.output[].text"
+                                                    )
+                                                    return text_content
+
+                                        # Check for "json" key (alternative format)
+                                        if "json" in output_item:
+                                            inner = output_item["json"]
+                                            if isinstance(inner, dict):
+                                                if "analysis" in inner or "success" in inner:
+                                                    logger.info(
+                                                        "[v12] SUCCESS: Extracted from tool_response.output[].json"
+                                                    )
+                                                    return inner
 
                     # =====================================================
                     # KEEP legacy patterns as fallback (backward compatibility)
