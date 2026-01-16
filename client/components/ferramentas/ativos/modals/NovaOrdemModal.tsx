@@ -380,31 +380,27 @@ export function NovaOrdemModal({
         selected_quote: selectedQuote,
       });
 
-      // Handle success - posting object is required for valid order creation
-      // Backend now ensures posting is always returned when save succeeds
       if (response.data.success && response.data.posting) {
         const posting = response.data.posting;
-        const trackingCode = posting.tracking_code;
-        const now = new Date().toISOString();
 
         // Transform SGAPostage to ShippingOrder for the page component
         const newOrder: ShippingOrder = {
-          id: posting.posting_id || response.data.posting_id,
-          codigo: posting.order_code || response.data.order_code || generateOrderCode(),
-          cliente: posting.destination?.name || formState.destinoNome || 'Destinatario',
+          id: posting.posting_id,
+          codigo: posting.order_code,
+          cliente: posting.destination.name,
           destino: {
-            nome: posting.destination?.name || formState.destinoNome || 'Destinatario',
-            cep: posting.destination?.cep || parseCEP(formState.destinoCep),
+            nome: posting.destination.name,
+            cep: posting.destination.cep,
           },
-          status: posting.status || 'aguardando',
-          prioridade: (posting.urgency || formState.urgencia || 'normal').toLowerCase(),
+          status: posting.status,
+          prioridade: (posting.urgency || 'normal').toLowerCase(),
           responsavel: { nome: 'Usuario Atual' },
           itens: [],
-          dataCriacao: posting.created_at || now,
-          dataPrevista: posting.estimated_delivery || selectedQuote?.delivery_date || '',
-          carrier: posting.carrier || selectedQuote?.carrier || 'Correios',
-          trackingCode: trackingCode,
-          price: posting.price || selectedQuote?.price || 0,
+          dataCriacao: posting.created_at,
+          dataPrevista: posting.estimated_delivery,
+          carrier: posting.carrier,
+          trackingCode: posting.tracking_code,
+          price: posting.price,
         };
 
         onOrderCreated(newOrder);
