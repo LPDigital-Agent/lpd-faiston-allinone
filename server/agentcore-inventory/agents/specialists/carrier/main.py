@@ -154,6 +154,42 @@ AGENT_SKILLS = [
         tags=["shipping", "label", "pdf", "printing"],
     ),
     AgentSkill(
+        id="save_posting",
+        name="save_posting",
+        description="Save a shipping posting to the database for Kanban board tracking. Creates a record with shipment data, tracking code, and status.",
+        tags=["posting", "kanban", "database", "shipping"],
+    ),
+    AgentSkill(
+        id="get_postings",
+        name="get_postings",
+        description="Get shipping postings for Kanban board display. Filter by status, carrier, or user. Returns paginated list of postings.",
+        tags=["posting", "kanban", "database", "query"],
+    ),
+    AgentSkill(
+        id="update_posting_status",
+        name="update_posting_status",
+        description="Update posting status for Kanban board transitions. Validates status transitions and tracks history with timestamps.",
+        tags=["posting", "kanban", "status", "workflow"],
+    ),
+    AgentSkill(
+        id="get_posting_by_tracking",
+        name="get_posting_by_tracking",
+        description="Lookup posting by tracking code using GSI3. Fast indexed lookup for tracking code searches.",
+        tags=["posting", "lookup", "tracking", "database"],
+    ),
+    AgentSkill(
+        id="get_posting_by_id",
+        name="get_posting_by_id",
+        description="Get posting by posting_id using direct primary key lookup. Fastest lookup method.",
+        tags=["posting", "lookup", "database"],
+    ),
+    AgentSkill(
+        id="get_posting_by_order_code",
+        name="get_posting_by_order_code",
+        description="Get posting by order code (EXP-YYYY-NNNN format). Uses scan with filter.",
+        tags=["posting", "lookup", "order", "database"],
+    ),
+    AgentSkill(
         id="health_check",
         name="health_check",
         description="Check agent health status and retrieve agent metadata including version, model, protocol, and specialty.",
@@ -631,6 +667,285 @@ async def get_label(
 
 
 @tool
+async def save_posting(
+    posting_data: Dict[str, Any],
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Save a shipping posting to DynamoDB for Kanban board tracking.
+
+    Creates a posting record with auto-generated posting_id and order_code.
+    Sets initial status to "aguardando" and creates GSI entries for efficient querying.
+
+    Args:
+        posting_data: Posting data containing:
+            - tracking_code: Tracking code from carrier (required)
+            - carrier: Carrier name (e.g., "Correios")
+            - service: Service type (e.g., "SEDEX")
+            - destination: Destination address dict
+            - origin: Origin address dict
+            - weight_grams: Package weight
+            - dimensions: Package dimensions dict
+            - declared_value: Declared value for insurance
+            - price: Shipping price
+            - delivery_days: Estimated delivery days
+            - user_id: User who created the posting (required)
+            - project_id: Related project ID (optional)
+            - invoice_number: Related invoice number (optional)
+            - notes: Additional notes (optional)
+        session_id: Session ID for context
+
+    Returns:
+        Dict with posting_id, order_code, and posting record
+    """
+    tracking_code = posting_data.get("tracking_code", "")
+    logger.info(f"[{AGENT_NAME}] Saving posting: tracking={tracking_code}")
+
+    try:
+        # Import tool implementation
+        from agents.specialists.carrier.tools.postings_db import save_posting_tool
+
+        result = await save_posting_tool(
+            posting_data=posting_data,
+            session_id=session_id,
+        )
+
+        # Log to ObservationAgent
+        if result.get("success"):
+            await a2a_client.invoke_agent("observation", {
+                "action": "log_event",
+                "event_type": "POSTING_SAVED",
+                "agent_id": AGENT_ID,
+                "session_id": session_id,
+                "details": {
+                    "posting_id": result.get("posting_id"),
+                    "order_code": result.get("order_code"),
+                    "tracking_code": tracking_code,
+                },
+            }, session_id)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] save_posting failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@tool
+async def get_postings(
+    status: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 50,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get shipping postings for Kanban board display.
+
+    Query patterns:
+    - If status provided: Query GSI1-StatusQuery
+    - If user_id provided: Query GSI2-UserQuery
+    - If neither: Scan with limit (use sparingly)
+
+    Valid statuses: aguardando, em_transito, entregue, cancelado, extraviado
+
+    Args:
+        status: Filter by status (optional, returns all if not specified)
+        user_id: Filter by user ID (optional)
+        limit: Maximum records to return (default 50, max 100)
+        session_id: Session ID for context
+
+    Returns:
+        Dict with postings list and count
+    """
+    logger.info(f"[{AGENT_NAME}] Getting postings: status={status}, limit={limit}")
+
+    try:
+        # Import tool implementation
+        from agents.specialists.carrier.tools.postings_db import get_postings_tool
+
+        result = await get_postings_tool(
+            status=status,
+            user_id=user_id,
+            limit=limit,
+            session_id=session_id,
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] get_postings failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e), "postings": [], "count": 0}
+
+
+@tool
+async def update_posting_status(
+    posting_id: str,
+    new_status: str,
+    actor_id: Optional[str] = None,
+    notes: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Update posting status for Kanban board transitions.
+
+    Updates the status of a posting and adds to history log.
+    Used when moving cards between Kanban columns.
+
+    Valid status transitions:
+    - aguardando -> em_transito, cancelado
+    - em_transito -> entregue, extraviado
+    - entregue, cancelado, extraviado -> (terminal states, no transitions)
+
+    Args:
+        posting_id: ID of posting to update
+        new_status: New status value
+        actor_id: User/agent making the change (for audit)
+        notes: Optional note about the status change
+        session_id: Session ID for context
+
+    Returns:
+        Dict with updated posting and previous_status
+    """
+    logger.info(f"[{AGENT_NAME}] Updating posting status: id={posting_id}, new_status={new_status}")
+
+    try:
+        # Import tool implementation
+        from agents.specialists.carrier.tools.postings_db import update_posting_status_tool
+
+        result = await update_posting_status_tool(
+            posting_id=posting_id,
+            new_status=new_status,
+            actor_id=actor_id,
+            notes=notes,
+            session_id=session_id,
+        )
+
+        # Log to ObservationAgent
+        if result.get("success"):
+            await a2a_client.invoke_agent("observation", {
+                "action": "log_event",
+                "event_type": "POSTING_STATUS_UPDATED",
+                "agent_id": AGENT_ID,
+                "session_id": session_id,
+                "details": {
+                    "posting_id": posting_id,
+                    "previous_status": result.get("previous_status"),
+                    "new_status": new_status,
+                    "notes": notes,
+                },
+            }, session_id)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] update_posting_status failed: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+@tool
+async def get_posting_by_tracking(
+    tracking_code: str,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Lookup posting by tracking code using GSI3.
+
+    Fast lookup using Global Secondary Index on tracking_code.
+
+    Args:
+        tracking_code: Tracking code to search for
+        session_id: Session ID for context
+
+    Returns:
+        Dict with found status and posting record if exists
+    """
+    logger.info(f"[{AGENT_NAME}] Looking up posting by tracking: {tracking_code}")
+
+    try:
+        from agents.specialists.carrier.tools.postings_db import get_posting_by_tracking_tool
+
+        result = await get_posting_by_tracking_tool(
+            tracking_code=tracking_code,
+            session_id=session_id,
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] get_posting_by_tracking failed: {e}", exc_info=True)
+        return {"success": False, "found": False, "error": str(e), "posting": None}
+
+
+@tool
+async def get_posting_by_id(
+    posting_id: str,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get posting by posting_id (direct primary key lookup).
+
+    Fast lookup using primary key on posting_id.
+
+    Args:
+        posting_id: Posting ID to retrieve
+        session_id: Session ID for context
+
+    Returns:
+        Dict with found status and posting record if exists
+    """
+    logger.info(f"[{AGENT_NAME}] Looking up posting by ID: {posting_id}")
+
+    try:
+        from agents.specialists.carrier.tools.postings_db import get_posting_by_id_tool
+
+        result = await get_posting_by_id_tool(
+            posting_id=posting_id,
+            session_id=session_id,
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] get_posting_by_id failed: {e}", exc_info=True)
+        return {"success": False, "found": False, "error": str(e), "posting": None}
+
+
+@tool
+async def get_posting_by_order_code(
+    order_code: str,
+    session_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Get posting by order code (e.g., EXP-2026-0001).
+
+    Uses scan with filter since order_code is not a primary key.
+    For frequent lookups, consider adding a GSI.
+
+    Args:
+        order_code: Order code to search for (format: EXP-YYYY-NNNN)
+        session_id: Session ID for context
+
+    Returns:
+        Dict with found status and posting record if exists
+    """
+    logger.info(f"[{AGENT_NAME}] Looking up posting by order code: {order_code}")
+
+    try:
+        from agents.specialists.carrier.tools.postings_db import get_posting_by_order_code_tool
+
+        result = await get_posting_by_order_code_tool(
+            order_code=order_code,
+            session_id=session_id,
+        )
+
+        return result
+
+    except Exception as e:
+        logger.error(f"[{AGENT_NAME}] get_posting_by_order_code failed: {e}", exc_info=True)
+        return {"success": False, "found": False, "error": str(e), "posting": None}
+
+
+@tool
 async def health_check() -> Dict[str, Any]:
     """
     Health check endpoint for monitoring.
@@ -667,12 +982,21 @@ def create_agent() -> Agent:
         description=AGENT_DESCRIPTION,
         model=create_gemini_model(AGENT_ID),  # GeminiModel via Google AI Studio
         tools=[
+            # Shipping operations
             get_quotes,
             recommend_carrier,
             track_shipment,
             create_shipment,
             liberate_shipment,
             get_label,
+            # Posting tools (Kanban workflow - DynamoDB)
+            save_posting,
+            get_postings,
+            update_posting_status,
+            get_posting_by_tracking,
+            get_posting_by_id,
+            get_posting_by_order_code,
+            # Health
             health_check,
         ],
         system_prompt=SYSTEM_PROMPT,

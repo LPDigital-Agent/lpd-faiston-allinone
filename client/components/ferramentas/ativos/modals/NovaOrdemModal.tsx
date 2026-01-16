@@ -29,18 +29,20 @@ import {
   ChevronRight,
   CheckCircle2,
   Info,
+  User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { getShippingQuotes } from '@/services/sgaAgentcore';
+import { getShippingQuotes, createPostage } from '@/services/sgaAgentcore';
 import type {
   SGAGetQuotesRequest,
   SGAShippingQuote,
   SGACarrierRecommendation,
   SGAExpeditionUrgency,
+  SGAPostage,
 } from '@/lib/ativos/types';
 
 // =============================================================================
@@ -55,7 +57,7 @@ interface ShippingOrder {
   codigo: string;
   cliente: string;
   destino: { nome: string; cep: string };
-  status: 'aguardando' | 'em_transito' | 'entregue';
+  status: 'aguardando' | 'em_transito' | 'entregue' | 'cancelado';
   prioridade: string;
   responsavel: { nome: string };
   itens: Array<{
@@ -71,12 +73,22 @@ interface ShippingOrder {
   price: number;
 }
 
+/**
+ * Extended form state to capture additional destination details
+ */
+interface ExtendedFormState extends FormState {
+  destinoNome: string;
+  destinoEndereco: string;
+  destinoCidade: string;
+  destinoEstado: string;
+}
+
 interface NovaOrdemModalProps {
   /** Whether the modal is open */
   open: boolean;
   /** Callback when modal should close */
   onOpenChange: (open: boolean) => void;
-  /** Callback when order is created */
+  /** Callback when order is created - receives the posting from API */
   onOrderCreated: (order: ShippingOrder) => void;
 }
 
@@ -162,9 +174,13 @@ export function NovaOrdemModal({
   onOpenChange,
   onOrderCreated,
 }: NovaOrdemModalProps) {
-  // Form state
-  const [formState, setFormState] = useState<FormState>({
+  // Form state - extended with destination details for API
+  const [formState, setFormState] = useState<ExtendedFormState>({
     destinoCep: '',
+    destinoNome: '',
+    destinoEndereco: '',
+    destinoCidade: '',
+    destinoEstado: '',
     peso: '',
     comprimento: String(DEFAULT_DIMENSIONS.length),
     largura: String(DEFAULT_DIMENSIONS.width),
@@ -191,7 +207,7 @@ export function NovaOrdemModal({
   // =============================================================================
 
   const updateFormField = useCallback(
-    <K extends keyof FormState>(field: K, value: FormState[K]) => {
+    <K extends keyof ExtendedFormState>(field: K, value: ExtendedFormState[K]) => {
       setFormState((prev) => ({ ...prev, [field]: value }));
       // Clear error when field is updated
       if (field in formErrors) {
@@ -275,35 +291,57 @@ export function NovaOrdemModal({
 
     setIsCreatingOrder(true);
     setStep('creating');
+    setApiError(null);
 
     try {
-      // Simulate order creation delay
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      const now = new Date();
-      const deliveryDate = new Date();
-      deliveryDate.setDate(deliveryDate.getDate() + selectedQuote.delivery_days);
-
-      const newOrder: ShippingOrder = {
-        id: generateOrderId(),
-        codigo: generateOrderCode(),
-        cliente: 'Cliente Faiston', // MVP: Could be expanded to include client selection
-        destino: {
-          nome: 'Destino',
-          cep: parseCEP(formState.destinoCep),
+      // Call the real API to create the postage
+      const response = await createPostage({
+        destination_cep: parseCEP(formState.destinoCep),
+        destination_name: formState.destinoNome || 'Destinatario',
+        destination_address: formState.destinoEndereco || 'Endereco nao informado',
+        destination_city: formState.destinoCidade || 'Cidade nao informada',
+        destination_state: formState.destinoEstado || 'SP',
+        weight_kg: parseFloat(formState.peso),
+        dimensions: {
+          length: parseFloat(formState.comprimento) || DEFAULT_DIMENSIONS.length,
+          width: parseFloat(formState.largura) || DEFAULT_DIMENSIONS.width,
+          height: parseFloat(formState.altura) || DEFAULT_DIMENSIONS.height,
         },
-        status: 'aguardando',
-        prioridade: formState.urgencia.toLowerCase(),
-        responsavel: { nome: 'Usuario Atual' }, // MVP: Could integrate with auth
-        itens: [], // MVP: Empty for now, could be expanded
-        dataCriacao: now.toISOString(),
-        dataPrevista: deliveryDate.toISOString(),
-        carrier: selectedQuote.carrier,
-        price: selectedQuote.price,
-      };
+        declared_value: formState.valorDeclarado ? parseFloat(formState.valorDeclarado) : 0,
+        urgency: formState.urgencia,
+        selected_quote: selectedQuote,
+      });
 
-      onOrderCreated(newOrder);
-      handleClose();
+      if (response.data.success && response.data.posting) {
+        const posting = response.data.posting;
+
+        // Transform SGAPostage to ShippingOrder for the page component
+        const newOrder: ShippingOrder = {
+          id: posting.posting_id,
+          codigo: posting.order_code,
+          cliente: posting.destination.name,
+          destino: {
+            nome: posting.destination.name,
+            cep: posting.destination.cep,
+          },
+          status: posting.status,
+          prioridade: posting.urgency.toLowerCase(),
+          responsavel: { nome: 'Usuario Atual' },
+          itens: [],
+          dataCriacao: posting.created_at,
+          dataPrevista: posting.estimated_delivery,
+          carrier: posting.carrier,
+          trackingCode: posting.tracking_code,
+          price: posting.price,
+        };
+
+        onOrderCreated(newOrder);
+        onOpenChange(false);
+      } else {
+        console.error('[NovaOrdemModal] API returned error:', response.data.error);
+        setApiError(response.data.error || 'Erro ao criar postagem. Tente novamente.');
+        setStep('quotes');
+      }
     } catch (error) {
       console.error('[NovaOrdemModal] Failed to create order:', error);
       setApiError('Erro ao criar postagem. Tente novamente.');
@@ -311,7 +349,7 @@ export function NovaOrdemModal({
     } finally {
       setIsCreatingOrder(false);
     }
-  }, [selectedQuote, formState.destinoCep, formState.urgencia, onOrderCreated]);
+  }, [selectedQuote, formState, onOrderCreated, onOpenChange]);
 
   // =============================================================================
   // Modal Handlers
@@ -323,6 +361,10 @@ export function NovaOrdemModal({
     // Reset all state
     setFormState({
       destinoCep: '',
+      destinoNome: '',
+      destinoEndereco: '',
+      destinoCidade: '',
+      destinoEstado: '',
       peso: '',
       comprimento: String(DEFAULT_DIMENSIONS.length),
       largura: String(DEFAULT_DIMENSIONS.width),
@@ -377,6 +419,73 @@ export function NovaOrdemModal({
             {formErrors.destinoCep}
           </p>
         )}
+      </div>
+
+      {/* Destinatario Nome */}
+      <div className="space-y-2">
+        <Label htmlFor="destinoNome" className="text-sm font-medium text-gray-300 flex items-center gap-2">
+          <User className="w-4 h-4 text-[#00FAFB]" />
+          Nome do Destinatario
+          <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+        </Label>
+        <Input
+          id="destinoNome"
+          type="text"
+          placeholder="Nome do destinatario"
+          value={formState.destinoNome}
+          onChange={(e) => updateFormField('destinoNome', e.target.value)}
+          className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#00FAFB]"
+        />
+      </div>
+
+      {/* Endereco */}
+      <div className="space-y-2">
+        <Label htmlFor="destinoEndereco" className="text-sm font-medium text-gray-300 flex items-center gap-2">
+          <MapPin className="w-4 h-4 text-[#00FAFB]" />
+          Endereco
+          <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+        </Label>
+        <Input
+          id="destinoEndereco"
+          type="text"
+          placeholder="Rua, numero, complemento"
+          value={formState.destinoEndereco}
+          onChange={(e) => updateFormField('destinoEndereco', e.target.value)}
+          className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#00FAFB]"
+        />
+      </div>
+
+      {/* Cidade e Estado */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="destinoCidade" className="text-sm font-medium text-gray-300">
+            Cidade
+            <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+          </Label>
+          <Input
+            id="destinoCidade"
+            type="text"
+            placeholder="Cidade"
+            value={formState.destinoCidade}
+            onChange={(e) => updateFormField('destinoCidade', e.target.value)}
+            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#00FAFB]"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="destinoEstado" className="text-sm font-medium text-gray-300">
+            Estado
+            <span className="text-xs text-gray-500 font-normal ml-1">opcional</span>
+          </Label>
+          <Input
+            id="destinoEstado"
+            type="text"
+            placeholder="UF"
+            maxLength={2}
+            value={formState.destinoEstado}
+            onChange={(e) => updateFormField('destinoEstado', e.target.value.toUpperCase())}
+            className="bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-[#00FAFB]"
+          />
+        </div>
       </div>
 
       {/* Peso */}

@@ -5,10 +5,11 @@
 // =============================================================================
 // Kanban-style view of shipping orders organized by status.
 // Includes Nova Ordem modal for creating shipping orders with carrier quotes.
-// Uses localStorage for MVP state persistence (DB integration planned).
+// Uses real API integration via useQuery/useMutation (replaced localStorage).
 // =============================================================================
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { GlassCard, GlassCardHeader, GlassCardTitle, GlassCardContent } from "@/components/shared/glass-card";
 import { AssetManagementHeader } from "@/components/ferramentas/ativos/asset-management-header";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,9 @@ import {
   MoreVertical,
   Play,
   Check,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -39,6 +43,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { NovaOrdemModal } from "@/components/ferramentas/ativos/modals/NovaOrdemModal";
 import { toast } from "@/components/ui/use-toast";
+import { getPostages, updatePostageStatus } from "@/services/sgaAgentcore";
+import type { SGAPostage } from "@/lib/ativos/types";
 
 /**
  * Expedição Page - Shipping Orders Management
@@ -47,8 +53,8 @@ import { toast } from "@/components/ui/use-toast";
  * Includes Nova Ordem modal for creating orders with Correios/TRB quotes.
  */
 
-// Types for shipping orders
-export type ShippingOrderStatus = "aguardando" | "em_transito" | "entregue";
+// Types for shipping orders (compatible with modal output)
+export type ShippingOrderStatus = "aguardando" | "em_transito" | "entregue" | "cancelado";
 
 export type ShippingOrderItem = {
   ativoId: string;
@@ -79,111 +85,192 @@ const statusColumns = [
   { id: "entregue" as const, label: "Entregue", color: "bg-green-500/20 text-green-400 border-green-500/30", icon: CheckCircle },
 ];
 
-// LocalStorage key for MVP persistence
-const STORAGE_KEY = "faiston_expedition_orders";
+// Query key for postages
+const POSTAGES_QUERY_KEY = ["postages"];
+
+/**
+ * Transform SGAPostage from API to ShippingOrder for UI
+ */
+function transformPostageToOrder(posting: SGAPostage): ShippingOrder {
+  return {
+    id: posting.posting_id,
+    codigo: posting.order_code,
+    cliente: posting.destination.name,
+    destino: {
+      nome: posting.destination.name,
+      cep: posting.destination.cep,
+    },
+    status: posting.status,
+    prioridade: posting.urgency.toLowerCase(),
+    responsavel: { nome: "Usuario" },
+    itens: [],
+    dataCriacao: posting.created_at,
+    dataPrevista: posting.estimated_delivery,
+    carrier: posting.carrier,
+    trackingCode: posting.tracking_code,
+    price: posting.price,
+  };
+}
 
 export default function ExpedicaoPage() {
-  // State for shipping orders (localStorage-backed for MVP)
-  const [shippingOrders, setShippingOrders] = useState<ShippingOrder[]>([]);
+  const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load orders from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const orders = JSON.parse(stored);
-        setShippingOrders(orders);
+  // Fetch postages from API
+  const {
+    data: postagesData,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: POSTAGES_QUERY_KEY,
+    queryFn: async () => {
+      const response = await getPostages();
+      if (response.data.success) {
+        return response.data.postings.map(transformPostageToOrder);
       }
-    } catch (e) {
-      console.error("Failed to load orders from localStorage:", e);
-    }
-    setIsLoaded(true);
-  }, []);
+      throw new Error(response.data.error || "Failed to fetch postages");
+    },
+    staleTime: 30000, // 30 seconds
+    refetchOnWindowFocus: true,
+  });
 
-  // Save orders to localStorage when changed
-  useEffect(() => {
-    if (isLoaded) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(shippingOrders));
-      } catch (e) {
-        console.error("Failed to save orders to localStorage:", e);
+  const shippingOrders = postagesData || [];
+
+  // Mutation for updating postage status
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ postingId, newStatus }: { postingId: string; newStatus: string }) => {
+      const response = await updatePostageStatus(postingId, newStatus);
+      if (!response.data.success) {
+        throw new Error(response.data.error || "Failed to update status");
       }
-    }
-  }, [shippingOrders, isLoaded]);
+      return response.data.posting;
+    },
+    onSuccess: (updatedPosting, { newStatus }) => {
+      // Invalidate and refetch postages
+      queryClient.invalidateQueries({ queryKey: POSTAGES_QUERY_KEY });
+
+      const statusLabel = newStatus === "em_transito" ? "Em Transito" : "Entregue";
+      toast({
+        title: `Status atualizado para "${statusLabel}"`,
+        description: `Pedido: ${updatedPosting.order_code}`,
+      });
+    },
+    onError: (error) => {
+      console.error("[ExpedicaoPage] Failed to update status:", error);
+      toast({
+        title: "Erro ao atualizar status",
+        description: error instanceof Error ? error.message : "Tente novamente",
+        variant: "destructive",
+      });
+    },
+  });
 
   // Handle new order created from modal
   const handleOrderCreated = useCallback((order: ShippingOrder) => {
-    setShippingOrders((prev) => [...prev, order]);
+    // Invalidate query to refetch from API (the order was already created on backend)
+    queryClient.invalidateQueries({ queryKey: POSTAGES_QUERY_KEY });
     toast({
       title: "Postagem criada com sucesso!",
-      description: `Código: ${order.codigo}`,
+      description: `Codigo: ${order.codigo}${order.trackingCode ? ` | Rastreio: ${order.trackingCode}` : ""}`,
     });
-  }, []);
+  }, [queryClient]);
 
   // Move order to next status
-  const moveToNextStatus = useCallback((orderId: string) => {
-    setShippingOrders((prev) =>
-      prev.map((order) => {
-        if (order.id !== orderId) return order;
+  const moveToNextStatus = useCallback((orderId: string, currentStatus: ShippingOrderStatus) => {
+    const nextStatus: Record<ShippingOrderStatus, ShippingOrderStatus> = {
+      aguardando: "em_transito",
+      em_transito: "entregue",
+      entregue: "entregue",
+      cancelado: "cancelado",
+    };
 
-        const nextStatus: Record<ShippingOrderStatus, ShippingOrderStatus> = {
-          aguardando: "em_transito",
-          em_transito: "entregue",
-          entregue: "entregue",
-        };
+    const newStatus = nextStatus[currentStatus];
+    if (newStatus !== currentStatus) {
+      updateStatusMutation.mutate({ postingId: orderId, newStatus });
+    }
+  }, [updateStatusMutation]);
 
-        const newStatus = nextStatus[order.status];
-
-        if (newStatus !== order.status) {
-          toast({
-            title: `Status atualizado para "${newStatus === 'em_transito' ? 'Em Trânsito' : 'Entregue'}"`,
-            description: `Pedido: ${order.codigo}`,
-          });
-        }
-
-        return {
-          ...order,
-          status: newStatus,
-        };
-      })
+  // Render loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <AssetManagementHeader
+          title="Expedicao"
+          subtitle="Gerencie ordens de envio e entregas"
+          primaryAction={{
+            label: "Nova Ordem",
+            onClick: () => setIsModalOpen(true),
+            icon: <Plus className="w-4 h-4" />,
+          }}
+        />
+        <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+            <p className="text-sm text-text-muted">Carregando postagens...</p>
+          </div>
+        </div>
+      </div>
     );
-  }, []);
+  }
 
-  // Delete order
-  const deleteOrder = useCallback((orderId: string) => {
-    setShippingOrders((prev) => prev.filter((o) => o.id !== orderId));
-    toast({ title: "Ordem removida" });
-  }, []);
-
-  // Clear all orders (for testing)
-  const clearAllOrders = useCallback(() => {
-    setShippingOrders([]);
-    toast({ title: "Todas as ordens foram removidas" });
-  }, []);
+  // Render error state
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <AssetManagementHeader
+          title="Expedicao"
+          subtitle="Gerencie ordens de envio e entregas"
+          primaryAction={{
+            label: "Nova Ordem",
+            onClick: () => setIsModalOpen(true),
+            icon: <Plus className="w-4 h-4" />,
+          }}
+        />
+        <NovaOrdemModal
+          open={isModalOpen}
+          onOpenChange={setIsModalOpen}
+          onOrderCreated={handleOrderCreated}
+        />
+        <div className="flex items-center justify-center py-20">
+          <div className="flex flex-col items-center gap-4">
+            <AlertCircle className="w-8 h-8 text-red-400" />
+            <p className="text-sm text-text-muted">
+              {error instanceof Error ? error.message : "Erro ao carregar postagens"}
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <AssetManagementHeader
-        title="Expedição"
+        title="Expedicao"
         subtitle="Gerencie ordens de envio e entregas"
         primaryAction={{
           label: "Nova Ordem",
           onClick: () => setIsModalOpen(true),
           icon: <Plus className="w-4 h-4" />,
         }}
-        secondaryActions={
-          shippingOrders.length > 0
-            ? [
-                {
-                  label: "Limpar Tudo",
-                  onClick: clearAllOrders,
-                },
-              ]
-            : undefined
-        }
+        secondaryActions={[
+          {
+            label: "Atualizar",
+            onClick: () => refetch(),
+            icon: <RefreshCw className="w-4 h-4" />,
+          },
+        ]}
       />
 
       {/* Nova Ordem Modal */}
@@ -241,11 +328,11 @@ export default function ExpedicaoPage() {
                                 {order.codigo}
                               </p>
                               <p className="text-xs text-text-muted">
-                                {order.carrier || "Correios"} • R$ {order.price?.toFixed(2) || "0.00"}
+                                {order.carrier || "Correios"} - R$ {order.price?.toFixed(2) || "0.00"}
                               </p>
                             </div>
                             <div className="flex items-center gap-1">
-                              {order.prioridade === "URGENT" && (
+                              {order.prioridade === "urgent" && (
                                 <Badge className="bg-red-500/20 text-red-400 text-xs">
                                   Urgente
                                 </Badge>
@@ -262,11 +349,14 @@ export default function ExpedicaoPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   {order.status !== "entregue" && (
-                                    <DropdownMenuItem onClick={() => moveToNextStatus(order.id)}>
+                                    <DropdownMenuItem
+                                      onClick={() => moveToNextStatus(order.id, order.status)}
+                                      disabled={updateStatusMutation.isPending}
+                                    >
                                       {order.status === "aguardando" ? (
                                         <>
                                           <Play className="w-3 h-3 mr-2" />
-                                          Mover para Em Trânsito
+                                          Mover para Em Transito
                                         </>
                                       ) : (
                                         <>
@@ -276,12 +366,6 @@ export default function ExpedicaoPage() {
                                       )}
                                     </DropdownMenuItem>
                                   )}
-                                  <DropdownMenuItem
-                                    onClick={() => deleteOrder(order.id)}
-                                    className="text-red-400"
-                                  >
-                                    Remover
-                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
@@ -320,10 +404,17 @@ export default function ExpedicaoPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-6 px-2 text-xs"
-                                onClick={() => moveToNextStatus(order.id)}
+                                onClick={() => moveToNextStatus(order.id, order.status)}
+                                disabled={updateStatusMutation.isPending}
                               >
-                                {order.status === "aguardando" ? "Enviar" : "Entregar"}
-                                <ChevronRight className="w-3 h-3 ml-1" />
+                                {updateStatusMutation.isPending ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    {order.status === "aguardando" ? "Enviar" : "Entregar"}
+                                    <ChevronRight className="w-3 h-3 ml-1" />
+                                  </>
+                                )}
                               </Button>
                             )}
                           </div>
@@ -375,7 +466,7 @@ export default function ExpedicaoPage() {
               <p className="text-2xl font-bold text-text-primary">
                 {shippingOrders.filter((o) => o.status === "em_transito").length}
               </p>
-              <p className="text-sm text-text-muted">Em Trânsito</p>
+              <p className="text-sm text-text-muted">Em Transito</p>
             </div>
           </div>
         </GlassCard>

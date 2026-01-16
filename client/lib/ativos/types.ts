@@ -2090,3 +2090,75 @@ export interface QueryEquipmentDocsRequest {
   part_number?: string;
   max_results?: number;
 }
+
+// =============================================================================
+// Posting/Shipment Types (Postage API Integration)
+// =============================================================================
+
+/**
+ * Request to create a new postage/shipment.
+ */
+export interface SGACreatePostageRequest {
+  destination_cep: string;
+  destination_name: string;
+  destination_address: string;
+  destination_city: string;
+  destination_state: string;
+  weight_kg: number;
+  dimensions: { length: number; width: number; height: number };
+  declared_value: number;
+  urgency: SGAExpeditionUrgency;
+  selected_quote: SGAShippingQuote;
+}
+
+/**
+ * Postage/shipment entity representing a shipping order.
+ */
+export interface SGAPostage {
+  posting_id: string;
+  order_code: string;
+  tracking_code: string;
+  carrier: string;
+  service: string;
+  price: number;
+  delivery_days: number;
+  estimated_delivery: string;
+  status: 'aguardando' | 'em_transito' | 'entregue' | 'cancelado';
+  destination: {
+    name: string;
+    address: string;
+    cep: string;
+    city: string;
+    state: string;
+  };
+  urgency: SGAExpeditionUrgency;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Response from create postage API.
+ */
+export interface SGACreatePostageResponse {
+  success: boolean;
+  posting: SGAPostage;
+  error?: string;
+}
+
+/**
+ * Response from get postages API.
+ */
+export interface SGAGetPostagesResponse {
+  success: boolean;
+  postings: SGAPostage[];
+  error?: string;
+}
+
+/**
+ * Response from update postage status API.
+ */
+export interface SGAUpdatePostageStatusResponse {
+  success: boolean;
+  posting: SGAPostage;
+  error?: string;
+}

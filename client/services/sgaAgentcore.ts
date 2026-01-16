@@ -871,6 +871,77 @@ export async function trackShipment(
 }
 
 // =============================================================================
+// Postage Management (Posting API)
+// =============================================================================
+
+import type {
+  SGACreatePostageRequest,
+  SGACreatePostageResponse,
+  SGAGetPostagesResponse,
+  SGAUpdatePostageStatusResponse,
+} from '@/lib/ativos/types';
+
+/**
+ * Create a new postage/shipment order.
+ * Stateless operation (useSession: false).
+ *
+ * @param params - Postage creation parameters including destination, weight, dimensions, and selected quote
+ * @returns Created postage with tracking code and order details
+ */
+export async function createPostage(
+  params: SGACreatePostageRequest
+): Promise<AgentCoreResponse<SGACreatePostageResponse>> {
+  return invokeSGAAgentCore<SGACreatePostageResponse>(
+    {
+      action: 'create_postage',
+      ...params,
+    },
+    { useSession: false }
+  );
+}
+
+/**
+ * Get all postages, optionally filtered by status.
+ * Stateless operation (useSession: false).
+ *
+ * @param status - Optional status filter ('aguardando' | 'em_transito' | 'entregue' | 'cancelado')
+ * @returns List of postages matching the filter
+ */
+export async function getPostages(
+  status?: string
+): Promise<AgentCoreResponse<SGAGetPostagesResponse>> {
+  return invokeSGAAgentCore<SGAGetPostagesResponse>(
+    {
+      action: 'get_postages',
+      ...(status && { status }),
+    },
+    { useSession: false }
+  );
+}
+
+/**
+ * Update the status of a postage/shipment.
+ * Stateless operation (useSession: false).
+ *
+ * @param posting_id - The ID of the postage to update
+ * @param new_status - The new status ('aguardando' | 'em_transito' | 'entregue' | 'cancelado')
+ * @returns Updated postage with new status
+ */
+export async function updatePostageStatus(
+  posting_id: string,
+  new_status: string
+): Promise<AgentCoreResponse<SGAUpdatePostageStatusResponse>> {
+  return invokeSGAAgentCore<SGAUpdatePostageStatusResponse>(
+    {
+      action: 'update_postage_status',
+      posting_id,
+      new_status,
+    },
+    { useSession: false }
+  );
+}
+
+// =============================================================================
 // Reverse Logistics (ReverseAgent)
 // =============================================================================
 
