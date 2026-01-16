@@ -913,6 +913,22 @@ async def _invoke_swarm(
     # =========================================================================
     _restore_session_from_payload(session, payload)
 
+    # =========================================================================
+    # BUG-020 v16 FIX: Ensure s3_key is available for ALL Swarm actions
+    # =========================================================================
+    # Pre-analysis actions (prior_knowledge, adaptive_threshold) may be called
+    # before nexo_analyze_file sets s3_key in context. This ensures s3_key
+    # propagates to session context for any action that has it in payload.
+    # =========================================================================
+    incoming_s3_key = (
+        payload.get("s3_key") or
+        payload.get("file_path") or
+        payload.get("key", "")
+    )
+    if incoming_s3_key and not session["context"].get("s3_key"):
+        session["context"]["s3_key"] = incoming_s3_key
+        logger.info("[v16] Propagated s3_key to session: %s", incoming_s3_key[:50])
+
     logger.info(
         f"[Swarm] Invocation: action={action}, session={session_id}, "
         f"round={session['round_count']}, s3_key={session['context'].get('s3_key', 'NONE')[:30] if session['context'].get('s3_key') else 'NONE'}"

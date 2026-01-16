@@ -475,16 +475,32 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
                             # Try JSON first (double quotes)
                             try:
                                 parsed = json.loads(text_content)
+                                # v16 DEBUG: Log what we parsed to understand wrapper format
+                                logger.info(
+                                    "[v16] v14 parsed JSON successfully, type=%s, keys=%s",
+                                    type(parsed).__name__,
+                                    list(parsed.keys())[:5] if isinstance(parsed, dict) else "N/A",
+                                )
                                 if isinstance(parsed, dict):
                                     if "analysis" in parsed or "success" in parsed:
                                         logger.info("[v14] SUCCESS: Parsed JSON from direct text block")
                                         return parsed
+                                    # v16 FIX: Log any tool response wrappers found
+                                    for key in parsed.keys():
+                                        if key.endswith("_response"):
+                                            logger.info("[v16] Found tool wrapper in text block: %s", key)
                                     # Also check for _response wrapper
                                     from_wrapper = _extract_from_response_wrapper(parsed)
                                     if from_wrapper:
                                         logger.info("[v14] SUCCESS: Extracted _response from direct text block")
                                         return from_wrapper
-                            except json.JSONDecodeError:
+                            except json.JSONDecodeError as e:
+                                # v16 DEBUG: Log parse failure details
+                                logger.warning(
+                                    "[v16] v14 JSON parse FAILED: %s (first 200 chars: %s)",
+                                    str(e),
+                                    text_content[:200] if text_content else "EMPTY",
+                                )
                                 # Python repr with single quotes - use ast.literal_eval
                                 try:
                                     parsed = ast.literal_eval(text_content)
@@ -810,6 +826,23 @@ def _extract_from_agent_result(
                 agent_name,
             )
             return None
+
+    # =========================================================================
+    # BUG-020 v16 FIX: Handle nested AgentResult recursively
+    # =========================================================================
+    # Strands Swarm may return nested AgentResult structures:
+    # result.results["agent"] = AgentResult where .result is ANOTHER AgentResult
+    # When this happens, we need to recursively extract from the inner AgentResult.
+    # =========================================================================
+    if hasattr(result_data, "result") or hasattr(result_data, "message"):
+        logger.info(
+            "[v16] result_data is AgentResult (nested), type=%s, recursively extracting",
+            type(result_data).__name__,
+        )
+        nested_extraction = _extract_from_single_agent_result(result_data, agent_name + "_nested")
+        if nested_extraction:
+            logger.info("[v16] SUCCESS: Extracted from nested AgentResult for agent=%s", agent_name)
+            return nested_extraction
 
     # If result_data is not a dict at this point, we can't extract
     if not isinstance(result_data, dict):
