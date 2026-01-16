@@ -43,6 +43,38 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Utility Functions
+# =============================================================================
+
+
+def parse_brazilian_float(value: Any, default: float = 0.0) -> float:
+    """
+    Parse a number that may use Brazilian format (comma as decimal separator).
+
+    Examples:
+        "45,45" -> 45.45
+        "1.234,56" -> 1234.56
+        45.45 -> 45.45
+        None -> 0.0
+    """
+    if value is None or value == "":
+        return default
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        # Remove currency symbols and spaces
+        value = value.replace("R$", "").strip()
+        # Handle thousands separator (.) and decimal separator (,)
+        # Brazilian: 1.234,56 -> 1234.56
+        value = value.replace(".", "").replace(",", ".")
+        try:
+            return float(value)
+        except ValueError:
+            return default
+    return default
+
+
+# =============================================================================
 # Credentials Management
 # =============================================================================
 
@@ -446,7 +478,7 @@ class PostalServiceAdapter(ShippingAdapter):
                     carrier="Correios",
                     service=volume_data.get("ServicoECT", "SEDEX"),
                     service_code=volume_data.get("CodigoFinanceiroECT", "04162"),
-                    price=float(volume_data.get("ValorPostagem", 0) or 0),
+                    price=parse_brazilian_float(volume_data.get("ValorPostagem")),
                     delivery_days=int(volume_data.get("DiasUteisPrazo", 0) or 0),
                     estimated_delivery=(
                         datetime.utcnow() + timedelta(days=int(volume_data.get("DiasUteisPrazo", 0) or 0))
