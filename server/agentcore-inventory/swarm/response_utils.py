@@ -459,6 +459,52 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
                                                     return inner
 
                     # =====================================================
+                    # v14 FIX: Handle direct "text" key in content_block
+                    # CloudWatch showed: content_block = {"text": "{'success': ...}"}
+                    # This format appears when tool returns simple text response
+                    # Session: sga-session-8374a4b38be146daaee6092e0ccbd408
+                    # =====================================================
+                    if "text" in content_block and len(content_block) == 1:
+                        text_content = content_block["text"]
+                        logger.info(
+                            "[v14] Found direct text block (no other keys), length=%d",
+                            len(text_content) if text_content else 0,
+                        )
+
+                        if isinstance(text_content, str):
+                            # Try JSON first (double quotes)
+                            try:
+                                parsed = json.loads(text_content)
+                                if isinstance(parsed, dict):
+                                    if "analysis" in parsed or "success" in parsed:
+                                        logger.info("[v14] SUCCESS: Parsed JSON from direct text block")
+                                        return parsed
+                                    # Also check for _response wrapper
+                                    from_wrapper = _extract_from_response_wrapper(parsed)
+                                    if from_wrapper:
+                                        logger.info("[v14] SUCCESS: Extracted _response from direct text block")
+                                        return from_wrapper
+                            except json.JSONDecodeError:
+                                # Python repr with single quotes - use ast.literal_eval
+                                try:
+                                    parsed = ast.literal_eval(text_content)
+                                    if isinstance(parsed, dict):
+                                        if "analysis" in parsed or "success" in parsed:
+                                            logger.info("[v14] SUCCESS: Parsed Python repr from direct text block")
+                                            return parsed
+                                        from_wrapper = _extract_from_response_wrapper(parsed)
+                                        if from_wrapper:
+                                            logger.info("[v14] SUCCESS: Extracted _response from repr text block")
+                                            return from_wrapper
+                                except (ValueError, SyntaxError) as e:
+                                    logger.debug("[v14] ast.literal_eval failed: %s", e)
+
+                        elif isinstance(text_content, dict):
+                            if "analysis" in text_content or "success" in text_content:
+                                logger.info("[v14] SUCCESS: Direct dict in text block")
+                                return text_content
+
+                    # =====================================================
                     # KEEP legacy patterns as fallback (backward compatibility)
                     # =====================================================
 
