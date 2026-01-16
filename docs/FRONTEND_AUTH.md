@@ -97,7 +97,7 @@ export const agentCoreConfig = {
   region: 'us-east-2',
   accountId: '377311924364',
   arns: {
-    sga: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_asset_management-uSuLPsFQNH',
+    sga: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_inventory_orchestration-uSuLPsFQNH',
     academy: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_academy_agents-ODNvP6HxCD',
     portal: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_portal_agents-PENDING',
   },

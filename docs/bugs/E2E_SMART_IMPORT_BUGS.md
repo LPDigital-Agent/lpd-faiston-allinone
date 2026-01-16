@@ -14,7 +14,7 @@
 
 ### Description
 
-The E2E test script `e2e_smart_import_iam.py` uses IAM SigV4 authentication, but the AgentCore runtime `faiston_asset_management-uSuLPsFQNH` is configured with **JWT Authorizer (Cognito OAuth)**.
+The E2E test script `e2e_smart_import_iam.py` uses IAM SigV4 authentication, but the AgentCore runtime `faiston_inventory_orchestration-uSuLPsFQNH` is configured with **JWT Authorizer (Cognito OAuth)**.
 
 **Expected:** IAM SigV4 auth should work
 **Actual:** Returns HTTP 403 with "Authorization method mismatch"
@@ -29,7 +29,7 @@ HTTP 403: {"message":"Authorization method mismatch. The agent is configured for
 
 From `terraform/main/agentcore_gateway.tf` (lines 14-16):
 ```
-# │ AgentCore RUNTIME (faiston_asset_management-uSuLPsFQNH)             │
+# │ AgentCore RUNTIME (faiston_inventory_orchestration-uSuLPsFQNH)             │
 # │ └─ JWT Authorizer ENABLED (customJWTAuthorizer)                     │
 # │    - discoveryUrl: cognito-idp.../openid-configuration              │
 ```
@@ -221,7 +221,7 @@ Timestamp: 2026-01-12T16:42:XX UTC
 |-------|--------|---------|
 | CSV file exists | ✅ Pass | 1,689 lines (1,688 + header) |
 | AWS credentials | ✅ Pass | Account 377311924364, user github-actions |
-| AgentCore runtime (main) | ✅ Pass | `faiston_asset_management-uSuLPsFQNH` with JWT auth |
+| AgentCore runtime (main) | ✅ Pass | `faiston_inventory_orchestration-uSuLPsFQNH` with JWT auth |
 | AgentCore A2A connectivity | ✅ Pass | SigV4 auth works for inter-agent calls |
 | Agent model configuration | ✅ FIXED | Uses `GeminiModel` via Google AI Studio (pending deploy) |
 

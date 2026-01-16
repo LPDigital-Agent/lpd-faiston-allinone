@@ -113,7 +113,7 @@ HTTP 504 Gateway Timeout
 **Causes & Solutions:**
 
 1. **Agent crash:**
-   - Check CloudWatch Logs: `/aws/bedrock-agentcore/faiston_asset_management`
+   - Check CloudWatch Logs: `/aws/bedrock-agentcore/faiston_inventory_orchestration`
    - Look for Python exceptions
 
 2. **Memory exceeded:**
@@ -149,7 +149,7 @@ Error: ECONNREFUSED
 
 1. **Wrong runtime ARN:**
    - Verify ARN in `client/lib/config/agentcore.ts`
-   - Check runtime exists: `agentcore status --agent faiston_asset_management`
+   - Check runtime exists: `agentcore status --agent faiston_inventory_orchestration`
 
 2. **Runtime not active:**
    - Status should be `ACTIVE`, not `CREATING` or `FAILED`
@@ -463,7 +463,7 @@ del data  # Release memory
 
 | Service | Log Group |
 |---------|-----------|
-| AgentCore Inventory | `/aws/bedrock-agentcore/faiston_asset_management` |
+| AgentCore Inventory | `/aws/bedrock-agentcore/faiston_inventory_orchestration` |
 | AgentCore Academy | `/aws/bedrock-agentcore/faiston_academy_agents` |
 | Lambda PostgreSQL Tools | `/aws/lambda/faiston-one-sga-postgres-tools-prod` |
 | Aurora PostgreSQL | `/aws/rds/cluster/faiston-one-sga-postgres-prod/postgresql` |
@@ -472,10 +472,10 @@ del data  # Release memory
 
 ```bash
 # Check AgentCore status
-agentcore status --agent faiston_asset_management
+agentcore status --agent faiston_inventory_orchestration
 
 # View recent logs
-aws logs tail /aws/bedrock-agentcore/faiston_asset_management --since 1h
+aws logs tail /aws/bedrock-agentcore/faiston_inventory_orchestration --since 1h
 
 # Check Aurora status
 aws rds describe-db-clusters --db-cluster-identifier faiston-one-sga-postgres-prod

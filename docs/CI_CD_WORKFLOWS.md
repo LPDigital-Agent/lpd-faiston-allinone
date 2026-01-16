@@ -199,7 +199,7 @@ jobs:
         working-directory: server/agentcore-inventory
         run: |
           agentcore deploy \
-            --agent faiston_asset_management \
+            --agent faiston_inventory_orchestration \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }} \
             --env AWS_REGION=us-east-2 \
             --env COGNITO_USER_POOL_ID=${{ secrets.COGNITO_USER_POOL_ID }} \
@@ -453,7 +453,7 @@ Error: Agent deployment failed
 ```
 
 **Solutions:**
-1. Check CloudWatch logs: `/aws/bedrock-agentcore/faiston_asset_management`
+1. Check CloudWatch logs: `/aws/bedrock-agentcore/faiston_inventory_orchestration`
 2. Verify `GOOGLE_API_KEY` is valid
 3. Check for cold start timeout (30s limit)
 
@@ -504,7 +504,7 @@ npm run build
 aws s3 sync out/ s3://faiston-one-frontend-prod --delete
 
 # AgentCore (from server/agentcore-inventory/)
-agentcore deploy --agent faiston_asset_management
+agentcore deploy --agent faiston_inventory_orchestration
 
 # Terraform (from terraform/main/)
 terraform init

@@ -78,7 +78,7 @@ server/agentcore-inventory/agents/
 
 | Type | Runtime ID | Purpose |
 | ---- | ---------- | ------- |
-| Orchestrator | `faiston_asset_management` | HTTP entry, LLM-based routing |
+| Orchestrator | `faiston_inventory_orchestration` | HTTP entry, LLM-based routing |
 | intake | `faiston_sga_intake` | NF parsing + S3 uploads |
 | estoque_control | `faiston_sga_estoque_control` | Inventory operations |
 | learning | `faiston_sga_learning` | Memory & patterns |

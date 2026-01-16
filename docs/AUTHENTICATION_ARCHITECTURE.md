@@ -27,7 +27,7 @@ The platform uses a **dual authentication model**:
 │         │                                                                   │
 │         │ JWT Bearer Token (Cognito accessToken)                            │
 │         ▼                                                                   │
-│   faiston_asset_management (HTTP runtime, JWT Authorizer)                   │
+│   faiston_inventory_orchestration (HTTP runtime, JWT Authorizer)                   │
 │         │                                                                   │
 │         │ IAM SigV4 (A2A Protocol)                                          │
 │         ▼                                                                   │
@@ -63,8 +63,8 @@ The platform uses a **dual authentication model**:
 
 | Property | Value |
 |----------|-------|
-| Runtime Name | `faiston_asset_management` |
-| Runtime ID | `faiston_asset_management-uSuLPsFQNH` |
+| Runtime Name | `faiston_inventory_orchestration` |
+| Runtime ID | `faiston_inventory_orchestration-uSuLPsFQNH` |
 | Protocol | `HTTP` |
 | Auth | JWT Bearer Token |
 | Use Case | Frontend-facing entry point |
@@ -107,7 +107,7 @@ The orchestrator uses a **Strands `Agent`** object with a system prompt that des
 **File:** `/server/agentcore-inventory/.bedrock_agentcore.yaml`
 
 ```yaml
-# In faiston_asset_management agent config
+# In faiston_inventory_orchestration agent config
 authorizer_configuration:
   customJWTAuthorizer:
     discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
@@ -143,7 +143,7 @@ AWS_PROFILE=faiston-aio python3 -c "
 import boto3
 session = boto3.Session(profile_name='faiston-aio')
 client = session.client('bedrock-agentcore-control', region_name='us-east-2')
-resp = client.get_agent_runtime(agentRuntimeId='faiston_asset_management-uSuLPsFQNH')
+resp = client.get_agent_runtime(agentRuntimeId='faiston_inventory_orchestration-uSuLPsFQNH')
 print(resp.get('authorizerConfiguration', {}))
 "
 ```
@@ -161,11 +161,11 @@ print(resp.get('authorizerConfiguration', {}))
 
 **Cause:** Calling an A2A agent (SigV4 auth) with a JWT token.
 
-**Solution:** Frontend MUST call the HTTP orchestrator (`faiston_asset_management`), NOT specialist agents directly.
+**Solution:** Frontend MUST call the HTTP orchestrator (`faiston_inventory_orchestration`), NOT specialist agents directly.
 
 ```
 ❌ Frontend → faiston_sga_nexo_import (A2A) → Empty response
-✅ Frontend → faiston_asset_management (HTTP) → faiston_sga_nexo_import (A2A)
+✅ Frontend → faiston_inventory_orchestration (HTTP) → faiston_sga_nexo_import (A2A)
 ```
 
 ### Token Expired

@@ -132,7 +132,7 @@ flowchart TB
 
 | Runtime | ID | Purpose | Agents | LLM |
 |---------|-----|---------|--------|-----|
-| **Inventory** | `faiston_asset_management-uSuLPsFQNH` | SGA Inventory management | 14 | Gemini 3.0 Pro/Flash |
+| **Inventory** | `faiston_inventory_orchestration-uSuLPsFQNH` | SGA Inventory management | 14 | Gemini 3.0 Pro/Flash |
 | **Academy** | `faiston_academy_agents-ODNvP6HxCD` | Learning platform | 6 | Gemini 3.0 Pro/Flash |
 | **Portal** | `faiston_portal_agents-PENDING` | Central orchestrator | 2 | Gemini 3.0 Pro/Flash |
 

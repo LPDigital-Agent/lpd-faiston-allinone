@@ -36,7 +36,7 @@ flowchart TB
 
     subgraph AgentCore ["AWS Bedrock AgentCore"]
         GW[AgentCore Gateway]
-        INV_RT[Inventory Runtime<br/>faiston_asset_management]
+        INV_RT[Inventory Runtime<br/>faiston_inventory_orchestration]
         PORTAL_RT[Portal Runtime<br/>faiston_portal_agents]
     end
 
@@ -106,7 +106,7 @@ flowchart TB
 
 | Runtime | ID | Agents | Purpose |
 |---------|-----|--------|---------|
-| **Inventory** | `faiston_asset_management-uSuLPsFQNH` | 14 | SGA Inventory management |
+| **Inventory** | `faiston_inventory_orchestration-uSuLPsFQNH` | 14 | SGA Inventory management |
 | **Academy** | `faiston_academy_agents-ODNvP6HxCD` | 6 | Learning platform |
 | **Portal** | `faiston_portal_agents-PENDING` | 2 | Central orchestrator |
 
@@ -202,7 +202,7 @@ export const agentCoreConfig = {
   accountId: '377311924364',
   arns: {
     academy: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_academy_agents-ODNvP6HxCD',
-    sga: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_asset_management-uSuLPsFQNH',
+    sga: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_inventory_orchestration-uSuLPsFQNH',
     portal: 'arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_portal_agents-PENDING',
   },
 };
@@ -375,7 +375,7 @@ jobs:
 
       - name: Deploy
         run: |
-          agentcore deploy --agent faiston_asset_management \
+          agentcore deploy --agent faiston_inventory_orchestration \
             --env GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
 ```
 
@@ -475,7 +475,7 @@ AgentCore has these libraries pre-installed (no cold start penalty):
 
 **Solution**:
 1. Verify ARN in `client/lib/config/agentcore.ts`
-2. Check runtime is deployed: `agentcore status --agent faiston_asset_management`
+2. Check runtime is deployed: `agentcore status --agent faiston_inventory_orchestration`
 3. Ensure runtime is in `ACTIVE` state
 
 ---

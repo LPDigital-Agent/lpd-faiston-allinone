@@ -15,7 +15,7 @@ paths:
 ## Authentication Flow
 
 ```
-Frontend (JWT) → faiston_asset_management (HTTP) → faiston_sga_* (A2A/SigV4)
+Frontend (JWT) → faiston_inventory_orchestration (HTTP) → faiston_sga_* (A2A/SigV4)
 ```
 
 - Frontend authenticates via **Amazon Cognito**

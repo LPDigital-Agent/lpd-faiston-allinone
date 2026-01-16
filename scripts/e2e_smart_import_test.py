@@ -34,7 +34,7 @@ AWS_ACCOUNT_ID = "377311924364"
 AGENTCORE_ENDPOINT = f"https://bedrock-agentcore.{AWS_REGION}.amazonaws.com"
 # HTTP Orchestrator runtime (routes to specialist A2A agents)
 # NOTE: Frontend uses HTTP protocol (JWT auth), NOT A2A protocol (SigV4)
-SGA_RUNTIME_ARN = f"arn:aws:bedrock-agentcore:{AWS_REGION}:{AWS_ACCOUNT_ID}:runtime/faiston_asset_management-uSuLPsFQNH"
+SGA_RUNTIME_ARN = f"arn:aws:bedrock-agentcore:{AWS_REGION}:{AWS_ACCOUNT_ID}:runtime/faiston_inventory_orchestration-uSuLPsFQNH"
 CSV_FILE_PATH = "data/SOLICITAÇÕES DE EXPEDIÇÃO.csv"
 TARGET_RECORD_COUNT = 1688
 

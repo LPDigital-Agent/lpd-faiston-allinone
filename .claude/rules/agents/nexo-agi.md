@@ -16,11 +16,11 @@ paths:
 ## Authentication Protocol Architecture
 
 ```
-Frontend (JWT) → faiston_asset_management (HTTP) → faiston_sga_* (A2A/SigV4)
+Frontend (JWT) → faiston_inventory_orchestration (HTTP) → faiston_sga_* (A2A/SigV4)
 ```
 
 - **NEVER** call `faiston_sga_*` agents directly from frontend
-- Frontend MUST call `faiston_asset_management-uSuLPsFQNH` (HTTP orchestrator)
+- Frontend MUST call `faiston_inventory_orchestration-{RUNTIME_ID}` (HTTP orchestrator)
 - Orchestrator routes to specialist agents via A2A protocol
 - Calling A2A agent with JWT → "Empty response payload" (auth mismatch)
 

@@ -205,7 +205,7 @@ Asset/inventory management system with **100% A2A Agentic Architecture**:
 - **Agent Room**: Transparency window for AI visibility (see below)
 
 **Architecture (ADR-002: "Everything is an Agent")**:
-- **1 Orchestrator** (`faiston_asset_management` - HTTP entry point, Strands Agent + Gemini)
+- **1 Orchestrator** (`faiston_inventory_orchestration` - HTTP entry point, Strands Agent + Gemini)
 - **15 Specialists** (A2A Protocol, port 9000) - no Python imports between agents
 - **Routing Modes**: Health, Swarm (NEXO), Mode 2.5 (Infrastructure), LLM (Business)
 - **Memory**: AgentCore Memory (global namespace `/strategy/import/company`)

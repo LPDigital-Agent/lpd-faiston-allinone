@@ -388,7 +388,7 @@ Tavily Search: "C9200-24P-A Cisco official part number"
 │                    NEXO Tavily Enrichment Architecture                    │
 │                                                                          │
 │  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────┐ │
-│  │ Frontend    │    │ API Gateway  │    │ faiston_asset_management    │ │
+│  │ Frontend    │    │ API Gateway  │    │ faiston_inventory_orchestration    │ │
 │  │ (Next.js)   │───▶│ (HTTP)       │───▶│ (Orchestrator)              │ │
 │  └─────────────┘    └──────────────┘    └──────────────┬──────────────┘ │
 │                                                         │                │

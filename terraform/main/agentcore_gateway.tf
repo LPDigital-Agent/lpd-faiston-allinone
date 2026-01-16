@@ -11,7 +11,7 @@
 #                                │
 #                                ▼ Authorization: Bearer {JWT}
 # ┌─────────────────────────────────────────────────────────────────────┐
-# │ AgentCore RUNTIME (faiston_asset_management-uSuLPsFQNH)             │
+# │ AgentCore RUNTIME (faiston_inventory_orchestration-uSuLPsFQNH)             │
 # │ └─ JWT Authorizer ENABLED (customJWTAuthorizer)                     │
 # │    - discoveryUrl: cognito-idp.../openid-configuration              │
 # │    - allowedClients: [7ovjm09dr94e52mpejvbu9v1cg]                   │

@@ -33,7 +33,7 @@ Smart Import is an **AI-First** file import system that uses:
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │         STRANDS ORCHESTRATOR AGENT (HTTP Protocol)              │
-│         faiston_asset_management-uSuLPsFQNH                     │
+│         faiston_inventory_orchestration-uSuLPsFQNH                     │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │ BedrockAgentCoreApp + Strands Agent (LLM-based routing)    ││
@@ -78,7 +78,7 @@ Smart Import is an **AI-First** file import system that uses:
 
 | Runtime | ID | Protocol | Purpose |
 |---------|-----|----------|---------|
-| HTTP Orchestrator | `faiston_asset_management-uSuLPsFQNH` | HTTP | Frontend entry point (JWT) |
+| HTTP Orchestrator | `faiston_inventory_orchestration-uSuLPsFQNH` | HTTP | Frontend entry point (JWT) |
 | NEXO Import | `faiston_sga_nexo_import-0zNtFDAo7M` | A2A | Smart Import HIL |
 | Data Import | `faiston_sga_import-sM56rCFLIr` | A2A | Bulk Import |
 | Learning | `faiston_sga_learning-30cZIOFmzo` | A2A | Memory/Patterns |
@@ -101,7 +101,7 @@ Smart Import is an **AI-First** file import system that uses:
 - Frontend sends JWT
 - Result: "Empty response payload" (auth mismatch)
 
-**CORRECT**: Frontend calling `faiston_asset_management`
+**CORRECT**: Frontend calling `faiston_inventory_orchestration`
 - This runtime accepts HTTP protocol (JWT)
 - Routes internally via A2A to specialist agents
 - Result: Proper response with HIL questions
@@ -121,7 +121,7 @@ If JWT is only configured post-deploy, it gets overwritten.
 **Config Location:** `/server/agentcore-inventory/.bedrock_agentcore.yaml`
 
 ```yaml
-# In faiston_asset_management agent
+# In faiston_inventory_orchestration agent
 authorizer_configuration:
   customJWTAuthorizer:
     discoveryUrl: https://cognito-idp.us-east-2.amazonaws.com/us-east-2_lkBXr4kjy/.well-known/openid-configuration
@@ -139,7 +139,7 @@ AWS_PROFILE=faiston-aio python3 -c "
 import boto3
 session = boto3.Session(profile_name='faiston-aio')
 client = session.client('bedrock-agentcore-control', region_name='us-east-2')
-resp = client.get_agent_runtime(agentRuntimeId='faiston_asset_management-uSuLPsFQNH')
+resp = client.get_agent_runtime(agentRuntimeId='faiston_inventory_orchestration-uSuLPsFQNH')
 print(resp.get('authorizerConfiguration', {}))
 "
 ```
@@ -279,7 +279,7 @@ The `stop_action: true` flag signals the Strands ReAct loop to pause.
 ## MANDATORY Rules for Changes
 
 1. **NEVER** change frontend to call A2A agents directly
-2. **ALWAYS** route through HTTP orchestrator (faiston_asset_management)
+2. **ALWAYS** route through HTTP orchestrator (faiston_inventory_orchestration)
 3. **ALWAYS** return `stop_action: true` when HIL questions are pending
 4. **ALWAYS** convert floats to Decimal before DynamoDB writes
 5. **ALWAYS** use 300s timeout for Gemini Pro with Thinking calls

@@ -214,7 +214,7 @@ Future improvements:
 
 - **Account:** 377311924364
 - **Region:** us-east-2
-- **Orchestrator Runtime:** faiston_asset_management-uSuLPsFQNH
+- **Orchestrator Runtime:** faiston_inventory_orchestration-uSuLPsFQNH
 - **Carrier Runtime:** faiston_sga_carrier-fVOntdCJaZ
 - **New DynamoDB Table:** faiston-one-prod-sga-postings (pending deploy)
 - **Cognito Pool:** us-east-2_lkBXr4kjy

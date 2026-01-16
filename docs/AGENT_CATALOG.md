@@ -46,7 +46,7 @@ Complete inventory of all AI agents in the Faiston NEXO platform.
 
 | Runtime | ID | Agents | Purpose |
 |---------|-----|--------|---------|
-| **Inventory** | `faiston_asset_management-uSuLPsFQNH` | 14 | SGA inventory management |
+| **Inventory** | `faiston_inventory_orchestration-uSuLPsFQNH` | 14 | SGA inventory management |
 | **Academy** | `faiston_academy_agents-ODNvP6HxCD` | 6 | Learning platform |
 | **Portal** | `faiston_portal_agents-PENDING` | 2 | Central orchestration |
 

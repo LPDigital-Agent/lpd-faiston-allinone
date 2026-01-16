@@ -32,7 +32,7 @@ flowchart TB
     end
 
     subgraph "AWS Bedrock AgentCore Runtime"
-        Runtime[AgentCore Runtime\nfaiston_asset_management-uSuLPsFQNH]
+        Runtime[AgentCore Runtime\nfaiston_inventory_orchestration-uSuLPsFQNH]
         Memory[AgentCore Memory\nSession + STM + LTM + RAG]
         A2A[A2A Protocol\nJSON-RPC 2.0:9000]
 
