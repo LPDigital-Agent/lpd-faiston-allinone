@@ -239,10 +239,17 @@ def _handle_infrastructure_action(action: str, payload: dict) -> dict:
 
     except Exception as e:
         logger.exception(f"[Infrastructure] Error handling {action}: {e}")
+        # Sandwich Pattern: Provide error context for potential LLM recovery decision
         return {
             "success": False,
             "error": str(e),
             "action": action,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": f"infrastructure_{action}",
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_s3_permissions", "escalate"],
         }
 
 
@@ -299,22 +306,36 @@ async def _handle_posting_action(
             # First check: A2A call must succeed
             if not shipment_result.get("success"):
                 logger.warning(f"[Posting] A2A call to carrier failed: {shipment_result}")
+                # Sandwich Pattern: Include error context for recovery decisions
                 return {
                     "success": False,
                     "error": response_data.get("error", "Failed to create shipment"),
                     "step": "create_shipment",
                     "details": shipment_result,
+                    "error_context": {
+                        "error_type": "a2a_call_failure",
+                        "operation": "carrier_create_shipment",
+                        "recoverable": True,
+                    },
+                    "suggested_actions": ["retry", "check_carrier_agent_health", "escalate"],
                 }
 
             # Second check: Look for explicit failure in structured response
             # Note: response_data.get("success") being None is OK (LLM returned natural language)
             if response_data.get("success") is False:
                 logger.warning(f"[Posting] Carrier returned explicit failure: {response_data}")
+                # Sandwich Pattern: Include error context for recovery decisions
                 return {
                     "success": False,
                     "error": response_data.get("error", "Failed to create shipment"),
                     "step": "create_shipment",
                     "details": shipment_result,
+                    "error_context": {
+                        "error_type": "carrier_explicit_failure",
+                        "operation": "carrier_create_shipment",
+                        "recoverable": True,
+                    },
+                    "suggested_actions": ["retry_with_different_carrier", "validate_shipment_data", "escalate"],
                 }
 
             # Extract tracking code - try structured response first, then parse message
@@ -331,11 +352,19 @@ async def _handle_posting_action(
 
             if not tracking_code:
                 logger.warning("[Posting] No tracking code in shipment response")
+                # Sandwich Pattern: Include error context for recovery decisions
                 return {
                     "success": False,
                     "error": "Shipment created but no tracking code returned",
                     "step": "create_shipment",
                     "details": shipment_result,
+                    "error_context": {
+                        "error_type": "missing_tracking_code",
+                        "operation": "carrier_create_shipment",
+                        "recoverable": True,
+                        "carrier_response_has_message": bool(response_data.get("message")),
+                    },
+                    "suggested_actions": ["query_carrier_for_tracking", "retry_shipment", "manual_lookup"],
                 }
 
             logger.info(f"[Posting] Shipment created: tracking_code={tracking_code}")
@@ -497,10 +526,17 @@ async def _handle_posting_action(
 
     except Exception as e:
         logger.exception(f"[Posting] Error handling {action}: {e}")
+        # Sandwich Pattern: Provide error context for potential LLM recovery decision
         return {
             "success": False,
             "error": str(e),
             "action": action,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": f"posting_{action}",
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_carrier_api", "escalate"],
         }
 
 
@@ -997,10 +1033,21 @@ async def _invoke_swarm(
 
     elif action == "nexo_submit_answers":
         if not session["awaiting_response"]:
+            # Sandwich Pattern: Include session state for debugging/recovery
             return {
                 "success": False,
                 "error": "No pending questions for this session",
                 "session_id": session_id,
+                "error_context": {
+                    "error_type": "invalid_session_state",
+                    "operation": "nexo_submit_answers",
+                    "session_state": {
+                        "awaiting_response": session.get("awaiting_response", False),
+                        "round_count": session.get("round_count", 0),
+                        "has_questions": bool(session.get("questions")),
+                    },
+                },
+                "suggested_actions": ["restart_analysis", "check_session_id", "escalate"],
             }
 
         user_responses = payload.get("answers", {})
@@ -1023,10 +1070,21 @@ async def _invoke_swarm(
 
     elif action == "nexo_execute_import":
         if not session["context"].get("approval_status"):
+            # Sandwich Pattern: Include session state for debugging/recovery
             return {
                 "success": False,
                 "error": "Import not approved. User approval required.",
                 "session_id": session_id,
+                "error_context": {
+                    "error_type": "approval_required",
+                    "operation": "nexo_execute_import",
+                    "session_state": {
+                        "approval_status": session["context"].get("approval_status"),
+                        "round_count": session.get("round_count", 0),
+                        "has_mappings": "column_mappings" in session.get("context", {}),
+                    },
+                },
+                "suggested_actions": ["complete_analysis_first", "submit_approval", "review_mappings"],
             }
 
         prompt = "Execute the approved import and generate audit trail."
@@ -1167,11 +1225,22 @@ async def _invoke_swarm(
 
     except Exception as e:
         logger.exception(f"[Swarm] Error: {e}")
+        # Sandwich Pattern: Provide error context for potential LLM recovery decision
         return {
             "success": False,
             "error": str(e),
             "session_id": session_id,
             "round": session["round_count"],
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": f"swarm_{action}",
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+                "session_state": {
+                    "awaiting_response": session.get("awaiting_response", False),
+                    "has_context": bool(session.get("context")),
+                },
+            },
+            "suggested_actions": ["retry", "reset_session", "escalate"],
         }
 
 
@@ -1335,6 +1404,7 @@ def invoke(payload: dict, context) -> dict:
             # Convert action to natural language for LLM routing
             llm_prompt = f"Execute the '{action}' operation with these parameters: {json.dumps(payload)}"
         else:
+            # Sandwich Pattern: Input validation error with guidance
             return {
                 "success": False,
                 "error": "Missing 'action' or 'prompt' in request",
@@ -1342,6 +1412,12 @@ def invoke(payload: dict, context) -> dict:
                     "prompt": "Natural language request",
                     "action": "Action name (nexo_analyze_file, etc.)",
                 },
+                "error_context": {
+                    "error_type": "missing_required_parameter",
+                    "operation": "orchestrator_invoke",
+                    "received_params": list(payload.keys()) if payload else [],
+                },
+                "suggested_actions": ["provide_action_name", "provide_natural_language_prompt"],
             }
 
         logger.info(f"[Orchestrator] LLM routing: {llm_prompt[:100]}...")
@@ -1377,10 +1453,17 @@ def invoke(payload: dict, context) -> dict:
 
     except Exception as e:
         logger.exception(f"[Orchestrator] Error: {e}")
+        # Sandwich Pattern: Provide error context for potential LLM recovery decision
         return {
             "success": False,
             "error": str(e),
             "agent_id": AGENT_ID,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": f"orchestrator_{action or 'llm_routing'}",
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_agent_health", "escalate"],
         }
 
 
