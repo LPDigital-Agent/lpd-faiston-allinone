@@ -64,9 +64,22 @@ def retrieve_episodes(
         }
 
     except ImportError:
-        # Fallback for development - return mock patterns
+        # Sandwich Pattern: Be honest about mock mode - LLM must know data is fake
         logger.warning("[retrieve_episodes] AgentMemoryManager not available, using mock")
-        return _get_mock_patterns(query, file_type, limit)
+        mock_patterns = _get_mock_patterns(query, file_type, limit)
+        return {
+            "success": False,  # Honest: Real memory lookup failed
+            "is_mock_data": True,
+            "patterns": mock_patterns.get("patterns", []),
+            "total_found": mock_patterns.get("total_found", 0),
+            "error_context": {
+                "error_type": "ImportError",
+                "operation": "retrieve_episodes",
+                "memory_available": False,
+            },
+            "warning": "AgentCore Memory not available - patterns are MOCK data for development only",
+            "suggested_actions": ["use_default_mappings", "ask_user_for_guidance"],
+        }
 
 
 @tool
@@ -121,11 +134,19 @@ def store_episode(
         }
 
     except ImportError:
-        logger.warning("[store_episode] AgentMemoryManager not available")
+        # Sandwich Pattern: Be honest - data was NOT stored
+        logger.warning("[store_episode] AgentMemoryManager not available - pattern NOT stored")
         return {
             "episode_id": episode["episode_id"],
-            "success": True,
-            "message": "Pattern stored (mock mode)",
+            "success": False,  # Honest: Storage actually failed
+            "is_mock_mode": True,
+            "error_context": {
+                "error_type": "ImportError",
+                "operation": "store_episode",
+                "memory_available": False,
+            },
+            "warning": "AgentCore Memory not available - pattern was NOT persisted",
+            "suggested_actions": ["log_pattern_locally", "proceed_without_learning"],
         }
 
 
@@ -181,14 +202,22 @@ def get_adaptive_threshold(file_type: str) -> Dict[str, Any]:
             }
 
     except ImportError:
-        pass
-
-    return {
-        "threshold": base_threshold,
-        "basis": "Default for file type",
-        "historical_accuracy": None,
-        "total_imports": 0,
-    }
+        # Sandwich Pattern: Be honest about memory unavailability
+        logger.warning("[get_adaptive_threshold] AgentMemoryManager not available")
+        return {
+            "success": False,
+            "is_mock_mode": True,
+            "threshold": base_threshold,
+            "basis": "Default for file type (memory unavailable)",
+            "historical_accuracy": None,
+            "total_imports": 0,
+            "error_context": {
+                "error_type": "ImportError",
+                "operation": "get_adaptive_threshold",
+                "memory_available": False,
+            },
+            "warning": "Using default threshold - historical data not available",
+        }
 
 
 @tool
@@ -225,11 +254,20 @@ def similarity_search(
         }
 
     except ImportError:
-        # Mock response
+        # Sandwich Pattern: Be honest about memory unavailability
+        logger.warning("[similarity_search] AgentMemoryManager not available")
         return {
+            "success": False,
+            "is_mock_mode": True,
             "similar_patterns": [],
             "best_match": None,
-            "message": "Similarity search not available (mock mode)",
+            "error_context": {
+                "error_type": "ImportError",
+                "operation": "similarity_search",
+                "memory_available": False,
+            },
+            "warning": "Similarity search unavailable - no historical patterns to match against",
+            "suggested_actions": ["use_default_mappings", "ask_user_for_guidance"],
         }
 
 
@@ -264,10 +302,19 @@ def update_pattern_success(
         }
 
     except ImportError:
+        # Sandwich Pattern: Be honest - update did NOT happen
+        logger.warning("[update_pattern_success] AgentMemoryManager not available - update NOT persisted")
         return {
-            "updated": True,
-            "new_success_count": 1,
-            "message": "Updated (mock mode)",
+            "success": False,
+            "updated": False,  # Honest: Nothing was actually updated
+            "is_mock_mode": True,
+            "new_success_count": None,
+            "error_context": {
+                "error_type": "ImportError",
+                "operation": "update_pattern_success",
+                "memory_available": False,
+            },
+            "warning": "Pattern success count was NOT updated - memory unavailable",
         }
 
 
