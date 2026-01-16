@@ -340,6 +340,7 @@ async def _handle_posting_action(
                 "user_id": user_id,
                 "invoice_number": payload.get("invoice_number", ""),
                 "notes": payload.get("notes", ""),
+                "urgency": payload.get("urgency", "NORMAL"),
             }
 
             posting_result = await _invoke_agent_via_a2a(

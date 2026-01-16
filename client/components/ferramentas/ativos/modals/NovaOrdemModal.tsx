@@ -325,7 +325,7 @@ export function NovaOrdemModal({
             cep: posting.destination.cep,
           },
           status: posting.status,
-          prioridade: posting.urgency.toLowerCase(),
+          prioridade: (posting.urgency || 'normal').toLowerCase(),
           responsavel: { nome: 'Usuario Atual' },
           itens: [],
           dataCriacao: posting.created_at,

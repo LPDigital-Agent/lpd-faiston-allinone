@@ -294,6 +294,7 @@ async def save_posting_tool(
             "project_id": posting_data.get("project_id", ""),
             "invoice_number": posting_data.get("invoice_number", ""),
             "notes": posting_data.get("notes", ""),
+            "urgency": posting_data.get("urgency", "NORMAL"),
 
             # Timestamps
             "created_at": iso_now,

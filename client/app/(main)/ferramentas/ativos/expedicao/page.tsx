@@ -101,7 +101,7 @@ function transformPostageToOrder(posting: SGAPostage): ShippingOrder {
       cep: posting.destination.cep,
     },
     status: posting.status,
-    prioridade: posting.urgency.toLowerCase(),
+    prioridade: (posting.urgency || "normal").toLowerCase(),
     responsavel: { nome: "Usuario" },
     itens: [],
     dataCriacao: posting.created_at,
