@@ -308,7 +308,20 @@ async def process_return(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] process_return failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "process_return",
+                "items_count": len(items) if items else 0,
+                "from_location": from_location,
+                "return_type": return_type,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_items", "check_location", "escalate"],
+        }
 
 
 @tool
@@ -347,10 +360,20 @@ async def validate_origin(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] validate_origin failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "is_valid": False,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "validate_origin",
+                "serial_number": serial_number,
+                "part_number_id": part_number_id,
+                "project_id": project_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_serial_number", "check_database_connection", "escalate"],
         }
 
 
@@ -412,10 +435,21 @@ async def evaluate_condition(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] evaluate_condition failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "condition": "UNKNOWN",
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "evaluate_condition",
+                "serial_number": serial_number,
+                "part_number_id": part_number_id,
+                "visual_assessment": visual_assessment,
+                "functional_test": functional_test,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "request_manual_evaluation", "check_assessment_data", "escalate"],
         }
 
 
@@ -547,10 +581,19 @@ async def request_return_shipment(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] request_return_shipment failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "return_id": return_id,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "request_return_shipment",
+                "pickup_location": f"{pickup_city}, {pickup_state}",
+                "destination": FAISTON_WAREHOUSE["name"],
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_carrier_agent", "check_address_data", "escalate"],
         }
 
 

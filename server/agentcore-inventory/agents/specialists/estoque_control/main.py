@@ -406,7 +406,20 @@ async def create_reservation(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] create_reservation failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "create_reservation",
+                "part_number_id": part_number_id,
+                "quantity": quantity,
+                "project_id": project_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_inventory_availability", "verify_project_access", "escalate"],
+        }
 
 
 @tool
@@ -454,7 +467,18 @@ async def cancel_reservation(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] cancel_reservation failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "cancel_reservation",
+                "reservation_id": reservation_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_reservation_exists", "check_reservation_status", "escalate"],
+        }
 
 
 @tool
@@ -517,7 +541,20 @@ async def process_expedition(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] process_expedition failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "process_expedition",
+                "items_count": len(items) if items else 0,
+                "destination": destination,
+                "project_id": project_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_item_availability", "check_destination_valid", "escalate"],
+        }
 
 
 @tool
@@ -576,7 +613,20 @@ async def create_transfer(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] create_transfer failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "create_transfer",
+                "items_count": len(items) if items else 0,
+                "from_location": from_location,
+                "to_location": to_location,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_locations_valid", "check_item_availability", "escalate"],
+        }
 
 
 @tool
@@ -637,7 +687,20 @@ async def process_return(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] process_return failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "process_return",
+                "items_count": len(items) if items else 0,
+                "from_location": from_location,
+                "condition": condition,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_items_exist", "check_return_eligibility", "escalate"],
+        }
 
 
 @tool
@@ -676,7 +739,19 @@ async def query_balance(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] query_balance failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "query_balance",
+                "part_number_id": part_number_id,
+                "location_id": location_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_part_number_exists", "check_database_connection", "escalate"],
+        }
 
 
 @tool
@@ -712,7 +787,19 @@ async def query_asset_location(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] query_asset_location failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "query_asset_location",
+                "serial_number": serial_number,
+                "part_number_id": part_number_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_asset_exists", "check_database_connection", "escalate"],
+        }
 
 
 @tool
@@ -776,7 +863,20 @@ async def create_entry_movement(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] create_entry_movement failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "movements": []}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "movements": [],  # Empty movements - LLM decides recovery
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "create_entry_movement",
+                "entry_id": entry_id,
+                "items_count": len(items) if items else 0,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_entry_exists", "rollback_partial_movements", "escalate"],
+        }
 
 
 @tool

@@ -202,7 +202,20 @@ async def log_event(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] log_event failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "log_event",
+                "event_type": event_type,
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_database_connection", "escalate"],
+        }
 
 
 @tool
@@ -243,10 +256,20 @@ async def analyze_import(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] analyze_import failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "confidence": {"overall": 50, "risk_level": "high"},
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "analyze_import",
+                "preview_data_keys": list(preview_data.keys()) if preview_data else [],
+                "has_context": context is not None,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_input_format", "use_simplified_analysis", "escalate"],
         }
 
 

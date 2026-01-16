@@ -293,7 +293,20 @@ async def start_campaign(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] start_campaign failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "start_campaign",
+                "campaign_type": campaign_type,
+                "scope": scope,
+                "cycles": cycles,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_scope", "check_database", "escalate"],
+        }
 
 
 @tool
@@ -326,7 +339,18 @@ async def get_campaign(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_campaign failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_campaign",
+                "campaign_id": campaign_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_campaign_id", "check_database", "escalate"],
+        }
 
 
 @tool
@@ -362,7 +386,20 @@ async def get_campaign_items(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_campaign_items failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "items": []}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "items": [],
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_campaign_items",
+                "campaign_id": campaign_id,
+                "status_filter": status,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_campaign_id", "check_database", "escalate"],
+        }
 
 
 @tool
@@ -413,7 +450,20 @@ async def submit_count(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] submit_count failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "submit_count",
+                "campaign_id": campaign_id,
+                "part_number_id": part_number_id,
+                "physical_quantity": physical_quantity,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_part_number", "check_campaign_status", "escalate"],
+        }
 
 
 @tool
@@ -461,10 +511,19 @@ async def analyze_divergences(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] analyze_divergences failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "divergences": [],
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "analyze_divergences",
+                "campaign_id": campaign_id,
+                "threshold_percent": threshold_percent,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_campaign_id", "check_count_data", "escalate"],
         }
 
 
@@ -513,7 +572,21 @@ async def propose_adjustment(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] propose_adjustment failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "propose_adjustment",
+                "campaign_id": campaign_id,
+                "part_number_id": part_number_id,
+                "adjustment_type": adjustment_type,
+                "quantity": quantity,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_adjustment_type", "check_authorization", "escalate"],
+        }
 
 
 @tool
@@ -564,7 +637,19 @@ async def complete_campaign(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] complete_campaign failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "complete_campaign",
+                "campaign_id": campaign_id,
+                "apply_adjustments": apply_adjustments,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_campaign_status", "check_adjustments", "escalate"],
+        }
 
 
 @tool

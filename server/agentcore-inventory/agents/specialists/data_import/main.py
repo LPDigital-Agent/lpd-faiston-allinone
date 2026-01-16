@@ -260,7 +260,20 @@ async def preview_import(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] preview_import failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "preview_import",
+                "s3_key": s3_key,
+                "filename": filename,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError, FileNotFoundError)),
+            },
+            "suggested_actions": ["retry", "check_s3_permissions", "verify_file_format", "escalate"],
+        }
 
 
 @tool
@@ -328,7 +341,21 @@ async def detect_columns(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] detect_columns failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "mappings": {}}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "mappings": {},
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "detect_columns",
+                "columns": columns,
+                "session_id": session_id,
+                "has_sample_data": sample_data is not None,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "use_basic_mapping", "request_manual_mapping", "escalate"],
+        }
 
 
 def _basic_column_detection(
@@ -422,7 +449,22 @@ async def match_rows_to_pn(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] match_rows_to_pn failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "matched_rows": [], "unmatched_rows": rows}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "matched_rows": [],
+            "unmatched_rows": rows,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "match_rows_to_pn",
+                "row_count": len(rows),
+                "column_mappings": column_mappings,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "skip_matching", "manual_review", "escalate"],
+        }
 
 
 @tool
@@ -506,7 +548,23 @@ async def execute_import(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] execute_import failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "rows_imported": 0}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "rows_imported": 0,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "execute_import",
+                "s3_key": s3_key,
+                "target_table": target_table,
+                "column_mappings": column_mappings,
+                "session_id": session_id,
+                "user_id": user_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_mappings", "check_database", "rollback", "escalate"],
+        }
 
 
 @tool

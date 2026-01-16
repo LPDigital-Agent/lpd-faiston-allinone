@@ -275,7 +275,20 @@ async def process_expedition(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] process_expedition failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "process_expedition",
+                "items_count": len(items),
+                "destination": destination,
+                "project_id": project_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_stock_availability", "check_project_id", "escalate"],
+        }
 
 
 @tool
@@ -308,7 +321,18 @@ async def get_expedition(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_expedition failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_expedition",
+                "expedition_id": expedition_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_expedition_id", "escalate"],
+        }
 
 
 @tool
@@ -344,10 +368,19 @@ async def verify_stock(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] verify_stock failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "is_available": False,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "verify_stock",
+                "items_count": len(items),
+                "location_id": location_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_location_id", "check_database_connection", "escalate"],
         }
 
 
@@ -384,7 +417,20 @@ async def generate_sap_data(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] generate_sap_data failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "data": None}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "data": None,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "generate_sap_data",
+                "expedition_id": expedition_id,
+                "format_type": format_type,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_expedition_id", "check_format_type", "escalate"],
+        }
 
 
 @tool
@@ -423,10 +469,19 @@ async def confirm_separation(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] confirm_separation failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "is_complete": False,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "confirm_separation",
+                "expedition_id": expedition_id,
+                "scanned_items_count": len(scanned_items),
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_scanned_items", "check_expedition_status", "escalate"],
         }
 
 
@@ -582,7 +637,20 @@ async def complete_expedition(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] complete_expedition failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "complete_expedition",
+                "expedition_id": expedition_id,
+                "carrier_id": carrier_id,
+                "tracking_code": tracking_code,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_expedition_status", "check_carrier_integration", "escalate"],
+        }
 
 
 @tool

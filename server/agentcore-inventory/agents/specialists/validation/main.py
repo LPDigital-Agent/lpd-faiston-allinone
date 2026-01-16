@@ -245,12 +245,22 @@ async def validate_schema(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] validate_schema failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "is_valid": False,
             "error": str(e),
             "errors": [],
             "warnings": [],
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "validate_schema",
+                "column_mappings": column_mappings,
+                "target_table": target_table,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_schema_exists", "verify_database_connection", "escalate"],
         }
 
 
@@ -296,11 +306,22 @@ async def validate_data(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] validate_data failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "is_valid": False,
             "error": str(e),
             "row_errors": [],
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "validate_data",
+                "rows_count": len(rows),
+                "column_mappings": column_mappings,
+                "target_table": target_table,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "validate_row_format", "check_column_mappings", "escalate"],
         }
 
 
@@ -342,11 +363,21 @@ async def check_constraints(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] check_constraints failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "is_valid": False,
             "error": str(e),
             "violations": [],
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "check_constraints",
+                "rows_count": len(rows),
+                "target_table": target_table,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_database_constraints", "verify_foreign_keys", "escalate"],
         }
 
 

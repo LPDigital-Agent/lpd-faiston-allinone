@@ -245,10 +245,27 @@ async def create_column(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] create_column failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "used_fallback": False,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "create_column",
+                "table_name": table_name,
+                "column_name": column_name,
+                "data_type": data_type,
+                "sample_values_count": len(sample_values) if sample_values else 0,
+                "nullable": nullable,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": [
+                "retry" if isinstance(e, (TimeoutError, ConnectionError, OSError)) else "validate_inputs",
+                "check_mcp_gateway_connectivity",
+                "use_jsonb_fallback",
+                "escalate",
+            ],
         }
 
 
@@ -288,10 +305,25 @@ async def validate_column_request(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] validate_column_request failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "is_valid": False,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "validate_column_request",
+                "table_name": table_name,
+                "column_name": column_name,
+                "data_type": data_type,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": [
+                "retry" if isinstance(e, (TimeoutError, ConnectionError, OSError)) else "check_validation_logic",
+                "sanitize_column_name_first",
+                "verify_table_exists",
+                "escalate",
+            ],
         }
 
 
@@ -328,11 +360,25 @@ async def infer_column_type(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] infer_column_type failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "inferred_type": "TEXT",  # Safe fallback
             "confidence": 0.0,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "infer_column_type",
+                "sample_values_count": len(sample_values) if sample_values else 0,
+                "column_name": column_name,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError, ValueError)),
+            },
+            "suggested_actions": [
+                "retry" if isinstance(e, (TimeoutError, ConnectionError, OSError)) else "use_default_type",
+                "validate_sample_values",
+                "use_text_fallback",
+                "escalate",
+            ],
         }
 
 
@@ -366,10 +412,23 @@ async def sanitize_column_name(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] sanitize_column_name failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "sanitized_name": None,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "sanitize_column_name",
+                "raw_name": raw_name,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError, ValueError)),
+            },
+            "suggested_actions": [
+                "retry" if isinstance(e, (TimeoutError, ConnectionError, OSError)) else "validate_raw_name",
+                "check_reserved_words",
+                "use_safe_fallback_name",
+                "escalate",
+            ],
         }
 
 

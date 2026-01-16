@@ -290,11 +290,23 @@ async def enrich_equipment(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] enrich_equipment failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "status": "error",
             "part_number": part_number,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "enrich_equipment",
+                "part_number": part_number,
+                "serial_number": serial_number,
+                "manufacturer_hint": manufacturer_hint,
+                "store_to_s3": store_to_s3,
+                "download_documents": download_documents,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_tavily_service", "check_s3_permissions", "escalate"],
         }
 
 
@@ -374,10 +386,21 @@ async def enrich_batch(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] enrich_batch failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "import_id": import_id,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "enrich_batch",
+                "import_id": import_id,
+                "tenant_id": tenant_id,
+                "items_count": len(items),
+                "trigger_kb_sync": trigger_kb_sync,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry_batch", "retry_failed_items", "check_rate_limits", "escalate"],
         }
 
 
@@ -425,9 +448,18 @@ async def sync_knowledge_base(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] sync_knowledge_base failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "triggered": False,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "sync_knowledge_base",
+                "knowledge_base_id": knowledge_base_id,
+                "data_source_id": data_source_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_kb_exists", "check_permissions", "escalate"],
         }
 
 
@@ -463,10 +495,19 @@ async def validate_part_number(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] validate_part_number failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "valid": False,
             "confidence": 0.0,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "validate_part_number",
+                "part_number": part_number,
+                "manufacturer_hint": manufacturer_hint,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_tavily_service", "manual_validation", "escalate"],
         }
 
 
@@ -496,10 +537,18 @@ async def get_enrichment_status(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_enrichment_status failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "enriched": False,
             "part_number": part_number,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_enrichment_status",
+                "part_number": part_number,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_s3_connectivity", "verify_part_number", "escalate"],
         }
 
 

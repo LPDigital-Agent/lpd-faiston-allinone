@@ -384,7 +384,19 @@ async def analyze_file(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] analyze_file failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "analyze_file",
+                "s3_key": s3_key,
+                "filename": filename,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_file_exists", "check_s3_access", "escalate"],
+        }
 
 
 @tool
@@ -472,7 +484,19 @@ async def reason_mappings(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] reason_mappings failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "mappings": {}}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "mappings": {},  # Empty mappings - LLM decides recovery
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "reason_mappings",
+                "columns_count": len(file_analysis.get("columns", [])) if isinstance(file_analysis, dict) else 0,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "use_default_mappings", "ask_user_for_help", "escalate"],
+        }
 
 
 @tool
@@ -509,7 +533,19 @@ async def generate_questions(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] generate_questions failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "questions": []}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "questions": [],  # Empty questions - LLM decides recovery
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "generate_questions",
+                "confidence_threshold": confidence_threshold,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "use_generic_questions", "skip_hil_and_warn", "escalate"],
+        }
 
 
 @tool
@@ -612,7 +648,21 @@ async def execute_import(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] execute_import failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "rows_imported": 0}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "rows_imported": 0,  # No rows imported - LLM decides recovery
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "execute_import",
+                "s3_key": s3_key,
+                "target_table": target_table,
+                "mappings_count": len(column_mappings) if column_mappings else 0,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_mappings_valid", "rollback_if_partial", "escalate"],
+        }
 
 
 @tool
@@ -662,7 +712,19 @@ async def route_to_specialist(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] route_to_specialist failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "route_to_specialist",
+                "file_type": file_type,
+                "target_specialist": specialist_map.get(file_type.upper(), "data_import"),
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_specialist_health", "try_fallback_specialist", "escalate"],
+        }
 
 
 @tool

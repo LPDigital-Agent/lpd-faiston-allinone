@@ -413,7 +413,22 @@ async def get_quotes(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_quotes failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "quotes": []}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "quotes": [],
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_quotes",
+                "origin_cep": origin_cep,
+                "destination_cep": destination_cep,
+                "weight_kg": weight_kg,
+                "service_type": service_type,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_carrier_api_availability", "escalate"],
+        }
 
 
 @tool
@@ -461,10 +476,21 @@ async def recommend_carrier(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] recommend_carrier failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "recommendation": None,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "recommend_carrier",
+                "origin_cep": origin_cep,
+                "destination_cep": destination_cep,
+                "weight_kg": weight_kg,
+                "priority": priority,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "fallback_to_manual_selection", "escalate"],
         }
 
 
@@ -501,10 +527,19 @@ async def track_shipment(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] track_shipment failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
             "status": "UNKNOWN",
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "track_shipment",
+                "tracking_code": tracking_code,
+                "carrier": carrier,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_tracking_code", "check_carrier_api_status", "escalate"],
         }
 
 
@@ -612,7 +647,21 @@ async def create_shipment(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] create_shipment failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "create_shipment",
+                "destination_city": destination_city,
+                "destination_state": destination_state,
+                "destination_cep": destination_cep,
+                "weight_grams": weight_grams,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_address_data", "check_postal_service_api", "escalate"],
+        }
 
 
 @tool
@@ -648,7 +697,18 @@ async def liberate_shipment(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] liberate_shipment failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "liberate_shipment",
+                "tracking_code": tracking_code,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_tracking_code_exists", "check_carrier_api_status", "escalate"],
+        }
 
 
 @tool
@@ -686,7 +746,19 @@ async def get_label(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_label failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_label",
+                "tracking_code": tracking_code,
+                "format": format,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_shipment_exists", "check_label_generation_service", "escalate"],
+        }
 
 
 @tool
@@ -751,7 +823,18 @@ async def save_posting(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] save_posting failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "save_posting",
+                "tracking_code": tracking_code,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_posting_data", "check_dynamodb_connectivity", "escalate"],
+        }
 
 
 @tool
@@ -797,7 +880,22 @@ async def get_postings(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_postings failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "postings": [], "count": 0}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "postings": [],
+            "count": 0,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_postings",
+                "status": status,
+                "user_id": user_id,
+                "limit": limit,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_dynamodb_connectivity", "verify_gsi_indexes", "escalate"],
+        }
 
 
 @tool
@@ -862,7 +960,20 @@ async def update_posting_status(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] update_posting_status failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "update_posting_status",
+                "posting_id": posting_id,
+                "new_status": new_status,
+                "actor_id": actor_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_posting_exists", "check_status_transition_validity", "escalate"],
+        }
 
 
 @tool
@@ -896,7 +1007,20 @@ async def get_posting_by_tracking(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_posting_by_tracking failed: {e}", exc_info=True)
-        return {"success": False, "found": False, "error": str(e), "posting": None}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "found": False,
+            "error": str(e),
+            "posting": None,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_posting_by_tracking",
+                "tracking_code": tracking_code,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_tracking_code_format", "check_gsi3_index", "escalate"],
+        }
 
 
 @tool
@@ -930,7 +1054,20 @@ async def get_posting_by_id(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_posting_by_id failed: {e}", exc_info=True)
-        return {"success": False, "found": False, "error": str(e), "posting": None}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "found": False,
+            "error": str(e),
+            "posting": None,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_posting_by_id",
+                "posting_id": posting_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_posting_id_format", "check_dynamodb_connectivity", "escalate"],
+        }
 
 
 @tool
@@ -965,7 +1102,20 @@ async def get_posting_by_order_code(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_posting_by_order_code failed: {e}", exc_info=True)
-        return {"success": False, "found": False, "error": str(e), "posting": None}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "found": False,
+            "error": str(e),
+            "posting": None,
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_posting_by_order_code",
+                "order_code": order_code,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_order_code_format", "check_dynamodb_scan_permissions", "escalate"],
+        }
 
 
 @tool

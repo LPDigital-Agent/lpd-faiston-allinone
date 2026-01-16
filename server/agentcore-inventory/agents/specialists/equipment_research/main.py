@@ -227,9 +227,22 @@ async def research_equipment(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] research_equipment failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "research_equipment",
+                "query": query,
+                "equipment_type": equipment_type,
+                "manufacturer": manufacturer,
+                "model": model,
+                "part_number": part_number,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry_with_simpler_query", "check_knowledge_base_status", "escalate"],
             "results": [],
         }
 
@@ -270,9 +283,20 @@ async def generate_queries(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] generate_queries failed: {e}", exc_info=True)
+        # Sandwich Pattern: Feed error context to LLM for decision
         return {
             "success": False,
             "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "generate_queries",
+                "description": description,
+                "context": context,
+                "max_queries": max_queries,
+                "session_id": session_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "use_fallback_keywords", "escalate"],
             "queries": [],
         }
 

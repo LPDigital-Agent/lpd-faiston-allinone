@@ -306,7 +306,19 @@ async def parse_nf(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] parse_nf failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "parse_nf",
+                "s3_key": s3_key,
+                "file_type": file_type,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "check_file_format", "verify_s3_access", "escalate"],
+        }
 
 
 @tool
@@ -346,7 +358,19 @@ async def match_items(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] match_items failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e), "matches": []}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "matches": [],  # Empty matches - LLM decides recovery
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "match_items",
+                "items_count": len(extraction.get("items", [])) if isinstance(extraction, dict) else 0,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "manual_matching_hil", "skip_matching", "escalate"],
+        }
 
 
 @tool
@@ -424,7 +448,20 @@ async def process_entry(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] process_entry failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "process_entry",
+                "has_extraction": extraction is not None,
+                "has_matches": matches is not None,
+                "project_id": project_id,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_data_integrity", "route_to_hil", "escalate"],
+        }
 
 
 @tool
@@ -521,7 +558,19 @@ async def confirm_entry(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] confirm_entry failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "confirm_entry",
+                "entry_id": entry_id,
+                "has_manual_mappings": manual_mappings is not None and len(manual_mappings) > 0,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_entry_exists", "rollback_partial", "escalate"],
+        }
 
 
 @tool
@@ -600,7 +649,19 @@ def get_upload_url(
 
     except Exception as e:
         logger.error(f"[{AGENT_NAME}] get_upload_url failed: {e}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        # Sandwich Pattern: Feed error context to LLM for decision
+        return {
+            "success": False,
+            "error": str(e),
+            "error_context": {
+                "error_type": type(e).__name__,
+                "operation": "get_upload_url",
+                "filename": filename,
+                "content_type": content_type,
+                "recoverable": isinstance(e, (TimeoutError, ConnectionError, OSError)),
+            },
+            "suggested_actions": ["retry", "verify_s3_permissions", "check_bucket_config", "escalate"],
+        }
 
 
 # =============================================================================
