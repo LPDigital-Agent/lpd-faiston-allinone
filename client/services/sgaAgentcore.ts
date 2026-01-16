@@ -154,6 +154,23 @@ interface OrchestratorEnvelope<T> {
 }
 
 /**
+ * Strip markdown code fences from a string before JSON parsing.
+ * LLM responses often wrap JSON in markdown code blocks like:
+ * ```json
+ * {"key": "value"}
+ * ```
+ */
+function stripMarkdownCodeFences(text: string): string {
+  const trimmed = text.trim();
+  // Match ```json or ``` at start and ``` at end
+  const match = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  if (match) {
+    return match[1].trim();
+  }
+  return trimmed;
+}
+
+/**
  * Extracts and parses the actual response from AgentCore HTTP format.
  *
  * AgentCore returns responses in this nested structure:
@@ -178,8 +195,9 @@ function extractAgentCoreResponse<T>(data: unknown): T {
 
     if (textContent && typeof textContent === 'string') {
       try {
-        // Parse the JSON string inside content[0].text
-        parsed = JSON.parse(textContent);
+        // Strip markdown code fences if present, then parse JSON
+        const cleanJson = stripMarkdownCodeFences(textContent);
+        parsed = JSON.parse(cleanJson);
       } catch {
         // If parsing fails, return the raw text
         return textContent as unknown as T;
@@ -814,14 +832,18 @@ export async function completeExpedition(
 
 /**
  * Get shipping quotes from multiple carriers.
+ * Uses fresh session (useSession: false) since this is a stateless operation.
  */
 export async function getShippingQuotes(
   params: SGAGetQuotesRequest
 ): Promise<AgentCoreResponse<SGAGetQuotesResponse>> {
-  return invokeSGAAgentCore<SGAGetQuotesResponse>({
-    action: 'get_shipping_quotes',
-    ...params,
-  });
+  return invokeSGAAgentCore<SGAGetQuotesResponse>(
+    {
+      action: 'get_shipping_quotes',
+      ...params,
+    },
+    { useSession: false }
+  );
 }
 
 /**

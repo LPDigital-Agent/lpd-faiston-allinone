@@ -85,7 +85,7 @@ const DEFAULT_POLLING_INTERVAL = 30000; // 30 seconds
 
 export function TaskInboxProvider({
   children,
-  pollingEnabled = true,
+  pollingEnabled = false, // Disabled: get_pending_tasks action not implemented on backend
   initialPollingInterval = DEFAULT_POLLING_INTERVAL,
 }: TaskInboxProviderProps) {
   // Tasks state
