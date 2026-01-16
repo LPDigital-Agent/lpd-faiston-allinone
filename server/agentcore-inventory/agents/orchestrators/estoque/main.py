@@ -1071,21 +1071,56 @@ async def _invoke_swarm(
             "analysis" in response,
         )
 
-        # Strands-compliant error handling using result.status (official attribute)
-        if not response.get("success") or getattr(result, "status", None) == "error":
-            logger.warning(
-                "[Swarm] Extraction failed or error status, status=%s",
+        # =====================================================================
+        # BUG-020 v18: SANDWICH PATTERN - Technical vs Business Separation
+        # =====================================================================
+        # TECHNICAL check: Did Swarm runtime crash? (Code decides)
+        # BUSINESS check: success=False with data? (LLM decided, we preserve)
+        #
+        # The Sandwich Pattern: Code (Technical) → LLM (Business) → Code (Validate)
+        # - HTTP requests, JSON parsing, structure validation = Code (deterministic)
+        # - Error recovery decisions, retry logic, HIL questions = LLM (reasoning)
+        #
+        # When LLM returns success=False + valid data, that's a BUSINESS decision
+        # (e.g., "I need more info from user before proceeding"). We MUST NOT
+        # override it with a hardcoded error response.
+        # =====================================================================
+
+        # TECHNICAL: Check if Swarm runtime had an error (infrastructure failure)
+        swarm_runtime_error = getattr(result, "status", None) == "error"
+
+        # TECHNICAL: Check if extraction produced ANY valid structure
+        # These are the fields that indicate meaningful LLM processing occurred
+        has_valid_structure = (
+            ("analysis" in response and isinstance(response.get("analysis"), dict))
+            or ("questions" in response and isinstance(response.get("questions"), list) and len(response.get("questions", [])) > 0)
+            or ("column_mappings" in response and isinstance(response.get("column_mappings"), list))
+        )
+
+        # Only trigger CODE error when TECHNICAL failure (runtime crashed, no data)
+        # This is a TECHNICAL decision - infrastructure failed, nothing to show user
+        if swarm_runtime_error and not has_valid_structure:
+            logger.error(
+                "[Swarm] TECHNICAL failure: runtime_error=%s, no valid structure extracted. "
+                "This is an infrastructure issue, not a business decision.",
                 getattr(result, "status", "unknown"),
             )
-            # Return structured error with HIL question (agentic behavior, not try/catch)
+            # Return structured error context - let caller/agent decide recovery
             return {
                 "success": False,
                 "session_id": session_id,
                 "round": session["round_count"],
-                "error": "Swarm extraction failed",
+                "error": "Swarm runtime error - no valid data extracted",
+                "error_context": {
+                    "error_type": "swarm_runtime_error",
+                    "swarm_status": getattr(result, "status", "unknown"),
+                    "has_analysis": "analysis" in response,
+                    "has_questions": "questions" in response,
+                    "recoverable": True,
+                },
                 "questions": [{
-                    "id": "swarm_extraction_error",
-                    "question": "Não foi possível processar o arquivo. Por favor, tente novamente.",
+                    "id": "swarm_technical_error",
+                    "question": "Ocorreu um erro técnico ao processar o arquivo. Por favor, tente novamente.",
                     "type": "error"
                 }],
                 "analysis": {
@@ -1093,8 +1128,23 @@ async def _invoke_swarm(
                     "sheet_count": 0,
                     "total_rows": 0,
                     "recommended_strategy": "manual_review"
-                }
+                },
+                "suggested_actions": ["retry", "check_swarm_logs", "escalate"],
             }
+
+        # BUSINESS: LLM returned success=False with valid data (HIL pause)
+        # This is a VALID intermediate state - LLM is asking for user input
+        # We MUST preserve the LLM's decision, not override it!
+        if not response.get("success") and has_valid_structure:
+            logger.info(
+                "[Swarm] HIL pause: LLM returned success=False with valid data "
+                "(questions=%d, has_analysis=%s, has_mappings=%s) - preserving LLM decision",
+                len(response.get("questions", [])),
+                "analysis" in response,
+                "column_mappings" in response,
+            )
+            # Fall through - response will be returned as-is below
+            # The LLM made a business decision (needs user input), we respect it
 
         # Check for HIL pause (from _process_swarm_result context update)
         if response.get("stop_action") or session.get("awaiting_response"):
