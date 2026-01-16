@@ -47,10 +47,16 @@ RUNTIME_IDS = {
 # Orchestrator Runtime IDs
 # =============================================================================
 # Orchestrators can also be invoked via A2A by other orchestrators.
+#
+# REFACTOR-001 (2026-01-16):
+# - Renamed from faiston_asset_management to faiston_inventory_orchestration
+# - TODO: Update runtime ID after new deployment completes (AWS assigns new ID)
+# - Old ID: faiston_asset_management-uSuLPsFQNH (to be deleted)
 # =============================================================================
 
 ORCHESTRATOR_RUNTIME_IDS = {
-    "estoque": "faiston_asset_management-uSuLPsFQNH",
+    # TODO: Update with new runtime ID after deployment
+    "estoque": "faiston_inventory_orchestration-PENDING_DEPLOYMENT",
     # Future orchestrators:
     # "expedicao": "faiston_sga_expedicao-XXXXX",
     # "reversa": "faiston_sga_reversa-XXXXX",

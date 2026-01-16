@@ -1,32 +1,33 @@
 # =============================================================================
 # Faiston Inventory Management (SGA) - AgentCore Configuration
 # =============================================================================
-# REFACTORED: 2026-01-14
+# REFACTORED: 2026-01-16 (REFACTOR-001)
 #
 # ARCHITECTURE: Strands Orchestrator Agent + 14 Specialist A2A Agents
 #
-# The main orchestrator (faiston_asset_management) was refactored from a
-# 4,426-line monolith to a ~490-line Strands Agent with LLM-based routing.
+# The main orchestrator (faiston_inventory_orchestration) routes inventory
+# operations to specialist agents using LLM-based intelligent routing.
 #
 # NAMING CONVENTION:
-# - Deployment name: faiston_asset_management (backward compatibility)
-# - Internal name: FaistonInventoryManagement (code references)
-# - Conceptual name: Inventory Management Orchestrator
+# - Deployment name: faiston_inventory_orchestration
+# - Internal name: FaistonInventoryOrchestrator
+# - Conceptual name: Inventory Orchestrator
 #
-# WHY NOT RENAMED:
-# - The agent_id (faiston_asset_management-uSuLPsFQNH) is fixed by AWS
-# - Renaming would create a new agent and break frontend integrations
-# - Internal code uses conceptual names; deployment name is preserved
+# REFACTOR-001 (2026-01-16):
+# - Renamed from faiston_asset_management to faiston_inventory_orchestration
+# - Removed carrier/posting code (dedicated to inventory only)
+# - Deployed as NEW agent (AWS runtime IDs are immutable)
+# - Old agent (faiston_asset_management-uSuLPsFQNH) to be deleted after migration
 #
 # PROTOCOL:
 # - Orchestrator: HTTP on port 8080 (/invocations) with JWT auth
 # - Specialists: A2A JSON-RPC on port 9000 (internal only)
 # =============================================================================
 
-default_agent: faiston_asset_management
+default_agent: faiston_inventory_orchestration
 agents:
-  faiston_asset_management:
-    name: faiston_asset_management
+  faiston_inventory_orchestration:
+    name: faiston_inventory_orchestration
     entrypoint: main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11
@@ -53,8 +54,10 @@ agents:
         idle_runtime_session_timeout: null
         max_lifetime: null
     bedrock_agentcore:
-      agent_id: faiston_asset_management-uSuLPsFQNH
-      agent_arn: arn:aws:bedrock-agentcore:us-east-2:377311924364:runtime/faiston_asset_management-uSuLPsFQNH
+      # NEW deployment - AWS will assign new runtime ID
+      # Old ID was: faiston_asset_management-uSuLPsFQNH (to be deleted after migration)
+      agent_id: null
+      agent_arn: null
       agent_session_id: null
     codebuild:
       project_name: null
@@ -922,10 +925,10 @@ agents:
   # =============================================================================
 
   # -----------------------------------------------------------------------------
-  # DEV: Orchestrator Agent (faiston_asset_management_dev)
+  # DEV: Orchestrator Agent (faiston_inventory_orchestration_dev)
   # -----------------------------------------------------------------------------
-  faiston_asset_management_dev:
-    name: faiston_asset_management_dev
+  faiston_inventory_orchestration_dev:
+    name: faiston_inventory_orchestration_dev
     entrypoint: main.py
     deployment_type: direct_code_deploy
     runtime_type: PYTHON_3_11

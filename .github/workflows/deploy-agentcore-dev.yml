@@ -173,7 +173,7 @@ jobs:
       matrix:
         agent:
           # Key agents for carrier integration testing (names match yaml configs)
-          - faiston_asset_management_dev      # Orchestrator (HTTP/JWT)
+          - faiston_inventory_orchestration_dev      # Orchestrator (HTTP/JWT)
           - faiston_sga_carrier_dev           # Carrier integration
           - faiston_sga_expedition_dev        # Expedition flow
           - faiston_sga_reverse_dev           # Reverse logistics
@@ -292,7 +292,7 @@ jobs:
 
       - name: Get Runtime ID (Orchestrator only)
         id: get-runtime-id
-        if: matrix.agent == 'faiston_asset_management_dev'
+        if: matrix.agent == 'faiston_inventory_orchestration_dev'
         run: |
           pip install boto3 --quiet
           RUNTIME_ID=$(python3 -c "
@@ -301,7 +301,7 @@ jobs:
           paginator = client.get_paginator('list_agent_runtimes')
           for page in paginator.paginate():
               for rt in page.get('agentRuntimes', []):
-                  if rt['agentRuntimeName'] == 'faiston_asset_management_dev':
+                  if rt['agentRuntimeName'] == 'faiston_inventory_orchestration_dev':
                       print(rt['agentRuntimeId'])
                       exit(0)
           ")
@@ -344,7 +344,7 @@ jobs:
           REGION = "us-east-2"
           COGNITO_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID")
           COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID")
-          DEV_ORCHESTRATOR_NAME = "faiston_asset_management_dev"
+          DEV_ORCHESTRATOR_NAME = "faiston_inventory_orchestration_dev"
 
           MAX_FIND_RETRIES = 15
           FIND_RETRY_DELAY = 20
@@ -487,7 +487,7 @@ jobs:
           echo "### Agents Deployed (4 - Carrier Integration Testing)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Orchestrator (HTTP/JWT):**" >> $GITHUB_STEP_SUMMARY
-          echo "- \`faiston_asset_management_dev\` - Dev entry point" >> $GITHUB_STEP_SUMMARY
+          echo "- \`faiston_inventory_orchestration_dev\` - Dev entry point" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Specialist Agents (A2A/SigV4):**" >> $GITHUB_STEP_SUMMARY
           echo "- \`faiston_sga_carrier_dev\` (Carrier Mode: ${CARRIER_MODE})" >> $GITHUB_STEP_SUMMARY
@@ -539,7 +539,7 @@ jobs:
         run: |
           # Key dev agents for carrier integration testing
           AGENTS=(
-            faiston_asset_management_dev
+            faiston_inventory_orchestration_dev
             faiston_sga_carrier_dev
             faiston_sga_expedition_dev
             faiston_sga_reverse_dev
