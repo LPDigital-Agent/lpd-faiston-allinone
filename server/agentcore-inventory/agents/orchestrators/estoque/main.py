@@ -587,6 +587,64 @@ def _get_swarm_session(session_id: str) -> dict:
     return _swarm_sessions[session_id]
 
 
+def _restore_session_from_payload(session: dict, payload: dict) -> None:
+    """
+    Restore session context from frontend's session_state payload.
+
+    STATELESS ARCHITECTURE: Frontend stores full state, backend restores.
+    This ensures Round 2+ works even if container restarted.
+
+    BUG-020 v15 FIX: Called at start of _invoke_swarm() for non-init actions.
+    The frontend passes the full session_state including s3_key, filename,
+    and accumulated answers. Without this restoration, a new container
+    would have empty session context and fail with S3 NoSuchKey errors.
+
+    Args:
+        session: The in-memory session dict to restore into
+        payload: The request payload containing session_state from frontend
+    """
+    frontend_state = payload.get("session_state", {})
+    if not frontend_state:
+        logger.debug("[v15] No session_state in payload, skipping restoration")
+        return
+
+    # Log restoration for debugging
+    s3_key_preview = frontend_state.get("s3_key", "")[:50] if frontend_state.get("s3_key") else "None"
+    logger.info(
+        "[v15] Restoring session from frontend state: s3_key=%s, stage=%s",
+        s3_key_preview,
+        frontend_state.get("stage", "unknown"),
+    )
+
+    # Restore critical context fields for file re-analysis
+    if "s3_key" in frontend_state:
+        session["context"]["s3_key"] = frontend_state["s3_key"]
+    if "filename" in frontend_state:
+        session["context"]["filename"] = frontend_state["filename"]
+
+    # Restore file_analysis if present (used by re-analysis)
+    file_analysis = frontend_state.get("file_analysis") or {}
+    if file_analysis:
+        session["context"]["file_analysis"] = file_analysis
+
+    # Restore user responses (accumulated from previous rounds)
+    if "answers" in frontend_state:
+        session["context"]["user_responses"] = {
+            **session["context"].get("user_responses", {}),
+            **frontend_state["answers"],
+        }
+
+    # Restore column mappings (for validation in later rounds)
+    if "column_mappings" in frontend_state:
+        session["context"]["column_mappings"] = frontend_state["column_mappings"]
+
+    # Mark session as having pending questions (for Round 2+)
+    # This prevents the "No pending questions" error when container restarts
+    if frontend_state.get("stage") == "questioning" or frontend_state.get("questions"):
+        session["awaiting_response"] = True
+        logger.debug("[v15] Set awaiting_response=True from frontend stage/questions")
+
+
 async def _invoke_swarm(
     action: str,
     payload: dict,
@@ -601,9 +659,18 @@ async def _invoke_swarm(
     swarm = _get_inventory_swarm()
     session = _get_swarm_session(session_id)
 
+    # =========================================================================
+    # BUG-020 v15 FIX: Restore session context from frontend's session_state
+    # =========================================================================
+    # STATELESS ARCHITECTURE: Frontend stores full state between rounds.
+    # AgentCore containers are ephemeral - _swarm_sessions may be empty.
+    # This restoration ensures Round 2+ works even after container restart.
+    # =========================================================================
+    _restore_session_from_payload(session, payload)
+
     logger.info(
         f"[Swarm] Invocation: action={action}, session={session_id}, "
-        f"round={session['round_count']}"
+        f"round={session['round_count']}, s3_key={session['context'].get('s3_key', 'NONE')[:30] if session['context'].get('s3_key') else 'NONE'}"
     )
 
     # Build Swarm context
