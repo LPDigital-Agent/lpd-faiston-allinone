@@ -24,7 +24,6 @@ import {
   MapPin,
   User,
   Calendar,
-  ArrowRight,
   InboxIcon,
   ChevronRight,
   MoreVertical,
@@ -42,6 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { NovaOrdemModal } from "@/components/ferramentas/ativos/modals/NovaOrdemModal";
+import { PostingDetailsModal } from "@/components/ferramentas/ativos/modals/PostingDetailsModal";
 import { toast } from "@/components/ui/use-toast";
 import { getPostages, updatePostageStatus } from "@/services/sgaAgentcore";
 import type { SGAPostage } from "@/lib/ativos/types";
@@ -115,6 +115,7 @@ function transformPostageToOrder(posting: SGAPostage): ShippingOrder {
 export default function ExpedicaoPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<ShippingOrder | null>(null);
 
   // Fetch postages from API
   const {
@@ -319,7 +320,8 @@ export default function ExpedicaoPage() {
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.9 }}
                           transition={{ delay: index * 0.05 }}
-                          className="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-border group"
+                          className="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors border border-border group cursor-pointer"
+                          onClick={() => setSelectedOrder(order)}
                         >
                           {/* Order Header */}
                           <div className="flex items-start justify-between mb-3">
@@ -489,6 +491,14 @@ export default function ExpedicaoPage() {
           </div>
         </GlassCard>
       </div>
+
+      {/* Order Details Modal */}
+      <PostingDetailsModal
+        order={selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+        onMoveToNextStatus={moveToNextStatus}
+        isUpdating={updateStatusMutation.isPending}
+      />
     </div>
   );
 }
