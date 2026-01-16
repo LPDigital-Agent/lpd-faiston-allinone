@@ -311,6 +311,26 @@ data "aws_iam_policy_document" "sga_agentcore_dynamodb" {
     ]
   }
 
+  # Postings table operations (shipping/postagem)
+  statement {
+    sid    = "DynamoDBSGAPostingsAccess"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchGetItem",
+      "dynamodb:BatchWriteItem"
+    ]
+    resources = [
+      aws_dynamodb_table.sga_postings.arn,
+      "${aws_dynamodb_table.sga_postings.arn}/index/*"
+    ]
+  }
+
   # DynamoDB Streams for real-time projections
   statement {
     sid    = "DynamoDBSGAStreamsAccess"
