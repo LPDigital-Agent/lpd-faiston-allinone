@@ -839,7 +839,7 @@ def _extract_from_agent_result(
             "[v16] result_data is AgentResult (nested), type=%s, recursively extracting",
             type(result_data).__name__,
         )
-        nested_extraction = _extract_from_single_agent_result(result_data, agent_name + "_nested")
+        nested_extraction = _extract_from_agent_result(result_data, agent_name + "_nested", "unified_analyze_file")
         if nested_extraction:
             logger.info("[v16] SUCCESS: Extracted from nested AgentResult for agent=%s", agent_name)
             return nested_extraction
