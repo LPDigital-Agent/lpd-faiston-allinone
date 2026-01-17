@@ -769,6 +769,23 @@ def _extract_from_agent_result(
         type(agent_result.result).__name__ if hasattr(agent_result, "result") and agent_result.result else "None",
     )
 
+    # BUG-021 v17: FULL INSPECTION for debugging extraction failures
+    # This logs the complete structure to help identify why extraction fails
+    try:
+        attrs = [a for a in dir(agent_result) if not a.startswith("_")][:15]
+        msg_type = type(agent_result.message).__name__ if hasattr(agent_result, "message") else "N/A"
+        msg_preview = str(agent_result.message)[:500] if hasattr(agent_result, "message") and agent_result.message else "EMPTY"
+        logger.info(
+            "[v17-DEBUG] agent_result FULL INSPECTION: "
+            "type=%s, attrs=%s, message_type=%s, message_preview=%s",
+            type(agent_result).__name__,
+            attrs,
+            msg_type,
+            msg_preview,
+        )
+    except Exception as e:
+        logger.warning("[v17-DEBUG] Failed to inspect agent_result: %s", e)
+
     # =========================================================================
     # BUG-020 v8 FIX: Priority 1 — Extract from .message attribute
     # =========================================================================

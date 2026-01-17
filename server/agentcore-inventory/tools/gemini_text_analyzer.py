@@ -42,10 +42,16 @@ def _get_genai_client():
 
     BUG-010 FIX: Load GOOGLE_API_KEY from SSM Parameter Store if not in env.
     SSM Path: /faiston-one/academy/google-api-key
+
+    BUG-021 v3 FIX: Set timeout at CLIENT level (not in GenerateContentConfig).
+    HttpOptions inside GenerateContentConfig is IGNORED by the SDK.
+    Verified against: https://googleapis.github.io/python-genai/
+    See also: https://github.com/googleapis/python-genai/issues/911
     """
     global _genai_client
     if _genai_client is None:
         import os
+        from google.genai import types as genai_types
 
         # BUG-010 FIX: Load GOOGLE_API_KEY from SSM if not in environment
         # Same logic as agents/utils.py LazyGeminiModel._ensure_model()
@@ -69,8 +75,19 @@ def _get_genai_client():
                 )
 
         from google import genai
-        _genai_client = genai.Client()
-        logger.info("[GeminiTextAnalyzer] Gemini client initialized")
+
+        # BUG-021 v3 FIX: Timeout MUST be set at Client level
+        # 120 seconds to handle large files (77s observed for complex analysis)
+        # HttpOptions.timeout expects MILLISECONDS
+        GEMINI_TIMEOUT_MS = 120 * 1000
+
+        _genai_client = genai.Client(
+            http_options=genai_types.HttpOptions(timeout=GEMINI_TIMEOUT_MS)
+        )
+        logger.info(
+            "[GeminiTextAnalyzer] Gemini client initialized with %dms timeout",
+            GEMINI_TIMEOUT_MS,
+        )
     return _genai_client
 
 
@@ -606,16 +623,10 @@ async def analyze_file_with_gemini(
 
         # 4. Call Gemini Pro
         # =====================================================================
-        # BUG-021 FIX v2: Add timeout to prevent 88+ second hangs
-        # =====================================================================
-        # HttpOptions.timeout expects MILLISECONDS (not seconds!)
-        # - Minimum allowed: 10 seconds (10000ms)
-        # - We use 60 seconds (60000ms) for file analysis
-        # Reference: https://github.com/googleapis/python-genai/issues/1330
+        # BUG-021 v3 FIX: Timeout is now configured at Client level
+        # (see _get_genai_client() - http_options in GenerateContentConfig is IGNORED)
         # =====================================================================
         from google.genai import types as genai_types
-
-        GEMINI_TIMEOUT_MS = 60 * 1000  # 60 seconds in milliseconds
 
         client = _get_genai_client()
         response = client.models.generate_content(
@@ -623,9 +634,6 @@ async def analyze_file_with_gemini(
             contents=prompt,
             config=genai_types.GenerateContentConfig(
                 response_mime_type="application/json",
-                http_options=genai_types.HttpOptions(
-                    timeout=GEMINI_TIMEOUT_MS,
-                ),
             ),
         )
 
