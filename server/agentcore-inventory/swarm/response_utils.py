@@ -78,6 +78,48 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# BUG-021 v5 FIX: Strip markdown code fence wrapper
+# =============================================================================
+# LLMs often wrap JSON responses in markdown code fences:
+# ```json
+# {"success": true, ...}
+# ```
+#
+# This helper strips the fence so json.loads() can parse the content.
+# =============================================================================
+
+
+def _strip_markdown_fence(text: str) -> str:
+    """
+    Strip markdown code fence wrapper from text.
+
+    Handles formats:
+    - ```json\n{...}\n```
+    - ```python\n{...}\n```
+    - ```\n{...}\n```
+
+    Args:
+        text: Input text that may have markdown fence
+
+    Returns:
+        Text without markdown fence, or original text if no fence found
+    """
+    if not isinstance(text, str):
+        return text
+
+    text = text.strip()
+
+    # Match ```json or ```python or ``` at start, ``` at end
+    match = re.match(r'^```(?:json|python)?\s*\n?(.*?)\n?```$', text, re.DOTALL)
+    if match:
+        stripped = match.group(1).strip()
+        logger.info("[v19] Stripped markdown fence, len: %d -> %d", len(text), len(stripped))
+        return stripped
+
+    return text
+
+
+# =============================================================================
 # BUG-020 v13 FIX: Helper function for _response wrapper extraction
 # =============================================================================
 # CloudWatch revealed: The "_response" wrapper is INSIDE parsed JSON strings,
@@ -135,29 +177,31 @@ def _extract_from_response_wrapper(data: Any) -> Optional[Dict]:
                             )
 
                             if isinstance(text_content, str):
+                                # BUG-021 v5: Strip markdown fence before parsing
+                                stripped_content = _strip_markdown_fence(text_content)
                                 # Try JSON first (double quotes)
                                 try:
-                                    parsed = json.loads(text_content)
+                                    parsed = json.loads(stripped_content)
                                     if isinstance(parsed, dict) and (
                                         "analysis" in parsed or "success" in parsed
                                     ):
                                         logger.info(
-                                            "[v13] SUCCESS: Extracted from _response.output[].text (JSON)"
+                                            "[v19] SUCCESS: Extracted from _response.output[].text (JSON)"
                                         )
                                         return parsed
                                 except json.JSONDecodeError:
                                     # Try Python repr (single quotes)
                                     try:
-                                        parsed = ast.literal_eval(text_content)
+                                        parsed = ast.literal_eval(stripped_content)
                                         if isinstance(parsed, dict) and (
                                             "analysis" in parsed or "success" in parsed
                                         ):
                                             logger.info(
-                                                "[v13] SUCCESS: Extracted from _response.output[].text (repr)"
+                                                "[v19] SUCCESS: Extracted from _response.output[].text (repr)"
                                             )
                                             return parsed
                                     except (ValueError, SyntaxError) as e:
-                                        logger.debug("[v13] ast.literal_eval failed: %s", e)
+                                        logger.debug("[v19] ast.literal_eval failed: %s", e)
 
                             elif isinstance(text_content, dict):
                                 if "analysis" in text_content or "success" in text_content:
@@ -252,10 +296,11 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
         # Content can be a string
         elif isinstance(content, str):
             try:
-                parsed = json.loads(content)
+                # BUG-021 v5: Strip markdown fence before parsing
+                parsed = json.loads(_strip_markdown_fence(content))
                 unwrapped = _unwrap_tool_result(parsed)
                 if unwrapped:
-                    logger.info("[v8] Extracted from Message.content string")
+                    logger.info("[v19] Extracted from Message.content string")
                     return unwrapped
             except json.JSONDecodeError:
                 pass
@@ -263,7 +308,8 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
     # Handle JSON string message (most common case from CloudWatch logs)
     if isinstance(message, str):
         try:
-            parsed = json.loads(message)
+            # BUG-021 v5: Strip markdown fence before parsing
+            parsed = json.loads(_strip_markdown_fence(message))
             if isinstance(parsed, dict):
                 # Check for tool response wrapper format
                 # Format: {"<tool_name>_response": {"output": [{"json": {...}}]}} OR
@@ -279,19 +325,21 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
                                     if "text" in item:
                                         text_val = item["text"]
                                         if isinstance(text_val, str):
+                                            # BUG-021 v5: Strip markdown fence before parsing
+                                            stripped_val = _strip_markdown_fence(text_val)
                                             # Try JSON first, then Python repr
                                             try:
-                                                inner = json.loads(text_val)
+                                                inner = json.loads(stripped_val)
                                             except json.JSONDecodeError:
                                                 try:
-                                                    inner = ast.literal_eval(text_val)
+                                                    inner = ast.literal_eval(stripped_val)
                                                 except (ValueError, SyntaxError):
                                                     continue
                                             if isinstance(inner, dict) and (
                                                 "analysis" in inner or "success" in inner
                                             ):
                                                 logger.info(
-                                                    "[v12] SUCCESS: Extracted from tool_response.output[].text"
+                                                    "[v19] SUCCESS: Extracted from tool_response.output[].text"
                                                 )
                                                 return inner
                                         elif isinstance(text_val, dict):
@@ -1122,15 +1170,36 @@ def _process_swarm_result(
                     if isinstance(content_block, dict) and "text" in content_block:
                         text_content = content_block["text"]
                         if isinstance(text_content, str):
+                            # BUG-021 v5 FIX: Strip markdown fence before parsing
+                            stripped_content = _strip_markdown_fence(text_content)
                             try:
-                                data = json.loads(text_content)
+                                data = json.loads(stripped_content)
+                                # Direct data with analysis/success
                                 if isinstance(data, dict) and ("analysis" in data or "success" in data):
                                     response.update(data)
                                     response["success"] = data.get("success", True)
-                                    logger.info("[v18] SUCCESS: Extracted from message.content[].text")
+                                    logger.info("[v19] SUCCESS: Extracted from message.content[].text")
                                     return response
+
+                                # BUG-021 v5: Handle _response wrapper (e.g., unified_analyze_file_response)
+                                if isinstance(data, dict):
+                                    from_wrapper = _extract_from_response_wrapper(data)
+                                    if from_wrapper:
+                                        response.update(from_wrapper)
+                                        response["success"] = from_wrapper.get("success", True)
+                                        logger.info("[v19] SUCCESS: Extracted via _response wrapper in message.content[].text")
+                                        return response
                             except json.JSONDecodeError:
-                                pass
+                                # Try ast.literal_eval for Python repr (single quotes)
+                                try:
+                                    data = ast.literal_eval(stripped_content)
+                                    if isinstance(data, dict) and ("analysis" in data or "success" in data):
+                                        response.update(data)
+                                        response["success"] = data.get("success", True)
+                                        logger.info("[v19] SUCCESS: Extracted from message.content[].text (repr)")
+                                        return response
+                                except (ValueError, SyntaxError):
+                                    pass
 
             # Try _extract_from_agent_message for complex structures
             extracted = _extract_from_agent_message(message)
