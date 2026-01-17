@@ -386,7 +386,11 @@
       "Bash(git rev-parse:*)",
       "Bash(AWS_PROFILE=faiston-aio AWS_REGION=us-east-2 aws logs describe-log-groups:*)",
       "Bash(AWS_PROFILE=faiston-aio AWS_REGION=us-east-2 aws logs tail:*)",
-      "Bash(AWS_PROFILE=faiston-aio aws codebuild:*)"
+      "Bash(AWS_PROFILE=faiston-aio aws codebuild:*)",
+      "mcp__plugin_serena_serena__list_dir",
+      "Bash(ruff check:*)",
+      "Bash(cd /Users/fabio.santos/LPD\\\\ Repos/lpd-faiston-allinone && AWS_PROFILE=faiston-aio agentcore destroy:*)",
+      "mcp__plugin_serena_serena__find_symbol"
     ],
     "deny": [],
     "ask": []
