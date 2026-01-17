@@ -90,8 +90,7 @@ PROD_RUNTIME_IDS = {
     "schema_evolution": "faiston_sga_schema_evolution-Ke1i76BvB0",
     "equipment_research": "faiston_sga_equipment_research-xs7hxg2SfS",
     # Debug Agent - Intelligent error analysis specialist (ADR-003)
-    # NOTE: Update this ID after running `terraform apply` for debug agent runtime
-    "debug": "faiston_sga_debug-PLACEHOLDER",  # TODO: Replace after terraform apply
+    "debug": "faiston_sga_debug-W86Xdj8sAY",
 }
 
 # Dev runtime IDs (only for agents that have dev deployments)
