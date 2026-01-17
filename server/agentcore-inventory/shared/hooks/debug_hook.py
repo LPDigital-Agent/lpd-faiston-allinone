@@ -133,31 +133,64 @@ class DebugHook(HookProvider):
 
         Called after agent invocation completes. Checks for error conditions
         in the stop_reason or response.
+
+        BUG-022 FIX: Now also intercepts 'soft errors' (success: false) not just
+        exceptions, enabling Debug Agent enrichment for ALL error types.
         """
-        stop_reason = getattr(event, "stop_reason", "")
-
-        # Check for error indicators in stop_reason
-        error_indicators = ["error", "exception", "failed", "timeout"]
-        if not any(indicator in str(stop_reason).lower() for indicator in error_indicators):
-            return  # No error detected
-
         # Skip if disabled or circuit is open
         if not self.enabled or self.circuit_breaker.is_open:
             return
 
-        # Try to extract error from response
+        # Try to extract response
         response = getattr(event, "response", None)
-        if response is None:
-            return
 
-        # Check if response contains error_context (our standard error pattern)
-        if isinstance(response, dict) and response.get("error_context"):
-            await self._enrich_error(
-                error=Exception(response.get("error", "Unknown error")),
-                operation=response.get("error_context", {}).get("operation", "unknown"),
-                event_type="invocation",
-                context=response.get("error_context"),
-            )
+        # BUG-022 FIX: Intercept 'soft errors' (success: false) not just exceptions
+        if isinstance(response, dict):
+            # Check for soft error pattern (success: false)
+            if response.get("success") is False:
+                # Skip if already enriched
+                if response.get("_debug_enriched"):
+                    return
+
+                error_msg = response.get("error", response.get("message", "Unknown error"))
+
+                # Enrich the soft error
+                enrichment = await self._enrich_error(
+                    error=Exception(str(error_msg)),
+                    operation=response.get("action", response.get("operation", "unknown")),
+                    event_type="soft_error",
+                    context=response,
+                )
+
+                if enrichment.get("enriched"):
+                    response["debug_analysis"] = enrichment.get("analysis", {})
+                    response["_debug_enriched"] = True
+                    logger.info(
+                        f"[DebugHook] Soft error enriched: {str(error_msg)[:100]}"
+                    )
+                return
+
+            # Check if response contains error_context (our standard error pattern)
+            if response.get("error_context"):
+                await self._enrich_error(
+                    error=Exception(response.get("error", "Unknown error")),
+                    operation=response.get("error_context", {}).get("operation", "unknown"),
+                    event_type="invocation",
+                    context=response.get("error_context"),
+                )
+                return
+
+        # Original behavior: Check for error indicators in stop_reason
+        stop_reason = getattr(event, "stop_reason", "")
+        error_indicators = ["error", "exception", "failed", "timeout"]
+        if any(indicator in str(stop_reason).lower() for indicator in error_indicators):
+            if isinstance(response, dict) and response.get("error_context"):
+                await self._enrich_error(
+                    error=Exception(response.get("error", "Unknown error")),
+                    operation=response.get("error_context", {}).get("operation", "unknown"),
+                    event_type="invocation",
+                    context=response.get("error_context"),
+                )
 
     async def _enrich_error(
         self,

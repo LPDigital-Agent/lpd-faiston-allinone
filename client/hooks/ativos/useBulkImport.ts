@@ -14,6 +14,7 @@ import {
   executeImport,
   validatePNMapping,
 } from '@/services/sgaAgentcore';
+import { safeExtractErrorMessage } from '@/utils/agentcoreResponse';  // BUG-022: Handle double-encoded errors
 import type {
   ImportColumnMapping,
   ImportPreviewRow,
@@ -106,7 +107,8 @@ export function useBulkImport(): UseBulkImportReturn {
         setUnmatchedRows(data.unmatched_rows);
         setError(null);
       } else {
-        setError(data.error || 'Erro ao processar arquivo');
+        // BUG-022 FIX: Handle double-encoded error messages from AgentCore
+        setError(safeExtractErrorMessage(data.error) || 'Erro ao processar arquivo');
       }
     },
     onError: (err) => {
@@ -207,7 +209,8 @@ export function useBulkImport(): UseBulkImportReturn {
       const result = await executeMutation.mutateAsync();
 
       if (!result.success) {
-        setError(result.error || 'Erro na importação');
+        // BUG-022 FIX: Handle double-encoded error messages from AgentCore
+        setError(safeExtractErrorMessage(result.error) || 'Erro na importação');
       }
 
       return result;

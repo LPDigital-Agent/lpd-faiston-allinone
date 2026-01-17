@@ -9,6 +9,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useInventoryOperations } from '@/contexts/ativos';
+import { safeExtractErrorMessage } from '@/utils/agentcoreResponse';  // BUG-022: Handle double-encoded errors
 import type {
   SGACreateReservationRequest,
   SGAProcessExpeditionRequest,
@@ -106,7 +107,7 @@ export function useMovementMutations(): UseMovementMutationsReturn {
     mutationFn: async (params: SGACreateReservationRequest) => {
       const result = await createNewReservation(params);
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(safeExtractErrorMessage(result.error));  // BUG-022 FIX
       }
       return result.data;
     },
@@ -120,7 +121,7 @@ export function useMovementMutations(): UseMovementMutationsReturn {
     mutationFn: async ({ reservationId, reason }: { reservationId: string; reason: string }) => {
       const result = await cancelExistingReservation(reservationId, reason);
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(safeExtractErrorMessage(result.error));  // BUG-022 FIX
       }
       return result.data!;
     },
@@ -134,7 +135,7 @@ export function useMovementMutations(): UseMovementMutationsReturn {
     mutationFn: async (params: SGAProcessExpeditionRequest) => {
       const result = await processNewExpedition(params);
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(safeExtractErrorMessage(result.error));  // BUG-022 FIX
       }
       return result.data;
     },
@@ -148,7 +149,7 @@ export function useMovementMutations(): UseMovementMutationsReturn {
     mutationFn: async (params: SGACreateTransferRequest) => {
       const result = await createNewTransfer(params);
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(safeExtractErrorMessage(result.error));  // BUG-022 FIX
       }
       return result.data;
     },
@@ -162,7 +163,7 @@ export function useMovementMutations(): UseMovementMutationsReturn {
     mutationFn: async (params: SGAProcessReturnRequest) => {
       const result = await processNewReturn(params);
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(safeExtractErrorMessage(result.error));  // BUG-022 FIX
       }
       return result.data;
     },

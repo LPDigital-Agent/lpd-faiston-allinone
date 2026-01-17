@@ -589,7 +589,17 @@ async def execute_import(
             return {"success": False, "error": import_response.error}
 
         import json
-        result = json.loads(import_response.response)
+        # BUG-022 FIX: Handle potential double-encoded response
+        response_text = import_response.response
+        if response_text and response_text.startswith('"') and response_text.endswith('"'):
+            try:
+                unwrapped = json.loads(response_text)
+                if isinstance(unwrapped, str):
+                    response_text = unwrapped
+                    logger.info("[BUG-022] Unwrapped double-encoded import_response")
+            except json.JSONDecodeError:
+                pass
+        result = json.loads(response_text)
 
         # ═══════════════════════════════════════════════════════════════════
         # NEXO MIND LEARN: Store successful patterns DIRECTLY (no A2A)
@@ -704,7 +714,17 @@ async def route_to_specialist(
         if response.success:
             import json
             try:
-                return json.loads(response.response)
+                # BUG-022 FIX: Handle potential double-encoded response
+                response_text = response.response
+                if response_text and response_text.startswith('"') and response_text.endswith('"'):
+                    try:
+                        unwrapped = json.loads(response_text)
+                        if isinstance(unwrapped, str):
+                            response_text = unwrapped
+                            logger.info("[BUG-022] Unwrapped double-encoded specialist response")
+                    except json.JSONDecodeError:
+                        pass
+                return json.loads(response_text)
             except json.JSONDecodeError:
                 return {"success": True, "response": response.response}
         else:

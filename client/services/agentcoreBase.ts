@@ -17,6 +17,7 @@
 
 import { ensureValidAccessToken } from '@/utils/tokenRefresh';
 import { AGENTCORE_ENDPOINT } from '@/lib/config/agentcore';
+import { safeExtractErrorMessage } from '@/utils/agentcoreResponse';
 
 // =============================================================================
 // Types
@@ -209,10 +210,13 @@ export function createAgentCoreService(config: AgentCoreServiceConfig) {
 
           try {
             const errorJson = JSON.parse(errorBody);
-            errorMessage = errorJson.message || errorJson.Message || errorMessage;
+            // BUG-022 FIX: Use safeExtractErrorMessage to handle double-encoded errors
+            const rawMessage = errorJson.message || errorJson.Message || errorJson.error;
+            errorMessage = rawMessage ? safeExtractErrorMessage(rawMessage) : errorMessage;
           } catch {
             if (errorBody) {
-              errorMessage = errorBody;
+              // BUG-022 FIX: Even raw error body might be double-encoded
+              errorMessage = safeExtractErrorMessage(errorBody);
             }
           }
 

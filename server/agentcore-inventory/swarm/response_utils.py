@@ -307,6 +307,19 @@ def _extract_from_agent_message(message: Any) -> Optional[Dict]:
 
     # Handle JSON string message (most common case from CloudWatch logs)
     if isinstance(message, str):
+        # BUG-022 FIX: Detect double-encoded JSON (starts with '"{' or "'{")
+        # This happens when JSON gets serialized twice: {"key": "value"} -> '"{\"key\": \"value\"}"'
+        message_stripped = message.strip()
+        if message_stripped.startswith('"{') or message_stripped.startswith("'{"):
+            logger.warning("[BUG-022] Detected double-encoded JSON: %s...", message_stripped[:100])
+            try:
+                unwrapped = json.loads(message_stripped)
+                if isinstance(unwrapped, str):
+                    message = unwrapped
+                    logger.info("[BUG-022] Successfully unwrapped double-encoded JSON")
+            except json.JSONDecodeError:
+                pass
+
         try:
             # BUG-021 v5: Strip markdown fence before parsing
             parsed = json.loads(_strip_markdown_fence(message))
@@ -1081,6 +1094,24 @@ def _process_swarm_result(
         if "error" in extracted and extracted["error"]:
             response["error"] = extracted["error"]
             logger.info("[_process] BUG-021: Preserved error field: %s", extracted["error"][:100] if len(extracted["error"]) > 100 else extracted["error"])
+
+        # BUG-022 FIX: Detect and unwrap double-encoded JSON strings
+        # Double-encoding happens when A2A client or model returns JSON string that gets re-serialized
+        # Pattern: '"success"' (a JSON-encoded string containing a JSON string)
+        for key in ["error", "message", "response"]:
+            if key in extracted and isinstance(extracted[key], str):
+                val = extracted[key]
+                # Check for double-encoded pattern (JSON string containing JSON)
+                if val.startswith('"') and val.endswith('"'):
+                    try:
+                        unwrapped = json.loads(val)
+                        if isinstance(unwrapped, str):
+                            extracted[key] = unwrapped
+                            if key in response:
+                                response[key] = unwrapped
+                            logger.info("[_process] BUG-022: Unwrapped double-encoded %s: %s...", key, unwrapped[:50] if len(unwrapped) > 50 else unwrapped)
+                    except json.JSONDecodeError:
+                        pass
 
         # Update session context with extracted data
         # Use the SAME keys as extracted (analysis, proposed_mappings, etc.)

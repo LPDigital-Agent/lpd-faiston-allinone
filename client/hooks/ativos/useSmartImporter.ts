@@ -40,7 +40,7 @@ import {
   type NexoSessionState,  // STATELESS: Full session state type
   type SGAGetUploadUrlResponse,  // BUG-014: Type for extraction
 } from '@/services/sgaAgentcore';
-import { extractAgentResponse } from '@/utils/agentcoreResponse';  // BUG-014: A2A response extraction
+import { extractAgentResponse, safeExtractErrorMessage } from '@/utils/agentcoreResponse';  // BUG-014/BUG-022: A2A response extraction
 import type {
   SmartFileType,
   SmartSourceType,
@@ -210,7 +210,9 @@ export function useSmartImporter(): UseSmartImporterReturn & {
 
       // Defensive validation - ensure we got a valid response
       if (!uploadUrlData || !uploadUrlData.upload_url || !uploadUrlData.s3_key) {
-        const errorMsg = (uploadUrlData as { error?: string })?.error || 'Falha ao obter URL de upload';
+        // BUG-022 FIX: Use safeExtractErrorMessage to handle double-encoded errors
+        const rawError = (uploadUrlData as { error?: string })?.error || 'Falha ao obter URL de upload';
+        const errorMsg = safeExtractErrorMessage(rawError);
         throw new Error(errorMsg);
       }
 
@@ -275,7 +277,9 @@ export function useSmartImporter(): UseSmartImporterReturn & {
 
       return previewResult;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao processar arquivo';
+      // BUG-022 FIX: Use safeExtractErrorMessage to handle double-encoded error messages
+      const rawMessage = err instanceof Error ? err.message : 'Erro ao processar arquivo';
+      const message = safeExtractErrorMessage(rawMessage);
       setError(message);
       setProgress({ stage: 'error', percent: 0, message });
       throw err;

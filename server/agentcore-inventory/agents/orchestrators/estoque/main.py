@@ -1135,7 +1135,24 @@ def invoke(payload: dict, context) -> dict:
                     return result.message
                 # Strip markdown code blocks before parsing (LLM may wrap JSON)
                 clean_message = extract_json(result.message)
-                return json.loads(clean_message)
+                parsed = json.loads(clean_message)
+
+                # BUG-022 FIX: If we got a string back, it was double-encoded
+                # json.loads on '"success"' returns the string "success", not a dict
+                # We need to unwrap again to get the actual dict
+                if isinstance(parsed, str):
+                    logger.warning(f"[BUG-022] Double-encoded response detected, unwrapping")
+                    try:
+                        parsed = json.loads(parsed)
+                    except json.JSONDecodeError:
+                        # If second parse fails, return as wrapped string
+                        return {
+                            "success": True,
+                            "response": parsed,
+                            "agent_id": AGENT_ID,
+                        }
+
+                return parsed
             except (json.JSONDecodeError, TypeError):
                 return {
                     "success": True,

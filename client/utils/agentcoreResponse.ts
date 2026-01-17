@@ -90,3 +90,69 @@ export function extractAgentMetadata(data: unknown): {
     request_id: data.request_id,
   };
 }
+
+// =============================================================================
+// BUG-022 FIX: Safe Error Message Extraction
+// =============================================================================
+// Handles double-encoded JSON strings that can occur when A2A transport
+// serializes already-JSON responses (e.g., '"success"' instead of 'success')
+// =============================================================================
+
+/**
+ * Safely extract error message from potentially double-encoded string.
+ *
+ * Handles cases where backend sends:
+ * - "\"success\"" (double-encoded string)
+ * - "success" (normal string)
+ * - { error: "message" } (object with error field)
+ *
+ * @param value - The value to extract error message from
+ * @returns The unwrapped error message string
+ *
+ * @example
+ * ```typescript
+ * safeExtractErrorMessage('"success"'); // Returns: 'success'
+ * safeExtractErrorMessage('normal error'); // Returns: 'normal error'
+ * safeExtractErrorMessage({ error: '"nested"' }); // Returns: 'nested'
+ * ```
+ */
+export function safeExtractErrorMessage(value: unknown): string {
+  if (typeof value === 'string') {
+    // Try to unwrap if it looks like a JSON-encoded string
+    if (value.startsWith('"') && value.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(value);
+        if (typeof parsed === 'string') {
+          return parsed;
+        }
+      } catch {
+        // Return as-is if parsing fails
+      }
+    }
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    if ('error' in obj) {
+      return safeExtractErrorMessage(obj.error);
+    }
+    if ('message' in obj) {
+      return safeExtractErrorMessage(obj.message);
+    }
+  }
+
+  return 'Erro desconhecido';
+}
+
+/**
+ * Check if a response indicates an error.
+ *
+ * @param data - The response data to check
+ * @returns True if the response contains error indicators
+ */
+export function isErrorResponse(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false;
+  const obj = data as Record<string, unknown>;
+  return obj.success === false || 'error' in obj;
+}

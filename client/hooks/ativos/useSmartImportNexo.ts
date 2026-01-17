@@ -38,7 +38,7 @@ import {
   type NexoSessionState,  // STATELESS: Full session state type
   type SGAGetUploadUrlResponse,  // BUG-014: Type for extraction
 } from '@/services/sgaAgentcore';
-import { extractAgentResponse } from '@/utils/agentcoreResponse';  // BUG-014: A2A response extraction
+import { extractAgentResponse, safeExtractErrorMessage } from '@/utils/agentcoreResponse';  // BUG-014, BUG-022
 
 // =============================================================================
 // Constants - Rotating Messages for Re-Analysis (Phase 3 fix)
@@ -401,7 +401,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       });
 
       if (!analysisResult.data?.success) {
-        const errorMsg = analysisResult.data?.error || 'Falha na análise (sem detalhes)';
+        // BUG-022 FIX: Handle double-encoded error messages from AgentCore
+        const errorMsg = safeExtractErrorMessage(analysisResult.data?.error) || 'Falha na análise (sem detalhes)';
         console.error('[NEXO] Analysis failed with error:', errorMsg, analysisResult.data);
         throw new Error(errorMsg);
       }
@@ -660,8 +661,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
           throw new Error(`Validação de schema falhou:\n• ${errorList}`);
         }
 
-        // Extract error message from backend response
-        const errorMsg = result.data?.error
+        // BUG-022 FIX: Extract error message from backend response with double-encoding protection
+        const errorMsg = safeExtractErrorMessage(result.data?.error)
           || 'Sessão expirada. Por favor, faça upload do arquivo novamente.';
         throw new Error(errorMsg);
       }
@@ -964,7 +965,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
       });
 
       if (!result.data?.success) {
-        const errorMsg = result.data?.error
+        // BUG-022 FIX: Handle double-encoded error messages from AgentCore
+        const errorMsg = safeExtractErrorMessage(result.data?.error)
           || (result.data?.failed_rows && result.data.failed_rows.length > 0
             ? result.data.failed_rows.map(r => r.reason).join(', ')
             : 'Falha na importação');

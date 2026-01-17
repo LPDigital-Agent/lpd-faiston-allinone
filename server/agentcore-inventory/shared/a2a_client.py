@@ -743,14 +743,20 @@ class A2AClient:
                     break
         # ===== END A2A PROTOCOL FIX =====
 
-        # NEW: Try to extract structured JSON from the response text
+        # NEW: Validate that response_text is valid JSON (but DON'T re-encode!)
         # Strands agents may embed tool results in conversational text (e.g., "Here's the result: {...}")
         # This is critical for NEXO analysis where tool results must be properly extracted
+        #
+        # BUG-022 FIX: Previously we did json.dumps(extracted_json) which DOUBLE-ENCODED
+        # the response. If Gemini returns JSON via response_mime_type="application/json",
+        # the text is ALREADY valid JSON - re-serializing corrupts it.
         if response_text:
             extracted_json = self._try_extract_json(response_text)
             if extracted_json:
-                logger.debug(f"[A2A] Extracted JSON from response text for {agent_id}")
-                response_text = json.dumps(extracted_json)
+                logger.debug(f"[A2A] Validated JSON from response text for {agent_id}")
+                # BUG-022 FIX: DON'T re-encode! response_text is already valid JSON.
+                # We only needed to validate it was parseable.
+                # Downstream code (response_utils.py) handles parsing.
             else:
                 # Log warning if text looks like it might contain JSON but extraction failed
                 if "{" in response_text and "}" in response_text:
@@ -764,9 +770,17 @@ class A2AClient:
         if not response_text:
             tool_results = result.get("tool_results", [])
             if tool_results:
-                # Use last tool result as response
-                response_text = json.dumps(tool_results[-1])
-                logger.info(f"[A2A] Using tool_result as response for {agent_id}")
+                # BUG-022 FIX: tool_results[-1] may already be a string (valid JSON)
+                # Only serialize if it's a dict/list, not if already a string
+                last_result = tool_results[-1]
+                if isinstance(last_result, str):
+                    # Already a string - use directly (don't double-encode!)
+                    response_text = last_result
+                    logger.info(f"[A2A] Using tool_result string as response for {agent_id}")
+                else:
+                    # Dict/list - serialize to JSON
+                    response_text = json.dumps(last_result)
+                    logger.info(f"[A2A] Using serialized tool_result as response for {agent_id}")
             else:
                 # Log warning for debugging empty responses
                 logger.warning(
