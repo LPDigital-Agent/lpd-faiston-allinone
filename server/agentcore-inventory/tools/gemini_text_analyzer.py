@@ -548,6 +548,30 @@ async def analyze_file_with_gemini(
         response = s3.get_object(Bucket=S3_BUCKET, Key=normalized_key)
         content = response["Body"].read()
 
+        # =====================================================================
+        # BUG-021 FIX: File size validation (prevent Gemini timeout on huge files)
+        # =====================================================================
+        # Large files cause Gemini to timeout (88+ seconds observed).
+        # Fail fast with user-friendly message instead of waiting for timeout.
+        # =====================================================================
+        MAX_FILE_SIZE_MB = 5
+        MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+        file_size_mb = len(content) / (1024 * 1024)
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            logger.warning(
+                f"[GeminiTextAnalyzer] BUG-021: File too large: {file_size_mb:.1f}MB > {MAX_FILE_SIZE_MB}MB"
+            )
+            return {
+                "success": False,
+                "error": (
+                    f"Arquivo muito grande ({file_size_mb:.1f}MB). "
+                    f"O limite máximo é {MAX_FILE_SIZE_MB}MB. "
+                    "Por favor, divida o arquivo em partes menores."
+                ),
+                "file_type": "unknown",
+                "file_size_mb": round(file_size_mb, 2),
+            }
+
         filename = s3_key.split("/")[-1] if "/" in s3_key else s3_key
         filename_lower = filename.lower()
 
@@ -581,13 +605,26 @@ async def analyze_file_with_gemini(
         )
 
         # 4. Call Gemini Pro
+        # =====================================================================
+        # BUG-021 FIX: Add timeout to prevent 88+ second hangs
+        # =====================================================================
+        # Using httpx timeout via HttpOptions (google-genai uses httpx internally).
+        # Default timeout: 60 seconds (enough for analysis, prevents indefinite wait).
+        # =====================================================================
+        from google.genai import types as genai_types
+
+        GEMINI_TIMEOUT_SECONDS = 60
+
         client = _get_genai_client()
         response = client.models.generate_content(
             model="gemini-2.5-pro",
             contents=prompt,
-            config={
-                "response_mime_type": "application/json",
-            }
+            config=genai_types.GenerateContentConfig(
+                response_mime_type="application/json",
+                http_options=genai_types.HttpOptions(
+                    timeout=GEMINI_TIMEOUT_SECONDS,
+                ),
+            ),
         )
 
         # 5. Parse response

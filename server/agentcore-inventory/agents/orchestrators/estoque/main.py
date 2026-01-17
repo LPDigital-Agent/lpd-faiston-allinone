@@ -894,6 +894,34 @@ async def _invoke_swarm(
             # Fall through - response will be returned as-is below
             # The LLM made a business decision (needs user input), we respect it
 
+        # =====================================================================
+        # BUG-021 FIX: SCENARIO 3 - Extraction failed completely
+        # =====================================================================
+        # When success=False AND no valid structure AND no error field, the
+        # extraction failed silently (e.g., Gemini timeout, parsing failure).
+        # This is NOT a business decision - it's a technical failure that needs
+        # a user-friendly error message.
+        # =====================================================================
+        if not response.get("success") and not has_valid_structure and not response.get("error"):
+            logger.warning(
+                "[Swarm] BUG-021 Scenario 3: Extraction failed with no error field. "
+                "success=%s, has_valid_structure=%s, response_keys=%s",
+                response.get("success"),
+                has_valid_structure,
+                list(response.keys()),
+            )
+            response["error"] = (
+                "Erro na análise do arquivo. Possíveis causas: "
+                "timeout na API de IA, arquivo muito grande, ou formato não suportado. "
+                "Tente novamente com um arquivo menor ou em formato diferente."
+            )
+            response["error_context"] = {
+                "error_type": "extraction_failure",
+                "operation": action,
+                "recoverable": True,
+                "suggested_actions": ["retry_with_smaller_file", "try_different_format", "check_cloudwatch_logs"],
+            }
+
         # Check for HIL pause (from _process_swarm_result context update)
         if response.get("stop_action") or session.get("awaiting_response"):
             session["awaiting_response"] = True

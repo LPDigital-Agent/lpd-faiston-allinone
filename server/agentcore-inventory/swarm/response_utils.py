@@ -983,6 +983,11 @@ def _process_swarm_result(
     if extracted:
         response.update(extracted)
         response["success"] = extracted.get("success", True)
+        # BUG-021 FIX: Explicitly preserve error field if present
+        # This ensures error messages from Gemini/tools reach the frontend
+        if "error" in extracted and extracted["error"]:
+            response["error"] = extracted["error"]
+            logger.info("[_process] BUG-021: Preserved error field: %s", extracted["error"][:100] if len(extracted["error"]) > 100 else extracted["error"])
 
         # Update session context with extracted data
         # Use the SAME keys as extracted (analysis, proposed_mappings, etc.)
@@ -1042,5 +1047,23 @@ def _process_swarm_result(
         response["message"] = message
         response["success"] = True
         logger.debug("[_process] Stored raw message as fallback")
+
+    # -------------------------------------------------------------------------
+    # BUG-021 FIX: Fallback error when ALL extraction fails
+    # -------------------------------------------------------------------------
+    # When we reach here with success=False and no error field, extraction
+    # failed completely. Add a fallback error for user visibility.
+    # -------------------------------------------------------------------------
+    if not response.get("success") and not response.get("error"):
+        logger.warning(
+            "[_process] BUG-021: Extraction failed completely, adding fallback error. "
+            "swarm_result type=%s, has_results=%s",
+            type(swarm_result).__name__,
+            hasattr(swarm_result, "results") and bool(swarm_result.results),
+        )
+        response["error"] = (
+            "Erro na extração de dados. O processamento do arquivo pode ter falhado "
+            "ou excedido o tempo limite. Verifique os logs ou tente novamente."
+        )
 
     return response
