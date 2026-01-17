@@ -1171,3 +1171,83 @@ agents:
     api_key_env_var_name: null
     api_key_credential_provider_name: null
     is_generated_by_agentcore_create: false
+
+  # =============================================================================
+  # SYSTEM AGENTS (Debug & Diagnostics)
+  # =============================================================================
+  # These agents provide system-wide support services (error analysis, monitoring)
+  # They are NOT inventory specialists but infrastructure components.
+  # =============================================================================
+
+  # -----------------------------------------------------------------------------
+  # Debug Agent (faiston_sga_debug)
+  # -----------------------------------------------------------------------------
+  # Intelligent error analysis agent with documentation research and pattern memory.
+  # Uses Gemini 2.5 Pro with Thinking for deep error analysis.
+  # Invoked by DebugHook when any agent encounters errors.
+  #
+  # Skills:
+  # - analyze_error: LLM-powered error analysis with pattern matching
+  # - search_documentation: MCP queries (AWS docs, AgentCore docs, Context7)
+  # - query_memory_patterns: Query AgentCore LTM for similar error patterns
+  # - store_resolution: Store successful resolutions for future reference
+  # -----------------------------------------------------------------------------
+  faiston_sga_debug:
+    name: faiston_sga_debug
+    entrypoint: agents/specialists/debug/main.py
+    deployment_type: direct_code_deploy
+    runtime_type: PYTHON_3_11
+    platform: linux/arm64
+    container_runtime: null
+    source_path: .
+    aws:
+      execution_role: arn:aws:iam::377311924364:role/faiston-one-sga-agentcore-role
+      execution_role_auto_create: false
+      account: '377311924364'
+      region: us-east-2
+      ecr_repository: null
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: A2A
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: 300
+        max_lifetime: 3600
+    bedrock_agentcore:
+      agent_id: null
+      agent_arn: null
+      agent_session_id: null
+    codebuild:
+      project_name: null
+      execution_role: null
+      source_bucket: null
+    memory:
+      # Debug agent REQUIRES memory for error pattern storage (LTM)
+      mode: STM_AND_LTM
+      memory_id: nexo_sga_learning_memory-u3ypElEdl1
+      memory_arn: null
+      memory_name: nexo_sga_learning_memory
+      event_expiry_days: 90  # 90-day TTL for error patterns (per PRD)
+      first_invoke_memory_check_done: false
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    aws_jwt:
+      enabled: false
+      audiences: []
+      signing_algorithm: ES384
+      issuer_url: null
+      duration_seconds: 300
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

@@ -249,19 +249,9 @@ locals {
     # ==========================================================================
     # System Agents (Debug & Diagnostics)
     # ==========================================================================
-    debug = {
-      name            = "DebugAgent"
-      description     = "Intelligent error analysis agent with documentation research and pattern memory"
-      entry_point     = ["main.py"]
-      memory_access   = true  # Requires memory for error pattern storage (LTM)
-      is_orchestrator = false
-      skills = [
-        "analyze_error",
-        "search_documentation",
-        "query_memory_patterns",
-        "store_resolution"
-      ]
-    }
+    # NOTE: Debug agent is deployed via `agentcore deploy` CLI, NOT Terraform.
+    # Terraform cannot create the runtime before code exists in S3.
+    # See: .bedrock_agentcore.yaml for debug agent configuration.
   }
 
   # S3 bucket and prefix for agent code artifacts

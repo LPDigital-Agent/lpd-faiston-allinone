@@ -90,6 +90,8 @@ jobs:
           - faiston_sga_reverse
           - faiston_sga_observation
           - faiston_sga_equipment_research
+          # System agents (Debug & Diagnostics)
+          - faiston_sga_debug
       max-parallel: 3  # Deploy 3 agents at a time to avoid AWS rate limits
       fail-fast: false  # Continue deploying other agents if one fails
 
