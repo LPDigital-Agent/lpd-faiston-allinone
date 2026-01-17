@@ -43,7 +43,7 @@ locals {
     # ==========================================================================
     nexo_import = {
       name            = "NexoImportAgent"
-      description     = "Main orchestrator for intelligent file import with ReAct pattern"
+      description     = "Autonomous import orchestrator using OBSERVE-THINK-LEARN-ACT pattern. Analyzes files (CSV/XLSX/XML/PDF), generates intelligent column mappings with confidence scoring, and coordinates with specialist agents."
       entry_point     = ["main.py"]
       memory_access   = true
       is_orchestrator = true
@@ -57,7 +57,7 @@ locals {
 
     learning = {
       name            = "LearningAgent"
-      description     = "Episodic memory agent for import intelligence and pattern learning"
+      description     = "Episodic memory specialist. Stores and retrieves import patterns, generates reflections on outcomes, and supports adaptive learning cycles for continuous improvement."
       entry_point     = ["main.py"]
       memory_access   = true
       is_orchestrator = false
@@ -71,7 +71,7 @@ locals {
 
     validation = {
       name            = "ValidationAgent"
-      description     = "Schema validation and data quality agent"
+      description     = "Pre-import validation specialist. Validates data types, schema constraints, foreign key references, and uniqueness rules against PostgreSQL inventory schema before execution."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -85,7 +85,7 @@ locals {
 
     schema_evolution = {
       name            = "SchemaEvolutionAgent"
-      description     = "Dynamic schema evolution and column creation agent"
+      description     = "Dynamic schema agent with reasoning. Proposes new columns based on unmapped data, validates evolution compatibility, and executes PostgreSQL DDL migrations."
       entry_point     = ["main.py"]
       memory_access   = true
       is_orchestrator = false
@@ -102,7 +102,7 @@ locals {
     # ==========================================================================
     intake = {
       name            = "IntakeAgent"
-      description     = "Nota Fiscal reader and XML/PDF parser"
+      description     = "Document parser specialist. Reads Nota Fiscal XML/PDF documents, extracts line items, validates fiscal data (NCM, CNPJ), and normalizes for inventory import."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -116,7 +116,7 @@ locals {
 
     data_import = {
       name            = "ImportAgent"
-      description     = "Bulk import agent for spreadsheets and CSV files"
+      description     = "Bulk import executor. Processes validated CSV/XLSX data with batch inserts, handles large datasets efficiently, and reports import progress and errors."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -133,7 +133,7 @@ locals {
     # ==========================================================================
     estoque_control = {
       name            = "EstoqueControlAgent"
-      description     = "Inventory control and stock balance management"
+      description     = "Core inventory control agent. Manages balance movements, reservations with TTL auto-expiry, expeditions, transfers between locations, returns, and serial number tracking."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -147,7 +147,7 @@ locals {
 
     compliance = {
       name            = "ComplianceAgent"
-      description     = "Regulatory compliance and audit trail agent"
+      description     = "Regulatory compliance specialist. Validates operations against compliance rules, manages multi-level approval workflows, tracks audit trails, and flags policy violations."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -160,7 +160,7 @@ locals {
 
     reconciliacao = {
       name            = "ReconciliacaoAgent"
-      description     = "SAP reconciliation and data comparison agent"
+      description     = "Inventory counting specialist. Manages counting campaigns (FULL/CYCLE/SPOT/PERPETUAL), analyzes divergences, proposes adjustments (GAIN/LOSS/CORRECTION), and supports blind counting."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -176,7 +176,7 @@ locals {
     # ==========================================================================
     expedition = {
       name            = "ExpeditionAgent"
-      description     = "Shipment and expedition management agent"
+      description     = "Material exit specialist. Manages expedition creation with stock verification, barcode scanning validation, SAP integration (MM/SD formats), and Nota Fiscal generation."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -189,7 +189,7 @@ locals {
 
     carrier = {
       name            = "CarrierAgent"
-      description     = "Carrier management and tracking agent"
+      description     = "Shipping and logistics specialist. Provides multi-carrier quotes (Correios/Loggi/Gollog), AI-powered carrier recommendations, real-time shipment tracking, and freight calculations."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -206,7 +206,7 @@ locals {
 
     reverse = {
       name            = "ReverseAgent"
-      description     = "Reverse logistics and returns management"
+      description     = "Reverse logistics specialist. Processes material returns with condition evaluation (GOOD/REPAIRABLE/SCRAP), validates return origins, and coordinates with carrier for physical shipments."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -222,7 +222,7 @@ locals {
     # ==========================================================================
     observation = {
       name            = "ObservationAgent"
-      description     = "Monitoring and alerting agent"
+      description     = "Audit trail and intelligence agent. Logs system events, analyzes import data quality using OBSERVE-LEARN-ACT pattern, and provides risk assessments with confidence scoring."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
@@ -235,7 +235,7 @@ locals {
 
     equipment_research = {
       name            = "EquipmentResearchAgent"
-      description     = "Equipment research and knowledge base agent"
+      description     = "Equipment knowledge base specialist. Researches equipment specifications, manufacturer documentation, compatibility information, and suggests alternatives from internal KB and external sources."
       entry_point     = ["main.py"]
       memory_access   = false
       is_orchestrator = false
