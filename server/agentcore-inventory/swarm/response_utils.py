@@ -787,6 +787,34 @@ def _extract_from_agent_result(
         logger.warning("[v17-DEBUG] Failed to inspect agent_result: %s", e)
 
     # =========================================================================
+    # BUG-021 v4 FIX: Priority 0 — Direct .result access (OFFICIAL STRANDS PATTERN)
+    # =========================================================================
+    # Official Strands docs: result.results["agent"].result → Direct tool output
+    # Reference: https://strandsagents.com/latest/documentation/docs/user-guide/concepts/multi-agent/swarm/
+    #
+    # Check if agent_result.result IS the raw tool output dict directly.
+    # This aligns with: analyst_result = result.results["analyst"].result
+    # =========================================================================
+    if hasattr(agent_result, "result") and agent_result.result:
+        result_data = agent_result.result
+
+        # If result is already a dict with our expected keys, return it directly
+        if isinstance(result_data, dict):
+            if "analysis" in result_data or "success" in result_data:
+                logger.info(
+                    "[v18] BUG-021 v4 OFFICIAL PATTERN: Direct .result access SUCCESS! "
+                    "keys=%s",
+                    list(result_data.keys())[:5],
+                )
+                return result_data
+
+            # Check for _response wrapper (tool_name_response format)
+            from_wrapper = _extract_from_response_wrapper(result_data)
+            if from_wrapper:
+                logger.info("[v18] SUCCESS via _response wrapper in .result")
+                return from_wrapper
+
+    # =========================================================================
     # BUG-020 v8 FIX: Priority 1 — Extract from .message attribute
     # =========================================================================
     # CloudWatch logs revealed: AgentResult has .message, NOT nested .result!
@@ -1064,6 +1092,63 @@ def _process_swarm_result(
         response["message"] = message
         response["success"] = True
         logger.debug("[_process] Stored raw message as fallback")
+
+    # -------------------------------------------------------------------------
+    # BUG-021 v4 FIX: Handle dict-style message (Official Strands format)
+    # -------------------------------------------------------------------------
+    # Official Strands docs: result.message["content"][0]["text"]
+    # Message is a DICT with "content" key, NOT a string!
+    # -------------------------------------------------------------------------
+    if hasattr(swarm_result, "message") and swarm_result.message:
+        message = swarm_result.message
+
+        # Dict-style message (official format)
+        if isinstance(message, dict):
+            logger.info(
+                "[v18] swarm_result.message is DICT (official format), keys=%s",
+                list(message.keys())[:5],
+            )
+
+            # Check for direct data
+            if "analysis" in message or "success" in message:
+                response.update(message)
+                response["success"] = message.get("success", True)
+                logger.info("[v18] SUCCESS: Direct dict message with analysis/success")
+                return response
+
+            # Check for content array (official format: message["content"][0]["text"])
+            if "content" in message and isinstance(message["content"], list):
+                for content_block in message["content"]:
+                    if isinstance(content_block, dict) and "text" in content_block:
+                        text_content = content_block["text"]
+                        if isinstance(text_content, str):
+                            try:
+                                data = json.loads(text_content)
+                                if isinstance(data, dict) and ("analysis" in data or "success" in data):
+                                    response.update(data)
+                                    response["success"] = data.get("success", True)
+                                    logger.info("[v18] SUCCESS: Extracted from message.content[].text")
+                                    return response
+                            except json.JSONDecodeError:
+                                pass
+
+            # Try _extract_from_agent_message for complex structures
+            extracted = _extract_from_agent_message(message)
+            if extracted:
+                response.update(extracted)
+                response["success"] = extracted.get("success", True)
+                logger.info("[v18] SUCCESS: Extracted via _extract_from_agent_message(dict)")
+                return response
+
+        # Message object (has .content attribute)
+        elif hasattr(message, "content"):
+            logger.info("[v18] swarm_result.message is Message object")
+            extracted = _extract_from_agent_message(message)
+            if extracted:
+                response.update(extracted)
+                response["success"] = extracted.get("success", True)
+                logger.info("[v18] SUCCESS: Extracted via _extract_from_agent_message(object)")
+                return response
 
     # -------------------------------------------------------------------------
     # BUG-021 FIX: Fallback error when ALL extraction fails
