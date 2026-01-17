@@ -27,7 +27,7 @@
 # Release: https://github.com/strands-agents/sdk-python/releases/tag/v1.22.0
 strands-agents[a2a,gemini]==1.22.0
 bedrock-agentcore>=0.1.0
-strands-agents-tools==1.22.0
+strands-agents-tools==0.2.19
 
 # A2A Server dependencies
 uvicorn>=0.30.0
