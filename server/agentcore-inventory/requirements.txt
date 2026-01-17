@@ -20,9 +20,14 @@
 # =============================================================================
 
 # Core framework - AWS Strands A2A (REQUIRED)
-strands-agents[a2a,gemini]>=0.1.0
+# PINNED to v1.22.0 for critical fixes:
+# - Gemini empty stream handling (fixes crashes)
+# - Concurrent agent protection (ConcurrencyException)
+# - Invocation state passing to model providers
+# Release: https://github.com/strands-agents/sdk-python/releases/tag/v1.22.0
+strands-agents[a2a,gemini]==1.22.0
 bedrock-agentcore>=0.1.0
-strands-agents-tools>=0.1.0
+strands-agents-tools==1.22.0
 
 # A2A Server dependencies
 uvicorn>=0.30.0
