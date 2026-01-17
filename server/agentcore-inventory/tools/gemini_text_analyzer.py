@@ -606,14 +606,16 @@ async def analyze_file_with_gemini(
 
         # 4. Call Gemini Pro
         # =====================================================================
-        # BUG-021 FIX: Add timeout to prevent 88+ second hangs
+        # BUG-021 FIX v2: Add timeout to prevent 88+ second hangs
         # =====================================================================
-        # Using httpx timeout via HttpOptions (google-genai uses httpx internally).
-        # Default timeout: 60 seconds (enough for analysis, prevents indefinite wait).
+        # HttpOptions.timeout expects MILLISECONDS (not seconds!)
+        # - Minimum allowed: 10 seconds (10000ms)
+        # - We use 60 seconds (60000ms) for file analysis
+        # Reference: https://github.com/googleapis/python-genai/issues/1330
         # =====================================================================
         from google.genai import types as genai_types
 
-        GEMINI_TIMEOUT_SECONDS = 60
+        GEMINI_TIMEOUT_MS = 60 * 1000  # 60 seconds in milliseconds
 
         client = _get_genai_client()
         response = client.models.generate_content(
@@ -622,7 +624,7 @@ async def analyze_file_with_gemini(
             config=genai_types.GenerateContentConfig(
                 response_mime_type="application/json",
                 http_options=genai_types.HttpOptions(
-                    timeout=GEMINI_TIMEOUT_SECONDS,
+                    timeout=GEMINI_TIMEOUT_MS,
                 ),
             ),
         )
