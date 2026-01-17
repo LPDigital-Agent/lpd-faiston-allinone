@@ -45,18 +45,18 @@ export const AGENTCORE_ENDPOINT =
  * - nexo_import: Smart Import orchestrator (file analysis, HIL dialogue)
  * - Other SGA agents: via A2A delegation from nexo_import
  *
- * REFACTOR-001 (2026-01-16):
+ * REFACTOR-001 COMPLETE (2026-01-16):
  * - Renamed from faiston_asset_management to faiston_inventory_orchestration
- * - TODO: Update runtime ID after new deployment completes
- * - Old ID: faiston_asset_management-uSuLPsFQNH (to be deleted)
+ * - New runtime ID: faiston_inventory_orchestration-TOk9YDGFSo
+ * - Old ID faiston_asset_management-uSuLPsFQNH was deleted
  */
 const RUNTIME_IDS = {
   /** Faiston Academy - Learning platform agent */
   academy: 'faiston_academy_agents-ODNvP6HxCD',
 
   /** SGA Inventory - HTTP Orchestrator (routes to A2A agents) */
-  // TODO: Update with new runtime ID after faiston_inventory_orchestration deployment
-  sga: 'faiston_inventory_orchestration-PENDING_DEPLOYMENT',
+  // REFACTOR-001 COMPLETE (2026-01-16): New runtime ID deployed
+  sga: 'faiston_inventory_orchestration-TOk9YDGFSo',
 
   /** Portal - Central NEXO orchestrator agent */
   portal: 'faiston_portal_agents-PENDING', // TODO: Update after first deployment
