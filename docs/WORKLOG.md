@@ -4,6 +4,37 @@ Automatically maintained by Claude Code hooks.
 
 ---
 
+## 2026-01-17 (Session 10) - BUG-021 v4: NEXO Extraction Fix
+
+**Root Cause Identified:**
+- Extraction priority didn't match official Strands documentation
+- Official pattern: `result.results["agent"].result` → Direct access
+- Our code: Checked `.message` first, `.result` third (too late)
+- Line 1038 only handled STRING messages, but Strands sends DICT messages
+
+**Investigation:**
+- Browser console showed 81-second response with HTTP 200 → Timeout fix (v3) WORKED
+- Error "Erro na extração de dados" indicates extraction failure, not timeout
+- Used sequential thinking + Context7 to verify against official Strands docs
+
+**Compliance Verification:**
+- Audited ALL 20 inventory agents before implementation
+- 100% COMPLIANT with Strands patterns (raw dict return, uniform creation)
+
+**v18 Changes (response_utils.py):**
+1. Added Priority 0: Direct `.result` access (official Strands pattern)
+2. Added dict-style message handling (`message["content"][0]["text"]`)
+3. Added Message object fallback for complex structures
+4. All existing extraction paths preserved (non-destructive)
+
+**Tests:** All 136 tests passed ✅
+
+**Commit:** `9ba0b46` - 🐛 fix(extraction): BUG-021 v4 align with official Strands patterns
+
+**Status:** ✅ DEPLOYED (pushed to main)
+
+---
+
 ## 2026-01-17 (Session 9) - REFACTOR-001: COMPLETED
 
 **All Phases Complete - Refactoring Fully Deployed**
@@ -2904,6 +2935,22 @@ The Strands Agent model (`LazyGeminiModel`) and the direct Gemini client (`gemin
 ---
 
 ## Turn Log — 2026-01-17 15:00:28 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-17 15:03:01 UTC
+
+**User:** (no user message captured)
+
+**Assistant:** (no assistant response captured)
+
+---
+
+## Turn Log — 2026-01-17 15:15:33 UTC
 
 **User:** (no user message captured)
 
