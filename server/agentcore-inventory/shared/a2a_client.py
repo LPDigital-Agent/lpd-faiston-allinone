@@ -89,6 +89,9 @@ PROD_RUNTIME_IDS = {
     "reverse": "faiston_sga_reverse-jeiH9k8CbC",
     "schema_evolution": "faiston_sga_schema_evolution-Ke1i76BvB0",
     "equipment_research": "faiston_sga_equipment_research-xs7hxg2SfS",
+    # Debug Agent - Intelligent error analysis specialist (ADR-003)
+    # NOTE: Update this ID after running `terraform apply` for debug agent runtime
+    "debug": "faiston_sga_debug-PLACEHOLDER",  # TODO: Replace after terraform apply
 }
 
 # Dev runtime IDs (only for agents that have dev deployments)
@@ -1071,6 +1074,46 @@ async def delegate_to_schema_evolution(
     return await client.invoke_agent("schema_evolution", payload, session_id)
 
 
+async def delegate_to_debug(
+    payload: Dict[str, Any],
+    session_id: Optional[str] = None,
+    timeout: float = 5.0,  # Short timeout for debug analysis
+) -> A2AResponse:
+    """
+    Convenience function to delegate to DebugAgent.
+
+    Used by DebugHook for intelligent error analysis. The timeout is
+    short (5s) to avoid blocking the main agent's execution.
+
+    Args:
+        payload: Error analysis payload with:
+            - error_type: Exception class name
+            - message: Error message
+            - operation: Operation that failed
+            - stack_trace: Optional stack trace
+            - context: Optional additional context
+        session_id: Optional session ID
+        timeout: Request timeout (default 5s for non-blocking)
+
+    Returns:
+        A2AResponse from DebugAgent with enriched error analysis
+
+    Example:
+        result = await delegate_to_debug({
+            "action": "analyze_error",
+            "error_type": "ValidationError",
+            "message": "Missing required field: part_number",
+            "operation": "import_csv",
+        })
+
+        if result.success:
+            analysis = json.loads(result.response)
+            print(f"Root causes: {analysis['root_causes']}")
+    """
+    client = A2AClient()
+    return await client.invoke_agent("debug", payload, session_id, timeout=timeout)
+
+
 # =============================================================================
 # Local Testing Support (Strands A2AServer)
 # =============================================================================
@@ -1111,6 +1154,7 @@ class LocalA2AClient(A2AClient):
         "reverse": "http://127.0.0.1:9011/",
         "observation": "http://127.0.0.1:9012/",
         "equipment_research": "http://127.0.0.1:9013/",
+        "debug": "http://127.0.0.1:9014/",  # Debug Agent - error analysis specialist
     }
 
     def __init__(self, base_port: int = 9000):

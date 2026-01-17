@@ -47,6 +47,7 @@ from config.agent_urls import RUNTIME_IDS
 from shared.hooks.logging_hook import LoggingHook
 from shared.hooks.metrics_hook import MetricsHook
 from shared.hooks.guardrails_hook import GuardrailsHook
+from shared.hooks.debug_hook import DebugHook
 
 # Swarm response extraction (BUG-020)
 # BUG-020 v5: Use _process_swarm_result() for 100% Strands-compliant extraction
@@ -983,6 +984,7 @@ def create_orchestrator() -> Agent:
     hooks = [
         LoggingHook(log_level=logging.INFO),
         MetricsHook(namespace="FaistonSGA", emit_to_cloudwatch=True),
+        DebugHook(timeout_seconds=5.0),  # ADR-003: Error enrichment
     ]
 
     if guardrail_id:

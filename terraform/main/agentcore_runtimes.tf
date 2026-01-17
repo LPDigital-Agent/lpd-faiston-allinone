@@ -1,12 +1,12 @@
 # =============================================================================
-# AgentCore Runtimes for SGA Inventory - 14 Separate Agents
+# AgentCore Runtimes for SGA Inventory - 15 Separate Agents
 # =============================================================================
 # Each agent runs in its own dedicated AgentCore Runtime for:
 # - Independent scaling and lifecycle
 # - Cross-agent communication via A2A protocol (JSON-RPC 2.0, SigV4 signed)
 #
 # Architecture (100% Agentic - AWS Strands Agents + AWS Bedrock AgentCore):
-# - 14 runtimes (one per agent)
+# - 15 runtimes (one per agent)
 # - A2A protocol (port 9000, root path /) - uses Strands A2AServer
 # - AgentCore Memory (global namespace)
 # - AgentCore Identity for cross-agent auth
@@ -243,6 +243,23 @@ locals {
         "search_equipment_kb",
         "get_specifications",
         "suggest_alternatives"
+      ]
+    }
+
+    # ==========================================================================
+    # System Agents (Debug & Diagnostics)
+    # ==========================================================================
+    debug = {
+      name            = "DebugAgent"
+      description     = "Intelligent error analysis agent with documentation research and pattern memory"
+      entry_point     = ["main.py"]
+      memory_access   = true  # Requires memory for error pattern storage (LTM)
+      is_orchestrator = false
+      skills = [
+        "analyze_error",
+        "search_documentation",
+        "query_memory_patterns",
+        "store_resolution"
       ]
     }
   }

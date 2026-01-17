@@ -66,6 +66,7 @@ PRO_THINKING_AGENTS = {
     "learning",         # Memory extraction - pattern recognition
     "schema_evolution", # Schema analysis - SQL generation
     "enrichment",       # Equipment enrichment - complex reasoning with Tavily data
+    "debug",            # Error analysis - deep reasoning for root cause identification
 }
 
 # Agents that require Pro (complex reasoning but no thinking needed)

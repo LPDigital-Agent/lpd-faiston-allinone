@@ -35,7 +35,7 @@ from agents.utils import get_model, requires_thinking, AGENT_VERSION, create_gem
 from shared.a2a_client import A2AClient
 
 # Hooks for observability (ADR-002)
-from shared.hooks import LoggingHook, MetricsHook
+from shared.hooks import LoggingHook, MetricsHook, DebugHook
 
 # Configure logging
 logging.basicConfig(
@@ -477,7 +477,7 @@ def create_agent() -> Agent:
             health_check,
         ],
         system_prompt=SYSTEM_PROMPT,
-        hooks=[LoggingHook(), MetricsHook()],  # ADR-002: Observability hooks
+        hooks=[LoggingHook(), MetricsHook(), DebugHook(timeout_seconds=5.0)],  # ADR-002/003
     )
 
 

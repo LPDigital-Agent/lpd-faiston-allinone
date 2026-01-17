@@ -392,7 +392,9 @@
       "Bash(cd /Users/fabio.santos/LPD\\\\ Repos/lpd-faiston-allinone && AWS_PROFILE=faiston-aio agentcore destroy:*)",
       "mcp__plugin_serena_serena__find_symbol",
       "WebFetch(domain:discuss.ai.google.dev)",
-      "WebFetch(domain:googleapis.github.io)"
+      "WebFetch(domain:googleapis.github.io)",
+      "Bash(for dir in /Users/fabio.santos/LPD Repos/lpd-faiston-allinone/server/agentcore-inventory/agents/specialists/*/)",
+      "Bash(do basename \"$dir\")"
     ],
     "deny": [],
     "ask": []

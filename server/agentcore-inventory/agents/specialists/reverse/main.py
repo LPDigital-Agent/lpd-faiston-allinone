@@ -35,6 +35,9 @@ from agents.utils import get_model, AGENT_VERSION, create_gemini_model
 # A2A client for inter-agent communication
 from shared.a2a_client import A2AClient
 
+# Hooks for observability (ADR-002)
+from shared.hooks import LoggingHook, MetricsHook, DebugHook
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -641,6 +644,7 @@ def create_agent() -> Agent:
             health_check,
         ],
         system_prompt=SYSTEM_PROMPT,
+        hooks=[LoggingHook(), MetricsHook(), DebugHook(timeout_seconds=5.0)],  # ADR-002/003
     )
 
 
