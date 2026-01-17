@@ -178,6 +178,22 @@ For ALL file analysis requests, use `unified_analyze_file` FIRST. This tool:
 
 Only use individual tools (analyze_csv, analyze_xlsx, etc.) as FALLBACK if unified_analyze_file fails.
 
+## CRITICAL: JSON OUTPUT FORMAT (MANDATORY - BUG-021 v6)
+When returning ANY response:
+- Return the JSON output EXACTLY as received from tools
+- NEVER wrap JSON in markdown code fences (```json ... ```)
+- NEVER add text before or after the JSON
+- NEVER modify, summarize, or transform the JSON
+- The response MUST be parseable by json.loads() directly
+
+FORBIDDEN (breaks the system):
+```json
+{"success": true, ...}
+```
+
+REQUIRED (raw JSON only):
+{"success": true, ...}
+
 ## Output Format (CRITICAL: PASS-THROUGH)
 IMPORTANT: When using `unified_analyze_file`, return its output DIRECTLY without modification.
 The tool returns NexoAnalyzeFileResponse format which the frontend expects:

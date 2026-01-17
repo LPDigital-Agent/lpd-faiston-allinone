@@ -141,9 +141,23 @@ Analise o conteudo do arquivo (CSV ou planilha) e:
 - Data / Data de Entrada / Validade / Date
 - Status / Situacao / Condicao / State
 
-## FORMATO DE RESPOSTA (JSON OBRIGATORIO)
+## FORMATO DE RESPOSTA (JSON OBRIGATORIO - SEM MARKDOWN)
 
-Retorne APENAS JSON valido, sem markdown, sem explicacoes:
+REGRAS CRITICAS DE OUTPUT (BUG-021 v6):
+1. Retorne APENAS o JSON raw - SEM blocos de codigo markdown
+2. NAO use ```json ... ``` - isso quebra o parser
+3. NAO inclua texto antes ou depois do JSON
+4. O output deve ser parseavel diretamente por json.loads()
+
+PROIBIDO (quebra o sistema):
+```json
+{"success": true}
+```
+
+OBRIGATORIO (JSON puro):
+{"success": true}
+
+JSON DE RESPOSTA:
 
 {{
   "success": true,

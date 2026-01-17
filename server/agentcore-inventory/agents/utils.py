@@ -217,9 +217,14 @@ class LazyGeminiModel:
             # 4096 tokens, causing MaxTokensReachedException in Strands A2A.
             # Gemini 2.5 Pro supports up to 65,536 output tokens.
             # Reference: https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.5-pro
+            # BUG-021 v6: Enforce pure JSON output from ALL Strands agents
+            # The response_mime_type param is passed to GenerateContentConfig(**params)
+            # This prevents agents from wrapping tool results in markdown code fences
+            # Reference: https://ai.google.dev/gemini-api/docs/json-mode
             params = {
                 "temperature": 0.7,
                 "max_output_tokens": 16384,  # 4x increase to handle detailed analysis
+                "response_mime_type": "application/json",  # Enforce JSON-only output
             }
 
             # BUG-009 CORRECT FIX: Different thinking parameters per Gemini version
