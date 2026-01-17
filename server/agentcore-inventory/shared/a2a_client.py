@@ -702,12 +702,22 @@ class A2AClient:
 
         # Check for JSON-RPC error
         if "error" in response:
+            # BUG-022 FIX: Handle multiple error formats defensively
+            # JSON-RPC errors can be: {"error": {"message": "..."}} or {"error": "string"} or other formats
+            error_obj = response["error"]
+            if isinstance(error_obj, dict):
+                error_message = error_obj.get("message", str(error_obj))
+            elif isinstance(error_obj, str):
+                error_message = error_obj
+            else:
+                error_message = str(error_obj)
+
             return A2AResponse(
                 success=False,
                 response="",
                 agent_id=agent_id,
                 message_id=message_id,
-                error=response["error"].get("message", "Unknown error"),
+                error=error_message,
                 raw_response=response,
             )
 

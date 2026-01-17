@@ -536,7 +536,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
       return analysis;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro na análise';
+      // BUG-022 FIX: Use safeExtractErrorMessage to handle double-encoded errors
+      const message = safeExtractErrorMessage(err instanceof Error ? err.message : 'Erro na análise');
       setState(prev => ({
         ...prev,
         stage: 'error',
@@ -779,7 +780,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
     } catch (err) {
       // Ensure interval is cleared on error
       clearInterval(progressInterval);
-      const message = err instanceof Error ? err.message : 'Erro ao processar respostas';
+      // BUG-022 FIX: Use safeExtractErrorMessage to handle double-encoded errors
+      const message = safeExtractErrorMessage(err instanceof Error ? err.message : 'Erro ao processar respostas');
       setState(prev => ({ ...prev, error: message }));
       throw err;
     }
@@ -911,7 +913,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
 
       return result.data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro ao preparar processamento';
+      // BUG-022 FIX: Use safeExtractErrorMessage to handle double-encoded errors
+      const message = safeExtractErrorMessage(err instanceof Error ? err.message : 'Erro ao preparar processamento');
       setState(prev => ({ ...prev, error: message }));
       throw err;
     }
@@ -979,7 +982,8 @@ export function useSmartImportNexo(): UseSmartImportNexoReturn {
         stage: 'complete',
       }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro na importação';
+      // BUG-022 FIX: Use safeExtractErrorMessage to handle double-encoded errors
+      const message = safeExtractErrorMessage(err instanceof Error ? err.message : 'Erro na importação');
       setState(prev => ({
         ...prev,
         stage: 'error',
