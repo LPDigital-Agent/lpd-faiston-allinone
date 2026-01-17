@@ -390,7 +390,9 @@
       "mcp__plugin_serena_serena__list_dir",
       "Bash(ruff check:*)",
       "Bash(cd /Users/fabio.santos/LPD\\\\ Repos/lpd-faiston-allinone && AWS_PROFILE=faiston-aio agentcore destroy:*)",
-      "mcp__plugin_serena_serena__find_symbol"
+      "mcp__plugin_serena_serena__find_symbol",
+      "WebFetch(domain:discuss.ai.google.dev)",
+      "WebFetch(domain:googleapis.github.io)"
     ],
     "deny": [],
     "ask": []
