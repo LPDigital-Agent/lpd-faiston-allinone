@@ -449,8 +449,9 @@ async def invoke_specialist(
 
     ### carrier
     Shipping and logistics: carrier quotes, recommendations, shipment tracking,
-    delivery scheduling.
-    Actions: get_quotes, recommend_carrier, track_shipment
+    delivery scheduling, postage management (create, list, update postings).
+    Actions: get_quotes, recommend_carrier, track_shipment, create_shipment,
+    save_posting, get_postings, update_posting_status, get_posting_by_tracking
 
     ### expedition
     Outbound logistics: expedition processing, stock verification,
